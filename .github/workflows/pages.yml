@@ -28,6 +28,7 @@ jobs:
         run: |
           node --check app.js
           node --check scanner.js
+          node --check auto-add.js
           node --check runtime.js
           node --check sw.js
           test -s index.html
@@ -69,6 +70,7 @@ jobs:
 
           probe_rpc validar_empleado '{"p_clave":"__smoke__","p_pin":"__smoke__"}'
           probe_rpc buscar_producto_codigo '{"p_codigo":"__smoke__"}'
+          probe_rpc crear_producto_codigo '{"p_token":null,"p_departamento":"00000000-0000-0000-0000-000000000000","p_codigo":"__smoke__"}'
           probe_rpc resumen_departamento '{"p_departamento":"00000000-0000-0000-0000-000000000000"}'
           probe_rpc cerrar_conteo '{"p_conteo":"00000000-0000-0000-0000-000000000000"}'
           probe_rpc importar_catalogo '{"p_departamento":"00000000-0000-0000-0000-000000000000","p_items":[]}'
