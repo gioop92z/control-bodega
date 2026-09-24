@@ -54,6 +54,17 @@ jobs:
             fi
           }
 
+          probe_table() {
+            local name="$1"
+            local body
+            body=$(curl -sS "$API/$name?select=*&limit=1" -H "apikey: $KEY")
+            if printf '%s' "$body" | grep -Eq 'PGRST205|Could not find the table'; then
+              echo "Backend contract missing table: $name"
+              printf '%s\n' "$body"
+              exit 1
+            fi
+          }
+
           probe_rpc validar_empleado '{"p_clave":"__smoke__","p_pin":"__smoke__"}'
           probe_rpc buscar_producto_codigo '{"p_codigo":"__smoke__"}'
           probe_rpc resumen_departamento '{"p_departamento":"00000000-0000-0000-0000-000000000000"}'
@@ -61,6 +72,11 @@ jobs:
           probe_rpc importar_catalogo '{"p_departamento":"00000000-0000-0000-0000-000000000000","p_items":[]}'
           probe_rpc ajuste_fisico_masivo '{"p_items":[],"p_nota":"smoke-test"}'
           probe_rpc mover_stock_v2 '{"p_token":null,"p_id":"00000000-0000-0000-0000-000000000000","p_producto":"00000000-0000-0000-0000-000000000000","p_tipo":"ENTRADA","p_cantidad":1,"p_marbete":null,"p_nota":"smoke-test"}'
+          probe_rpc admin_guardar_empleado '{"p_id":null,"p_clave":"__smoke__","p_nombre":"Smoke Test","p_puesto":"","p_pin":"","p_activo":false,"p_departamentos":[]}'
+
+          for table in departamentos productos movimientos marbetes producto_marbetes conteos conteo_lineas empleados_operativos empleado_operativo_departamentos; do
+            probe_table "$table"
+          done
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
