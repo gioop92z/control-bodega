@@ -23,6 +23,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Validate app JavaScript
         run: |
           node --check app.js
@@ -30,14 +31,47 @@ jobs:
           test -s index.html
           test -s styles.css
           test -s manifest.json
+
+      - name: Validate Supabase API contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          API='https://dkqovohxkxlcccvagpij.supabase.co/rest/v1'
+          KEY='sb_publishable_iz06RtaObND0dWOpuX2vKg_wZVbrZCv'
+
+          probe_rpc() {
+            local name="$1"
+            local payload="$2"
+            local body
+            body=$(curl -sS "$API/rpc/$name" -X POST \
+              -H "apikey: $KEY" \
+              -H 'Content-Type: application/json' \
+              --data "$payload")
+            if printf '%s' "$body" | grep -Eq 'PGRST202|Could not find the function|function .* does not exist'; then
+              echo "Backend contract missing RPC: $name"
+              printf '%s\n' "$body"
+              exit 1
+            fi
+          }
+
+          probe_rpc validar_empleado '{"p_clave":"__smoke__","p_pin":"__smoke__"}'
+          probe_rpc buscar_producto_codigo '{"p_codigo":"__smoke__"}'
+          probe_rpc resumen_departamento '{"p_departamento":"00000000-0000-0000-0000-000000000000"}'
+          probe_rpc cerrar_conteo '{"p_conteo":"00000000-0000-0000-0000-000000000000"}'
+          probe_rpc importar_catalogo '{"p_departamento":"00000000-0000-0000-0000-000000000000","p_items":[]}'
+          probe_rpc ajuste_fisico_masivo '{"p_items":[],"p_nota":"smoke-test"}'
+          probe_rpc mover_stock_v2 '{"p_token":null,"p_id":"00000000-0000-0000-0000-000000000000","p_producto":"00000000-0000-0000-0000-000000000000","p_tipo":"ENTRADA","p_cantidad":1,"p_marbete":null,"p_nota":"smoke-test"}'
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
           enablement: true
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: .
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
