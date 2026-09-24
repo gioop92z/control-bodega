@@ -29,6 +29,7 @@ jobs:
           node --check app.js
           node --check scanner.js
           node --check auto-add.js
+          node --check location-scan.js
           node --check runtime.js
           node --check sw.js
           test -s index.html
