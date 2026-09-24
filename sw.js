@@ -1,5 +1,5 @@
-const CACHE='inventario-v3-1-20260924';
-const ASSETS=['./','./index.html','./styles.css?v=3.1.0','./auto-add.js?v=3.1.0','./app.js?v=3.1.0','./location-scan.js?v=3.1.0','./team-access.js?v=3.1.0','./runtime.js?v=3.1.0','./scanner.js','./manifest.json?v=3.1.0','./icon.svg'];
+const CACHE='inventario-v3-2-20260924';
+const ASSETS=['./','./index.html','./styles.css?v=3.2.0','./auto-add.js?v=3.2.0','./app.js?v=3.2.0','./location-scan.js?v=3.2.0','./team-access.js?v=3.2.0','./access-admin-fix.js?v=3.2.0','./runtime.js?v=3.2.0','./scanner.js','./manifest.json?v=3.2.0','./icon.svg'];
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)))});
 self.addEventListener('activate',e=>e.waitUntil(Promise.all([self.clients.claim(),caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k))))])));
 self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(fetch(e.request,{cache:'no-store'}).then(r=>{const copy=r.clone();caches.open(CACHE).then(c=>c.put(e.request,copy)).catch(()=>{});return r}).catch(()=>caches.match(e.request)))})
