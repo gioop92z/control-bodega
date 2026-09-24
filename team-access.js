@@ -5,11 +5,9 @@ const KEY='sb_publishable_iz06RtaObND0dWOpuX2vKg_wZVbrZCv';
 const sbAccess=createClient(URL,KEY,{auth:{persistSession:true,autoRefreshToken:true}});
 const sbTest=createClient(URL,KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
 const $=id=>document.getElementById(id);
-const esc=(s='')=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const esc=(s='')=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
 const norm=s=>String(s||'').trim();
 let teamBusy=false;
-let renderedFor='';
-let lastSuccessPin='';
 
 function ensureStyles(){
   if($('teamAccessStyles'))return;
@@ -43,157 +41,42 @@ function ensureStyles(){
 
 function feedbackOk(){
   try{navigator.vibrate?.(35)}catch{}
-  try{
-    const A=window.AudioContext||window.webkitAudioContext;if(!A)return;
-    const a=new A(),o=a.createOscillator(),g=a.createGain();o.frequency.value=660;g.gain.value=.025;o.connect(g);g.connect(a.destination);o.start();g.gain.exponentialRampToValueAtTime(.0001,a.currentTime+.11);o.stop(a.currentTime+.12);setTimeout(()=>a.close().catch(()=>{}),180);
-  }catch{}
+  try{const A=window.AudioContext||window.webkitAudioContext;if(!A)return;const a=new A(),o=a.createOscillator(),g=a.createGain();o.frequency.value=660;g.gain.value=.025;o.connect(g);g.connect(a.destination);o.start();g.gain.exponentialRampToValueAtTime(.0001,a.currentTime+.11);o.stop(a.currentTime+.12);setTimeout(()=>a.close().catch(()=>{}),180)}catch{}
 }
 
-function loginMsg(text,type='error'){
-  const el=$('loginMsg');if(!el)return;
-  el.innerHTML=`<div class="${type==='success'?'success':'error'}">${esc(text)}</div>`;
-}
+function loginMsg(text,type='error'){const el=$('loginMsg');if(el)el.innerHTML=`<div class="${type==='success'?'success':'error'}">${esc(text)}</div>`}
 
 async function unifiedLogin(e){
-  e.preventDefault();
-  const form=e.currentTarget;if(form.dataset.teamBusy==='1')return;
-  const b=e.submitter||form.querySelector('button[type="submit"]');
-  const clave=norm($('clave')?.value),pin=norm($('pin')?.value);
-  if(!clave||!pin)return loginMsg('Escribe tu clave y tu PIN.');
-  if(!navigator.onLine)return loginMsg('Necesitas conexión para iniciar sesión.');
-  form.dataset.teamBusy='1';if(b){b.disabled=true;b.textContent='Validando…'}
-  try{
-    localStorage.removeItem('inv.employee');
-    await sbAccess.auth.signOut().catch(()=>{});
-    if(clave==='99'){
-      const r=await sbAccess.auth.signInWithPassword({email:'99@bodega.local',password:`bodega-99-${pin}`});
-      if(r.error)throw new Error('Clave o PIN incorrectos.');
-      feedbackOk();loginMsg('✓ Acceso de administrador verificado.','success');setTimeout(()=>location.reload(),180);return;
-    }
-    const tech=await sbAccess.auth.signInWithPassword({email:'10@bodega.local',password:'bodega-10-1010'});
-    if(tech.error)throw new Error('No se pudo abrir la sesión segura de empleados.');
-    const v=await sbAccess.rpc('validar_empleado',{p_clave:clave,p_pin:pin});
-    if(v.error||!v.data?.length){await sbAccess.auth.signOut().catch(()=>{});throw new Error('Clave o PIN incorrectos.');}
-    const emp=v.data[0];
-    localStorage.setItem('inv.employee',JSON.stringify({id:emp.empleado_id,clave:emp.clave,nombre:emp.nombre,puesto:emp.puesto||'',departamentos:emp.departamentos||[],token:emp.token}));
-    feedbackOk();loginMsg(`✓ Bienvenido, ${emp.nombre}.`,'success');setTimeout(()=>location.reload(),180);
-  }catch(err){
-    loginMsg(err?.message||'No se pudo iniciar sesión.');form.dataset.teamBusy='0';if(b){b.disabled=false;b.textContent='Entrar'}
-  }
+  e.preventDefault();const form=e.currentTarget;if(form.dataset.teamBusy==='1')return;const b=e.submitter||form.querySelector('button[type="submit"]');const clave=norm($('clave')?.value),pin=norm($('pin')?.value);
+  if(!clave||!pin)return loginMsg('Escribe tu clave y tu PIN.');if(!navigator.onLine)return loginMsg('Necesitas conexión para iniciar sesión.');form.dataset.teamBusy='1';if(b){b.disabled=true;b.textContent='Validando…'}
+  try{localStorage.removeItem('inv.employee');await sbAccess.auth.signOut().catch(()=>{});if(clave==='99'){const r=await sbAccess.auth.signInWithPassword({email:'99@bodega.local',password:`bodega-99-${pin}`});if(r.error)throw new Error('Clave o PIN incorrectos.');feedbackOk();loginMsg('✓ Acceso de administrador verificado.','success');setTimeout(()=>location.reload(),180);return}
+    const tech=await sbAccess.auth.signInWithPassword({email:'10@bodega.local',password:'bodega-10-1010'});if(tech.error)throw new Error('No se pudo abrir la sesión segura de empleados.');const v=await sbAccess.rpc('validar_empleado',{p_clave:clave,p_pin:pin});if(v.error||!v.data?.length){await sbAccess.auth.signOut().catch(()=>{});throw new Error('Clave o PIN incorrectos.')}const emp=v.data[0];localStorage.setItem('inv.employee',JSON.stringify({id:emp.empleado_id,clave:emp.clave,nombre:emp.nombre,puesto:emp.puesto||'',departamentos:emp.departamentos||[],token:emp.token}));feedbackOk();loginMsg(`✓ Bienvenido, ${emp.nombre}.`,'success');setTimeout(()=>location.reload(),180)
+  }catch(err){loginMsg(err?.message||'No se pudo iniciar sesión.');form.dataset.teamBusy='0';if(b){b.disabled=false;b.textContent='Entrar'}}
 }
 
-function attachLogin(){
-  const f=$('loginForm');if(!f||f.dataset.teamUnified==='1')return;
-  f.dataset.teamUnified='1';f.onsubmit=unifiedLogin;
-  const note=f.parentElement?.querySelector('.tiny.center');if(note)note.textContent='Acceso administrado dentro de la app · sin sincronizaciones externas';
-}
+function attachLogin(){const f=$('loginForm');if(!f||f.dataset.teamUnified==='1')return;f.dataset.teamUnified='1';f.onsubmit=unifiedLogin;const note=f.parentElement?.querySelector('.tiny.center');if(note)note.textContent='Acceso administrado dentro de la app · sin sincronizaciones externas'}
 
-async function getTeamData(){
-  const [er,dr,ar]=await Promise.all([
-    sbAccess.from('empleados_operativos').select('id,clave,nombre,puesto,activo').order('nombre'),
-    sbAccess.from('departamentos').select('id,nombre,activo').eq('activo',true).order('nombre'),
-    sbAccess.from('empleado_operativo_departamentos').select('empleado_id,departamento_id')
-  ]);
-  if(er.error)throw er.error;if(dr.error)throw dr.error;if(ar.error)throw ar.error;
-  return{employees:er.data||[],departments:dr.data||[],assignments:ar.data||[]};
-}
+async function getTeamData(){const[er,dr,ar]=await Promise.all([sbAccess.from('empleados_operativos').select('id,clave,nombre,puesto,activo').order('nombre'),sbAccess.from('departamentos').select('id,nombre,activo').eq('activo',true).order('nombre'),sbAccess.from('empleado_operativo_departamentos').select('empleado_id,departamento_id')]);if(er.error)throw er.error;if(dr.error)throw dr.error;if(ar.error)throw ar.error;return{employees:er.data||[],departments:dr.data||[],assignments:ar.data||[]}}
 
-async function testCredential(emp,clave,pin){
-  await sbTest.auth.signOut().catch(()=>{});
-  const tech=await sbTest.auth.signInWithPassword({email:'10@bodega.local',password:'bodega-10-1010'});
-  if(tech.error)throw new Error('La sesión técnica de empleados no respondió.');
-  const v=await sbTest.rpc('validar_empleado',{p_clave:String(clave),p_pin:String(pin)});
-  await sbTest.auth.signOut().catch(()=>{});
-  if(v.error)throw v.error;
-  const row=v.data?.[0];
-  if(!row||String(row.empleado_id)!==String(emp.id))throw new Error('La prueba de acceso no devolvió al empleado correcto.');
-  return row;
-}
-
-function randomPin(){
-  const a=new Uint32Array(1);crypto.getRandomValues(a);return String(10000000+(a[0]%90000000));
-}
-
+async function testCredential(emp,clave,pin){await sbTest.auth.signOut().catch(()=>{});const tech=await sbTest.auth.signInWithPassword({email:'10@bodega.local',password:'bodega-10-1010'});if(tech.error)throw new Error('La sesión técnica de empleados no respondió.');const v=await sbTest.rpc('validar_empleado',{p_clave:String(clave),p_pin:String(pin)});await sbTest.auth.signOut().catch(()=>{});if(v.error)throw v.error;const row=v.data?.[0];if(!row||String(row.empleado_id)!==String(emp.id))throw new Error('La prueba de acceso no devolvió al empleado correcto.');return row}
+function randomPin(){const a=new Uint32Array(1);crypto.getRandomValues(a);return String(10000000+(a[0]%90000000))}
 function depsFor(empId,data){return data.assignments.filter(a=>a.empleado_id===empId).map(a=>a.departamento_id)}
 function depNames(empId,data){const ids=depsFor(empId,data);return ids.length?ids.map(id=>data.departments.find(d=>d.id===id)?.nombre).filter(Boolean):['Todos los departamentos']}
-
-function openModal(html){
-  closeModal();const back=document.createElement('div');back.id='teamModal';back.className='team-modal-backdrop';back.innerHTML=`<section class="team-modal">${html}</section>`;document.body.appendChild(back);back.addEventListener('click',e=>{if(e.target===back)closeModal()});
-}
+function openModal(html){closeModal();const back=document.createElement('div');back.id='teamModal';back.className='team-modal-backdrop';back.innerHTML=`<section class="team-modal">${html}</section>`;document.body.appendChild(back);back.addEventListener('click',e=>{if(e.target===back)closeModal()})}
 function closeModal(){$('teamModal')?.remove()}
 
-function employeeForm(emp,data){
-  const isNew=!emp,selected=new Set(emp?depsFor(emp.id,data):[]);
-  openModal(`<div class="team-modal-head"><div><div class="eyebrow">${isNew?'Nuevo acceso':'Editar acceso'}</div><h3>${esc(emp?.nombre||'Empleado')}</h3></div><button class="team-close" id="teamClose">×</button></div>
-  <div class="team-note">La clave y el PIN se guardan directamente en la app. Si cambias la clave, también debes establecer un PIN nuevo para comprobar el acceso inmediatamente.</div>
-  <div class="team-form-grid">
-    <label>Clave de acceso<input id="teamClave" value="${esc(emp?.clave||'10')}" inputmode="numeric" autocomplete="off"></label>
-    <label>Estado<select id="teamActive"><option value="true" ${emp?.activo!==false?'selected':''}>Activo</option><option value="false" ${emp?.activo===false?'selected':''}>Inactivo</option></select></label>
-    <label class="full">Nombre<input id="teamName" value="${esc(emp?.nombre||'')}" autocomplete="off"></label>
-    <label class="full">Puesto<input id="teamRole" value="${esc(emp?.puesto||'')}" autocomplete="off"></label>
-    <div class="full team-pin-row"><label>PIN ${isNew?'*':'nuevo (opcional)'}<input id="teamPin" type="password" inputmode="numeric" autocomplete="new-password" placeholder="${isNew?'4 a 12 dígitos':'Déjalo vacío para conservarlo'}"></label><button id="teamGenerate" type="button" class="secondary">Generar PIN</button></div>
-    <div class="full"><label>Departamentos</label><div class="team-deps">${data.departments.map(d=>`<label><input type="checkbox" name="teamDep" value="${d.id}" ${selected.has(d.id)?'checked':''}> ${esc(d.nombre)}</label>`).join('')||'<span class="muted">No hay departamentos activos.</span>'}</div><p class="tiny muted">Sin selección = acceso a todos los departamentos activos.</p></div>
-  </div>
-  <div id="teamFormMsg"></div><div class="team-toolbar"><button id="teamSave" class="primary">${isNew?'Crear y probar acceso':'Guardar cambios'}</button><button id="teamCancel" class="secondary">Cancelar</button></div>`);
-  $('teamClose').onclick=$('teamCancel').onclick=closeModal;
-  $('teamGenerate').onclick=()=>{const p=randomPin();$('teamPin').type='text';$('teamPin').value=p;lastSuccessPin=p};
-  $('teamSave').onclick=()=>saveEmployeeForm(emp,data);
-}
+function employeeForm(emp,data){const isNew=!emp,selected=new Set(emp?depsFor(emp.id,data):[]);openModal(`<div class="team-modal-head"><div><div class="eyebrow">${isNew?'Nuevo acceso':'Editar acceso'}</div><h3>${esc(emp?.nombre||'Empleado')}</h3></div><button class="team-close" id="teamClose">×</button></div><div class="team-note">La clave y el PIN se guardan directamente en la app. Si cambias la clave, también debes establecer un PIN nuevo para comprobar el acceso inmediatamente.</div><div class="team-form-grid"><label>Clave de acceso<input id="teamClave" value="${esc(emp?.clave||'10')}" inputmode="numeric" autocomplete="off"></label><label>Estado<select id="teamActive"><option value="true" ${emp?.activo!==false?'selected':''}>Activo</option><option value="false" ${emp?.activo===false?'selected':''}>Inactivo</option></select></label><label class="full">Nombre<input id="teamName" value="${esc(emp?.nombre||'')}" autocomplete="off"></label><label class="full">Puesto<input id="teamRole" value="${esc(emp?.puesto||'')}" autocomplete="off"></label><div class="full team-pin-row"><label>PIN ${isNew?'*':'nuevo (opcional)'}<input id="teamPin" type="password" inputmode="numeric" autocomplete="new-password" placeholder="${isNew?'4 a 12 dígitos':'Déjalo vacío para conservarlo'}"></label><button id="teamGenerate" type="button" class="secondary">Generar PIN</button></div><div class="full"><label>Departamentos</label><div class="team-deps">${data.departments.map(d=>`<label><input type="checkbox" name="teamDep" value="${d.id}" ${selected.has(d.id)?'checked':''}> ${esc(d.nombre)}</label>`).join('')||'<span class="muted">No hay departamentos activos.</span>'}</div><p class="tiny muted">Sin selección = acceso a todos los departamentos activos.</p></div></div><div id="teamFormMsg"></div><div class="team-toolbar"><button id="teamSave" class="primary">${isNew?'Crear y probar acceso':'Guardar cambios'}</button><button id="teamCancel" class="secondary">Cancelar</button></div>`);$('teamClose').onclick=$('teamCancel').onclick=closeModal;$('teamGenerate').onclick=()=>{$('teamPin').type='text';$('teamPin').value=randomPin()};$('teamSave').onclick=()=>saveEmployeeForm(emp,data)}
 
-async function saveEmployeeForm(emp,data){
-  if(teamBusy)return;const b=$('teamSave'),msg=$('teamFormMsg');
-  const clave=norm($('teamClave').value),nombre=norm($('teamName').value),puesto=norm($('teamRole').value),pin=norm($('teamPin').value),activo=$('teamActive').value==='true',deps=[...document.querySelectorAll('input[name="teamDep"]:checked')].map(x=>x.value);
-  if(!clave||!nombre)return msg.innerHTML='<div class="team-error">Clave y nombre son obligatorios.</div>';
-  if((!emp||clave!==String(emp.clave))&&!pin)return msg.innerHTML='<div class="team-error">Para un acceso nuevo o un cambio de clave, define también un PIN nuevo.</div>';
-  if(pin&&!/^\d{4,12}$/.test(pin))return msg.innerHTML='<div class="team-error">El PIN debe tener entre 4 y 12 dígitos.</div>';
-  teamBusy=true;b.disabled=true;b.textContent=pin?'Guardando y probando…':'Guardando…';msg.innerHTML='';
-  try{
-    const r=await sbAccess.rpc('admin_guardar_empleado',{p_id:emp?.id||null,p_clave:clave,p_nombre:nombre,p_puesto:puesto,p_pin:pin,p_activo:activo,p_departamentos:deps});
-    if(r.error)throw r.error;
-    const id=String(r.data||emp?.id||'');const saved={id,clave,nombre,puesto,activo};
-    if(pin){await testCredential(saved,clave,pin);feedbackOk();lastSuccessPin=pin;msg.innerHTML=`<div class="team-result">✓ Guardado y acceso probado correctamente.</div><div class="team-copy"><div><span class="tiny">PIN para entregar al empleado</span><br><code>${esc(pin)}</code></div><button id="teamCopyPin" class="secondary">Copiar</button></div>`;$('teamCopyPin').onclick=async()=>{await navigator.clipboard?.writeText(pin);$('teamCopyPin').textContent='Copiado ✓'};b.textContent='✓ Acceso verificado';setTimeout(async()=>{closeModal();await renderTeamAdmin(true)},1100)}
-    else{feedbackOk();msg.innerHTML='<div class="team-result">✓ Cambios guardados.</div>';setTimeout(async()=>{closeModal();await renderTeamAdmin(true)},650)}
-  }catch(e){msg.innerHTML=`<div class="team-error">${esc(e?.message||'No se pudo guardar o probar el acceso.')}</div>`;b.disabled=false;b.textContent=emp?'Guardar cambios':'Crear y probar acceso'}finally{teamBusy=false}
-}
+async function saveEmployeeForm(emp,data){if(teamBusy)return;const b=$('teamSave'),msg=$('teamFormMsg'),clave=norm($('teamClave').value),nombre=norm($('teamName').value),puesto=norm($('teamRole').value),pin=norm($('teamPin').value),activo=$('teamActive').value==='true',deps=[...document.querySelectorAll('input[name="teamDep"]:checked')].map(x=>x.value);if(!clave||!nombre)return msg.innerHTML='<div class="team-error">Clave y nombre son obligatorios.</div>';if((!emp||clave!==String(emp.clave))&&!pin)return msg.innerHTML='<div class="team-error">Para un acceso nuevo o un cambio de clave, define también un PIN nuevo.</div>';if(pin&&!/^\d{4,12}$/.test(pin))return msg.innerHTML='<div class="team-error">El PIN debe tener entre 4 y 12 dígitos.</div>';teamBusy=true;b.disabled=true;b.textContent=pin?'Guardando y probando…':'Guardando…';msg.innerHTML='';try{const r=await sbAccess.rpc('admin_guardar_empleado',{p_id:emp?.id||null,p_clave:clave,p_nombre:nombre,p_puesto:puesto,p_pin:pin,p_activo:activo,p_departamentos:deps});if(r.error)throw r.error;const id=String(r.data||emp?.id||''),saved={id,clave,nombre,puesto,activo};if(pin){await testCredential(saved,clave,pin);feedbackOk();msg.innerHTML=`<div class="team-result">✓ Guardado y acceso probado correctamente.</div><div class="team-copy"><div><span class="tiny">PIN para entregar al empleado</span><br><code>${esc(pin)}</code></div><button id="teamCopyPin" class="secondary">Copiar</button></div>`;$('teamCopyPin').onclick=async()=>{await navigator.clipboard?.writeText(pin);$('teamCopyPin').textContent='Copiado ✓'};b.textContent='✓ Acceso verificado';setTimeout(async()=>{closeModal();await renderTeamAdmin(true)},1100)}else{feedbackOk();msg.innerHTML='<div class="team-result">✓ Cambios guardados.</div>';setTimeout(async()=>{closeModal();await renderTeamAdmin(true)},650)}}catch(e){msg.innerHTML=`<div class="team-error">${esc(e?.message||'No se pudo guardar o probar el acceso.')}</div>`;b.disabled=false;b.textContent=emp?'Guardar cambios':'Crear y probar acceso'}finally{teamBusy=false}}
 
-async function quickPin(emp,data){
-  openModal(`<div class="team-modal-head"><div><div class="eyebrow">Cambiar PIN</div><h3>${esc(emp.nombre)}</h3></div><button class="team-close" id="teamClose">×</button></div><div class="team-note">El PIN se guarda directamente en la base de la app y se prueba antes de confirmarlo.</div><div class="team-pin-row"><label>PIN nuevo<input id="quickPin" type="password" inputmode="numeric" autocomplete="new-password" placeholder="4 a 12 dígitos"></label><button id="quickGenerate" class="secondary">Generar</button></div><div id="quickMsg"></div><div class="team-toolbar"><button id="quickSave" class="primary">Guardar y probar</button><button id="quickCancel" class="secondary">Cancelar</button></div>`);
-  $('teamClose').onclick=$('quickCancel').onclick=closeModal;$('quickGenerate').onclick=()=>{$('quickPin').type='text';$('quickPin').value=randomPin()};
-  $('quickSave').onclick=async()=>{const pin=norm($('quickPin').value),m=$('quickMsg'),b=$('quickSave');if(!/^\d{4,12}$/.test(pin))return m.innerHTML='<div class="team-error">Usa entre 4 y 12 dígitos.</div>';b.disabled=true;b.textContent='Probando…';try{const deps=depsFor(emp.id,data),r=await sbAccess.rpc('admin_guardar_empleado',{p_id:emp.id,p_clave:emp.clave,p_nombre:emp.nombre,p_puesto:emp.puesto||'',p_pin:pin,p_activo:emp.activo,p_departamentos:deps});if(r.error)throw r.error;await testCredential(emp,emp.clave,pin);feedbackOk();m.innerHTML=`<div class="team-result">✓ PIN cambiado y acceso probado.</div><div class="team-copy"><code>${esc(pin)}</code><button id="copyQuick" class="secondary">Copiar</button></div>`;$('copyQuick').onclick=async()=>{await navigator.clipboard?.writeText(pin);$('copyQuick').textContent='Copiado ✓'};b.textContent='✓ Verificado'}catch(e){m.innerHTML=`<div class="team-error">${esc(e?.message||'No se pudo probar el acceso.')}</div>`;b.disabled=false;b.textContent='Guardar y probar'}}
-}
+async function quickPin(emp,data){openModal(`<div class="team-modal-head"><div><div class="eyebrow">Cambiar PIN</div><h3>${esc(emp.nombre)}</h3></div><button class="team-close" id="teamClose">×</button></div><div class="team-note">El PIN se guarda directamente en la base de la app y se prueba antes de confirmarlo.</div><div class="team-pin-row"><label>PIN nuevo<input id="quickPin" type="password" inputmode="numeric" autocomplete="new-password" placeholder="4 a 12 dígitos"></label><button id="quickGenerate" class="secondary">Generar</button></div><div id="quickMsg"></div><div class="team-toolbar"><button id="quickSave" class="primary">Guardar y probar</button><button id="quickCancel" class="secondary">Cancelar</button></div>`);$('teamClose').onclick=$('quickCancel').onclick=closeModal;$('quickGenerate').onclick=()=>{$('quickPin').type='text';$('quickPin').value=randomPin()};$('quickSave').onclick=async()=>{const pin=norm($('quickPin').value),m=$('quickMsg'),b=$('quickSave');if(!/^\d{4,12}$/.test(pin))return m.innerHTML='<div class="team-error">Usa entre 4 y 12 dígitos.</div>';b.disabled=true;b.textContent='Probando…';try{const deps=depsFor(emp.id,data),r=await sbAccess.rpc('admin_guardar_empleado',{p_id:emp.id,p_clave:emp.clave,p_nombre:emp.nombre,p_puesto:emp.puesto||'',p_pin:pin,p_activo:emp.activo,p_departamentos:deps});if(r.error)throw r.error;await testCredential(emp,emp.clave,pin);feedbackOk();m.innerHTML=`<div class="team-result">✓ PIN cambiado y acceso probado.</div><div class="team-copy"><code>${esc(pin)}</code><button id="copyQuick" class="secondary">Copiar</button></div>`;$('copyQuick').onclick=async()=>{await navigator.clipboard?.writeText(pin);$('copyQuick').textContent='Copiado ✓'};b.textContent='✓ Verificado'}catch(e){m.innerHTML=`<div class="team-error">${esc(e?.message||'No se pudo probar el acceso.')}</div>`;b.disabled=false;b.textContent='Guardar y probar'}}}
 
-async function testExisting(emp){
-  const pin=prompt(`PIN actual de ${emp.nombre}\nSe usará solo para probar el acceso:`);if(pin===null)return;
-  try{await testCredential(emp,emp.clave,norm(pin));feedbackOk();alert(`✓ Acceso correcto\n${emp.nombre}\nClave ${emp.clave}`)}catch(e){alert(`No pasó la prueba de acceso.\n${e?.message||''}`)}
-}
+async function testExisting(emp){const pin=prompt(`PIN actual de ${emp.nombre}\nSe usará solo para probar el acceso:`);if(pin===null)return;try{await testCredential(emp,emp.clave,norm(pin));feedbackOk();alert(`✓ Acceso correcto\n${emp.nombre}\nClave ${emp.clave}`)}catch(e){alert(`No pasó la prueba de acceso.\n${e?.message||''}`)}}
+async function toggleEmployee(emp,data){const active=!emp.activo;if(!confirm(`${active?'Activar':'Desactivar'} a ${emp.nombre}?`))return;const r=await sbAccess.rpc('admin_guardar_empleado',{p_id:emp.id,p_clave:emp.clave,p_nombre:emp.nombre,p_puesto:emp.puesto||'',p_pin:'',p_activo:active,p_departamentos:depsFor(emp.id,data)});if(r.error)return alert(r.error.message);feedbackOk();await renderTeamAdmin(true)}
 
-async function toggleEmployee(emp,data){
-  const active=!emp.activo;if(!confirm(`${active?'Activar':'Desactivar'} a ${emp.nombre}?`))return;
-  const r=await sbAccess.rpc('admin_guardar_empleado',{p_id:emp.id,p_clave:emp.clave,p_nombre:emp.nombre,p_puesto:emp.puesto||'',p_pin:'',p_activo:active,p_departamentos:depsFor(emp.id,data)});
-  if(r.error)return alert(r.error.message);feedbackOk();await renderTeamAdmin(true);
-}
-
-async function renderTeamAdmin(force=false){
-  const body=$('adminBody'),marker=$('empClave');if(!body||!marker)return;
-  if(teamBusy)return;ensureStyles();
-  const key=`${location.pathname}:${Date.now()}`;if(!force&&body.dataset.teamManager==='1')return;body.dataset.teamManager='1';
-  body.innerHTML='<div class="skeleton"></div><div class="skeleton"></div>';
-  try{
-    const data=await getTeamData();renderedFor=key;
-    body.innerHTML=`<div class="team-access-head"><div><div class="eyebrow">Seguridad y accesos</div><h3>Accesos del equipo</h3><p class="muted">Todo se administra aquí. No depende de Drive ni de enlaces de sincronización.</p></div><button id="teamNew" class="primary">＋ Nuevo empleado</button></div><div class="team-note"><b>Flujo seguro:</b> crea o modifica una clave/PIN → la app lo guarda → lo prueba contra el inicio de sesión real → solo entonces muestra ✓ verificado.</div><div class="team-toolbar"><input id="teamSearch" placeholder="Buscar empleado, clave o puesto" autocomplete="off"></div><div id="teamList" class="team-list"></div>`;
-    const list=$('teamList');
-    const paint=()=>{const q=norm($('teamSearch')?.value).toLowerCase(),rows=data.employees.filter(e=>!q||`${e.nombre} ${e.clave} ${e.puesto||''}`.toLowerCase().includes(q));list.innerHTML=rows.map(e=>`<article class="team-person" data-team-id="${e.id}"><div class="team-person-top"><div><h4>${esc(e.nombre)}</h4><p><b>Clave ${esc(e.clave)}</b>${e.puesto?' · '+esc(e.puesto):''}</p><p>${depNames(e.id,data).map(esc).join(' · ')}</p></div><span class="team-status ${e.activo?'on':'off'}">${e.activo?'Activo':'Inactivo'}</span></div><div class="team-actions"><button class="secondary" data-team-edit="${e.id}">Editar</button><button class="secondary" data-team-pin="${e.id}">Cambiar PIN</button><button class="secondary" data-team-test="${e.id}">Probar acceso</button><button class="${e.activo?'danger':'secondary'}" data-team-toggle="${e.id}">${e.activo?'Desactivar':'Activar'}</button></div></article>`).join('')||'<div class="team-empty">No hay empleados.</div>';wireRows()};
-    const wireRows=()=>{document.querySelectorAll('[data-team-edit]').forEach(b=>b.onclick=()=>employeeForm(data.employees.find(e=>e.id===b.dataset.teamEdit),data));document.querySelectorAll('[data-team-pin]').forEach(b=>b.onclick=()=>quickPin(data.employees.find(e=>e.id===b.dataset.teamPin),data));document.querySelectorAll('[data-team-test]').forEach(b=>b.onclick=()=>testExisting(data.employees.find(e=>e.id===b.dataset.teamTest)));document.querySelectorAll('[data-team-toggle]').forEach(b=>b.onclick=()=>toggleEmployee(data.employees.find(e=>e.id===b.dataset.teamToggle),data))};
-    $('teamNew').onclick=()=>employeeForm(null,data);$('teamSearch').oninput=paint;paint();
-  }catch(e){body.innerHTML=`<div class="error">${esc(e?.message||'No se pudieron cargar los empleados.')}</div>`}
-}
+async function renderTeamAdmin(force=false){const body=$('adminBody'),marker=$('empClave');if(!body||!marker)return;if(teamBusy)return;ensureStyles();if(!force&&body.querySelector('#teamNew'))return;body.innerHTML='<div class="skeleton"></div><div class="skeleton"></div>';try{const data=await getTeamData();body.innerHTML=`<div class="team-access-head"><div><div class="eyebrow">Seguridad y accesos</div><h3>Accesos del equipo</h3><p class="muted">Todo se administra aquí. No depende de Drive ni de enlaces de sincronización.</p></div><button id="teamNew" class="primary">＋ Nuevo empleado</button></div><div class="team-note"><b>Flujo seguro:</b> crea o modifica una clave/PIN → la app lo guarda → lo prueba contra el inicio de sesión real → solo entonces muestra ✓ verificado.</div><div class="team-toolbar"><input id="teamSearch" placeholder="Buscar empleado, clave o puesto" autocomplete="off"></div><div id="teamList" class="team-list"></div>`;const list=$('teamList');const wireRows=()=>{document.querySelectorAll('[data-team-edit]').forEach(b=>b.onclick=()=>employeeForm(data.employees.find(e=>e.id===b.dataset.teamEdit),data));document.querySelectorAll('[data-team-pin]').forEach(b=>b.onclick=()=>quickPin(data.employees.find(e=>e.id===b.dataset.teamPin),data));document.querySelectorAll('[data-team-test]').forEach(b=>b.onclick=()=>testExisting(data.employees.find(e=>e.id===b.dataset.teamTest)));document.querySelectorAll('[data-team-toggle]').forEach(b=>b.onclick=()=>toggleEmployee(data.employees.find(e=>e.id===b.dataset.teamToggle),data))};const paint=()=>{const q=norm($('teamSearch')?.value).toLowerCase(),rows=data.employees.filter(e=>!q||`${e.nombre} ${e.clave} ${e.puesto||''}`.toLowerCase().includes(q));list.innerHTML=rows.map(e=>`<article class="team-person" data-team-id="${e.id}"><div class="team-person-top"><div><h4>${esc(e.nombre)}</h4><p><b>Clave ${esc(e.clave)}</b>${e.puesto?' · '+esc(e.puesto):''}</p><p>${depNames(e.id,data).map(esc).join(' · ')}</p></div><span class="team-status ${e.activo?'on':'off'}">${e.activo?'Activo':'Inactivo'}</span></div><div class="team-actions"><button class="secondary" data-team-edit="${e.id}">Editar</button><button class="secondary" data-team-pin="${e.id}">Cambiar PIN</button><button class="secondary" data-team-test="${e.id}">Probar acceso</button><button class="${e.activo?'danger':'secondary'}" data-team-toggle="${e.id}">${e.activo?'Desactivar':'Activar'}</button></div></article>`).join('')||'<div class="team-empty">No hay empleados.</div>';wireRows()};$('teamNew').onclick=()=>employeeForm(null,data);$('teamSearch').oninput=paint;paint()}catch(e){body.innerHTML=`<div class="error">${esc(e?.message||'No se pudieron cargar los empleados.')}</div>`}}
 
 function maybeTeamAdmin(){const body=$('adminBody'),emp=$('empClave');if(!body||!emp)return;renderTeamAdmin().catch(()=>{})}
-
-let lastToast='';function watchSuccess(){
-  const t=$('toast');if(!t||t.classList.contains('error'))return;const text=t.textContent||'';if(!text||text===lastToast)return;lastToast=text;feedbackOk();
-}
-
+let lastToast='';function watchSuccess(){const t=$('toast');if(!t||t.classList.contains('error'))return;const text=t.textContent||'';if(!text||text===lastToast)return;lastToast=text;feedbackOk()}
 function attach(){attachLogin();maybeTeamAdmin();watchSuccess()}
-new MutationObserver(attach).observe(document.documentElement,{subtree:true,childList:true});
-document.addEventListener('DOMContentLoaded',attach,{once:true});attach();
+new MutationObserver(attach).observe(document.documentElement,{subtree:true,childList:true});document.addEventListener('DOMContentLoaded',attach,{once:true});attach();
