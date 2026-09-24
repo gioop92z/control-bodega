@@ -16,7 +16,7 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install chromium >/dev/null 2>&1
-          cat > /tmp/test.mjs <<'JS'
+          cat > e2e-test.mjs <<'JS'
           import { chromium } from 'playwright';
           const browser=await chromium.launch({headless:true});
           const page=await browser.newPage();
@@ -31,4 +31,4 @@ jobs:
           if(!text.includes('sincronizada')&&!text.includes('incorrect')) process.exit(3);
           await browser.close();
           JS
-          node /tmp/test.mjs
+          node e2e-test.mjs
