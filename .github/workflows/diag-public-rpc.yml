@@ -1,0 +1,21 @@
+name: Diagnose public RPC behavior
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/diag-public-rpc.yml']
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe RPC responses with fake data only
+        shell: bash
+        run: |
+          set -euo pipefail
+          API='https://dkqovohxkxlcccvagpij.supabase.co/rest/v1'
+          KEY='sb_publishable_iz06RtaObND0dWOpuX2vKg_wZVbrZCv'
+          echo '--- validar_empleado fake ---'
+          curl -sS "$API/rpc/validar_empleado" -X POST -H "apikey: $KEY" -H 'Content-Type: application/json' --data '{"p_clave":"__fake__","p_pin":"__fake__"}' | python -c 'import sys,json; x=json.load(sys.stdin); print(x if isinstance(x,dict) else {"rows":len(x)})'
+          echo '--- mover_stock_v2 null token fake ids ---'
+          curl -sS "$API/rpc/mover_stock_v2" -X POST -H "apikey: $KEY" -H 'Content-Type: application/json' --data '{"p_token":null,"p_id":"00000000-0000-0000-0000-000000000000","p_producto":"00000000-0000-0000-0000-000000000000","p_tipo":"ENTRADA","p_cantidad":1,"p_marbete":null,"p_nota":"diag"}' | python -c 'import sys,json; x=json.load(sys.stdin); print(x if isinstance(x,dict) else {"rows":len(x)})'
