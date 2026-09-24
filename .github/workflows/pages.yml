@@ -72,6 +72,14 @@ jobs:
           }
 
           probe_rpc validar_empleado '{"p_clave":"__smoke__","p_pin":"__smoke__"}'
+          AUTH_BODY=$(curl --connect-timeout 5 --max-time 15 -sS "$API/rpc/validar_empleado" -X POST \
+            -H "apikey: $KEY" -H 'Content-Type: application/json' \
+            --data '{"p_clave":"__permission_probe__","p_pin":"__permission_probe__"}')
+          if printf '%s' "$AUTH_BODY" | grep -Eqi 'permission denied|42501|not authorized|authentication required'; then
+            echo 'Employee login RPC is not callable before login.'
+            printf '%s\n' "$AUTH_BODY"
+            exit 1
+          fi
           probe_rpc buscar_producto_codigo '{"p_codigo":"__smoke__"}'
           probe_rpc crear_producto_codigo '{"p_token":null,"p_departamento":"00000000-0000-0000-0000-000000000000","p_codigo":"__smoke__"}'
           probe_rpc resumen_departamento '{"p_departamento":"00000000-0000-0000-0000-000000000000"}'
