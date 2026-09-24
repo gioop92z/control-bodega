@@ -23,17 +23,51 @@ jobs:
           npx playwright install chromium >/dev/null 2>&1
           cat > e2e-test.mjs <<'JS'
           import { chromium } from 'playwright';
+
           const browser=await chromium.launch({headless:true});
           const page=await browser.newPage();
-          const url='https://gioop92z.github.io/control-bodega/?e2e=3.3.0';
+          const browserMessages=[];
+          let apiHeaders=null;
+
+          page.on('console',msg=>{
+            const text=`console:${msg.type()}: ${msg.text()}`;
+            browserMessages.push(text);
+            console.log(text);
+          });
+          page.on('pageerror',err=>{
+            const text=`pageerror: ${err.message}`;
+            browserMessages.push(text);
+            console.log(text);
+          });
+          page.on('request',req=>{
+            if(req.url().includes('supabase.co/rest/v1/')){
+              const h=req.headers();
+              if(h.authorization&&h.apikey) apiHeaders={authorization:h.authorization,apikey:h.apikey,'content-type':'application/json'};
+            }
+          });
+
           let ready=false;
           for(let i=0;i<30;i++){
-            await page.goto(url,{waitUntil:'domcontentloaded'});
-            const body=await page.locator('body').innerText().catch(()=> '');
-            if(body.includes('v3.3.0')){ready=true;break;}
+            const url=`https://gioop92z.github.io/control-bodega/?e2e=3.3.0&cb=${Date.now()}-${i}`;
+            const response=await page.goto(url,{waitUntil:'domcontentloaded'});
+            const html=await page.content();
+            console.log(`pages-attempt=${i+1} status=${response?.status()}`);
+            if(html.includes('app.js?v=3.3.0')&&html.includes('styles.css?v=3.3.0')){
+              ready=true;
+              break;
+            }
             await page.waitForTimeout(4000);
           }
-          if(!ready) throw new Error('GitHub Pages no publicó v3.3.0 durante la prueba.');
+          if(!ready) throw new Error('GitHub Pages todavía no sirve el HTML de v3.3.0.');
+
+          try{
+            await page.locator('#clave').waitFor({state:'visible',timeout:25000});
+          }catch(e){
+            console.log('BROWSER_DIAGNOSTICS_START');
+            console.log(browserMessages.join('\n'));
+            console.log('BROWSER_DIAGNOSTICS_END');
+            throw new Error('El HTML v3.3.0 llegó, pero JavaScript no renderizó el login.');
+          }
 
           await page.locator('#clave').fill('10');
           await page.locator('#pin').fill('0000');
@@ -43,8 +77,7 @@ jobs:
 
           await page.locator('#pin').fill('1010');
           await page.locator('button[type=submit]').click();
-          await page.waitForLoadState('domcontentloaded');
-          await page.locator('.access-label').waitFor({state:'visible',timeout:15000});
+          await page.locator('.access-label').waitFor({state:'visible',timeout:20000});
           const access=await page.locator('.access-label').innerText();
           if(!access.includes('Vendedor general')) throw new Error('No abrió el acceso Vendedor general.');
           if(await page.locator('[data-view="admin"]').count()) throw new Error('El vendedor puede ver Ajustes.');
@@ -52,6 +85,29 @@ jobs:
 
           await page.locator('[data-view="search"]').click();
           await page.locator('#manualSearch').waitFor({state:'visible',timeout:10000});
+          await page.locator('#searchCode').fill('__e2e_no_product__');
+          await page.locator('#manualSearch button').click();
+          await page.waitForTimeout(1200);
+
+          if(!apiHeaders) throw new Error('No se capturó una sesión autenticada de Supabase para el vendedor.');
+          const probe=await page.context().request.post('https://dkqovohxkxlcccvagpij.supabase.co/rest/v1/rpc/mover_stock_v2',{
+            headers:apiHeaders,
+            data:{
+              p_token:null,
+              p_id:'00000000-0000-0000-0000-000000000001',
+              p_producto:'00000000-0000-0000-0000-000000000000',
+              p_tipo:'ENTRADA',
+              p_cantidad:1,
+              p_marbete:null,
+              p_nota:'E2E SIN CAMBIOS'
+            }
+          });
+          const probeText=await probe.text();
+          console.log(`movement-probe-status=${probe.status()} body=${probeText.slice(0,500)}`);
+          if(/emplead|employee|sesión operativa|session.*oper|token.*(invál|inval|requer|required)|permission denied|not authorized/i.test(probeText)){
+            throw new Error('Las entradas/salidas del vendedor todavía dependen del sistema antiguo de empleados.');
+          }
+
           console.log('E2E seller access OK');
           await browser.close();
           JS
