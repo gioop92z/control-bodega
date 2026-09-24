@@ -11,11 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: List public RPC endpoint names
+      - name: Inspect PostgREST schema safely
         shell: bash
         run: |
           set -euo pipefail
           API='https://dkqovohxkxlcccvagpij.supabase.co/rest/v1'
           KEY=$(grep "KEY='sb_publishable_" .github/workflows/pages.yml | head -1 | sed -E "s/.*KEY='([^']+)'.*/\1/")
-          curl --connect-timeout 5 --max-time 20 -sS "$API/" -H "apikey: $KEY" -H 'Accept: application/openapi+json' > /tmp/openapi.json
-          jq -r '.paths | keys[] | select(startswith("/rpc/"))' /tmp/openapi.json | sort
+          code=$(curl --connect-timeout 5 --max-time 20 -sS -o /tmp/openapi.json -w '%{http_code}' "$API/" -H "apikey: $KEY" -H 'Accept: application/openapi+json')
+          echo "HTTP $code"
+          jq -r 'if .paths then (.paths | keys[] | select(startswith("/rpc/"))) else (.message // .hint // .code // "No OpenAPI paths") end' /tmp/openapi.json | sort
