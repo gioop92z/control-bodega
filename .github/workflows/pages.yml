@@ -30,8 +30,7 @@ jobs:
           node --check scanner.js
           node --check auto-add.js
           node --check location-scan.js
-          node --check login-fix.js
-          node --check employee-reset.js
+          node --check team-access.js
           node --check runtime.js
           node --check sw.js
           test -s index.html
@@ -81,7 +80,7 @@ jobs:
           probe_rpc mover_stock_v2 '{"p_token":null,"p_id":"00000000-0000-0000-0000-000000000000","p_producto":"00000000-0000-0000-0000-000000000000","p_tipo":"ENTRADA","p_cantidad":1,"p_marbete":null,"p_nota":"smoke-test"}'
           probe_rpc admin_guardar_empleado '{"p_id":null,"p_clave":"__smoke__","p_nombre":"Smoke Test","p_puesto":"","p_pin":"","p_activo":false,"p_departamentos":[]}'
 
-          for table in departamentos productos movimientos marbetes producto_marbetes conteos conteo_lineas empleados_operativos empleado_operativo_departamentos; do
+          for table in departamentos productos movimientos marbetes producto_marbetes conteos conteo_lineas empleados_operativos empleado_operativo_departamentos empleado_sesiones; do
             probe_table "$table"
           done
 
