@@ -2,7 +2,8 @@
   const WRITE_SELECTORS=[
     '#saveMove','#runImport','#saveLoc','#saveAssign','#saveEmp','#newCount',
     '#addCount','#setCount','#pauseCount','#closeCount','[data-edit]',
-    '[data-toggle-dept]','[data-emp-toggle]'
+    '[data-toggle-dept]','[data-emp-toggle]','#teamSave','#quickSave',
+    '[data-team-toggle]','[data-team-pin]','[data-team-edit]'
   ].join(',');
 
   function ensureStyles(){
