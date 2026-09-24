@@ -1,0 +1,27 @@
+name: Auth settings diagnostic
+
+on:
+  push:
+    branches: ["main"]
+    paths: [".github/workflows/auth-settings.yml"]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read public Supabase auth settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://dkqovohxkxlcccvagpij.supabase.co'
+          KEY='sb_publishable_iz06RtaObND0dWOpuX2vKg_wZVbrZCv'
+          curl --connect-timeout 5 --max-time 15 -sS "$BASE/auth/v1/settings" -H "apikey: $KEY" > /tmp/settings.json
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/settings.json'))
+          for k in ['disable_signup','mailer_autoconfirm','phone_autoconfirm','anonymous_users_enabled']:
+              print(f'{k}={d.get(k)}')
+          ext=d.get('external') or {}
+          for k in ['anonymous','email','phone']:
+              if k in ext: print(f'external_{k}={ext.get(k)}')
+          PY
