@@ -28,6 +28,8 @@ jobs:
         run: |
           node --check app.js
           node --check scanner.js
+          node --check runtime.js
+          node --check sw.js
           test -s index.html
           test -s styles.css
           test -s manifest.json
