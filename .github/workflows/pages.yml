@@ -31,6 +31,7 @@ jobs:
           node --check auto-add.js
           node --check location-scan.js
           node --check team-access.js
+          node --check access-admin-fix.js
           node --check runtime.js
           node --check sw.js
           test -s index.html
