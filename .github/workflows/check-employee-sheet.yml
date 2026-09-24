@@ -1,0 +1,26 @@
+name: Check employee sheet
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/check-employee-sheet.yml']
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check sheet availability without exposing values
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='https://docs.google.com/spreadsheets/d/1SjawmzT3NwiZsfeNS7r5gG8Ycp-hzhzAbR1WZo8HYQQ/gviz/tq?tqx=out:csv&sheet=Empleados'
+          CODE=$(curl -L --connect-timeout 5 --max-time 20 -sS -o /tmp/employees.csv -w '%{http_code}' "$URL")
+          echo "sheet_http=$CODE"
+          test "$CODE" = "200"
+          python - <<'PY'
+          import csv
+          with open('/tmp/employees.csv',encoding='utf-8-sig',newline='') as f:
+              rows=list(csv.reader(f))
+          print('row_count='+str(max(0,len(rows)-1)))
+          print('header_ok='+str(bool(rows and rows[0][:2]==['Clave','Nombre'])).lower())
+          PY
