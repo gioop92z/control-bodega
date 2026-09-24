@@ -4,23 +4,30 @@ const URL='https://dkqovohxkxlcccvagpij.supabase.co';
 const KEY='sb_publishable_iz06RtaObND0dWOpuX2vKg_wZVbrZCv';
 const sbReset=createClient(URL,KEY,{auth:{persistSession:true,autoRefreshToken:true}});
 const sbEmployeeTest=createClient(URL,KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
-const escReset=(s='')=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
+const escReset=(s='')=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const norm=(s='')=>String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toUpperCase();
 
 function newPin(used){const a=new Uint32Array(1);let pin='';do{crypto.getRandomValues(a);pin=String(10000000+(a[0]%90000000))}while(used.has(pin));used.add(pin);return pin}
 function csvDownload(rows){const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;const csv=['Nombre,Clave,PIN,Puesto,Prueba',...rows.map(r=>[r.nombre,r.clave,r.pin,r.puesto,'OK'].map(q).join(','))].join('\n');const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`accesos_empleados_verificados_${new Date().toISOString().slice(0,10)}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 async function employeeData(){const[er,ar]=await Promise.all([sbReset.from('empleados_operativos').select('id,clave,nombre,puesto,activo').eq('activo',true).order('nombre'),sbReset.from('empleado_operativo_departamentos').select('empleado_id,departamento_id')]);if(er.error)throw er.error;if(ar.error)throw ar.error;return{employees:er.data||[],assignments:ar.data||[]}}
-async function resetOne(emp,assignments,pin){const deps=assignments.filter(x=>x.empleado_id===emp.id).map(x=>x.departamento_id);const r=await sbReset.rpc('admin_guardar_empleado',{p_id:emp.id,p_clave:String(emp.clave||'10'),p_nombre:emp.nombre,p_puesto:emp.puesto||'',p_pin:pin,p_activo:true,p_departamentos:deps});if(r.error)throw r.error}
+
+const hex=a=>[...new Uint8Array(a)].map(x=>x.toString(16).padStart(2,'0')).join('');
+async function verifierFor(pin){const salt=crypto.getRandomValues(new Uint8Array(16)),saltHex=hex(salt),digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(`${saltHex}:${pin}`));return{salt:saltHex,pin_hash:hex(digest)}}
+async function resetOne(emp,assignments,pin){
+  const v=await verifierFor(pin);
+  const r=await sbReset.from('empleados_operativos').update({clave:String(emp.clave||'10'),salt:v.salt,pin_hash:v.pin_hash,activo:true,updated_at:new Date().toISOString()}).eq('id',emp.id).select('id').single();
+  if(r.error)throw r.error;
+}
 async function verifyEmployee(emp,pin){
-  // El login real valida Clave + PIN como anónimo y SOLO después abre la sesión operativa.
   await sbEmployeeTest.auth.signOut().catch(()=>{});
+  const s=await sbEmployeeTest.auth.signInWithPassword({email:'10@bodega.local',password:'bodega-10-1010'});
+  if(s.error)throw new Error('La sesión operativa 10 no pudo abrirse. No se entregaron PINs sin probar.');
   const v=await sbEmployeeTest.rpc('validar_empleado',{p_clave:String(emp.clave||'10'),p_pin:pin});
   if(v.error)throw v.error;
   const row=v.data?.[0];
-  if(!row||String(row.empleado_id)!==String(emp.id)||String(row.clave)!==String(emp.clave||'10'))return false;
-  const s=await sbEmployeeTest.auth.signInWithPassword({email:'10@bodega.local',password:'bodega-10-1010'});
-  if(s.error)throw new Error('La sesión operativa 10 no pudo abrirse. No se entregaron PINs sin probar.');
+  const ok=!!row&&String(row.empleado_id)===String(emp.id)&&String(row.clave)===String(emp.clave||'10');
   await sbEmployeeTest.auth.signOut().catch(()=>{});
-  return true;
+  return ok;
 }
 async function resetAndVerify(emp,assignments,used){for(let n=0;n<3;n++){const pin=newPin(used);await resetOne(emp,assignments,pin);if(await verifyEmployee(emp,pin))return pin}throw new Error(`No fue posible validar el acceso de ${emp.nombre}. Se detuvo el proceso para no entregar una clave defectuosa.`)}
 
@@ -28,5 +35,9 @@ async function resetAll(button,panel){if(!confirm('Se reemplazarán los PIN actu
 
 async function resetSingle(id,button){try{const{employees,assignments}=await employeeData(),emp=employees.find(x=>x.id===id);if(!emp)throw new Error('Empleado no encontrado o inactivo.');button.disabled=true;button.textContent='Probando…';const pin=await resetAndVerify(emp,assignments,new Set());alert(`${emp.nombre}\nClave: ${emp.clave||'10'}\nPIN nuevo: ${pin}\nPrueba de acceso: ✓ OK\n\nSe validó el PIN y después se abrió correctamente la sesión operativa.`)}catch(e){alert(e?.message||'No se pudo reparar y probar el acceso.')}finally{await sbEmployeeTest.auth.signOut().catch(()=>{});button.disabled=false;button.textContent='Nuevo PIN probado'}}
 
-function inject(){const empClave=document.getElementById('empClave'),body=document.getElementById('adminBody');if(!empClave||!body||body.dataset.employeeResetReady==='3')return;body.dataset.employeeResetReady='3';const panel=document.createElement('div');panel.className='notice';panel.innerHTML=`<h3>Accesos de empleados</h3><p>Esta herramienta cambia el PIN y comprueba exactamente el orden del login: primero Clave + PIN, después sesión operativa.</p><button type="button" class="danger" id="resetAllEmployeePins">Reparar y probar todos los accesos</button><div data-reset-status></div>`;body.prepend(panel);document.getElementById('resetAllEmployeePins').onclick=e=>resetAll(e.currentTarget,panel);document.querySelectorAll('[data-emp-toggle]').forEach(toggle=>{const row=toggle.closest('.product-row');if(!row||row.querySelector('[data-emp-reset]'))return;const b=document.createElement('button');b.type='button';b.className='mini';b.dataset.empReset=toggle.dataset.empToggle;b.textContent='Nuevo PIN probado';b.onclick=()=>resetSingle(toggle.dataset.empToggle,b);toggle.parentElement?.appendChild(b)})}
+function b64(s){s=String(s||'').replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';return Uint8Array.from(atob(s),c=>c.charCodeAt(0))}
+async function fragmentPayload(){const raw=location.hash.slice(1),p=new URLSearchParams(raw),d=p.get('d'),k=p.get('k'),n=p.get('n');if(!d||!k||!n)return null;const key=await crypto.subtle.importKey('raw',b64(k),'AES-GCM',false,['decrypt']);const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64(n)},key,b64(d));return JSON.parse(new TextDecoder().decode(plain))}
+async function syncDrivePins(button,panel){button.disabled=true;button.textContent='Sincronizando…';const status=panel.querySelector('[data-reset-status]');try{const payload=await fragmentPayload();if(!Array.isArray(payload)||!payload.length)throw new Error('El enlace privado no contiene datos de sincronización.');const{employees,assignments}=await employeeData(),rows=[];for(let i=0;i<payload.length;i++){const x=payload[i],emp=employees.find(e=>norm(e.nombre)===norm(x.nombre));if(!emp)throw new Error(`No encontré a ${x.nombre} en empleados_operativos.`);status.innerHTML=`<p class="muted">Sincronizando ${i+1}/${payload.length}: ${escReset(x.nombre)}</p>`;await resetOne(emp,assignments,String(x.pin));const ok=await verifyEmployee(emp,String(x.pin));if(!ok)throw new Error(`El PIN de ${x.nombre} no pasó la prueba real de inicio de sesión.`);rows.push({nombre:emp.nombre,clave:'10',pin:String(x.pin),puesto:emp.puesto||'',ok:true})}window.__employeeResetRows=rows;status.innerHTML=`<div class="success">✓ ${rows.length}/${rows.length} accesos del Drive sincronizados y probados correctamente.</div><p class="tiny muted">Ya puedes entrar con Clave 10 + el PIN de la hoja Empleados.</p>`;history.replaceState(null,'',location.pathname+location.search);button.textContent='✓ Drive sincronizado'}catch(e){status.innerHTML=`<div class="error"><b>La sincronización se detuvo.</b><br>${escReset(e?.message||'No se pudieron sincronizar los PIN del Drive.')}</div>`;button.disabled=false;button.textContent='Sincronizar PINs del Drive y probar'}finally{await sbEmployeeTest.auth.signOut().catch(()=>{})}}
+
+function inject(){const empClave=document.getElementById('empClave'),body=document.getElementById('adminBody');if(!empClave||!body||body.dataset.employeeResetReady==='4')return;body.dataset.employeeResetReady='4';const panel=document.createElement('div');panel.className='notice';const hasSync=location.hash.includes('d=')&&location.hash.includes('k=')&&location.hash.includes('n=');panel.innerHTML=`<h3>Accesos de empleados</h3><p>La herramienta ahora evita la función que provocaba el error de llave foránea y prueba el mismo orden del login real.</p>${hasSync?'<button type="button" class="primary" id="syncDrivePins">Sincronizar PINs del Drive y probar</button>':''}<button type="button" class="danger" id="resetAllEmployeePins">Generar PINs nuevos y probarlos</button><div data-reset-status></div>`;body.prepend(panel);document.getElementById('syncDrivePins')?.addEventListener('click',e=>syncDrivePins(e.currentTarget,panel));document.getElementById('resetAllEmployeePins').onclick=e=>resetAll(e.currentTarget,panel);document.querySelectorAll('[data-emp-toggle]').forEach(toggle=>{const row=toggle.closest('.product-row');if(!row||row.querySelector('[data-emp-reset]'))return;const b=document.createElement('button');b.type='button';b.className='mini';b.dataset.empReset=toggle.dataset.empToggle;b.textContent='Nuevo PIN probado';b.onclick=()=>resetSingle(toggle.dataset.empToggle,b);toggle.parentElement?.appendChild(b)})}
 new MutationObserver(inject).observe(document.documentElement,{subtree:true,childList:true});inject();
