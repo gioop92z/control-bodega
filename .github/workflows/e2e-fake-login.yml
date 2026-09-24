@@ -1,15 +1,20 @@
-name: E2E fake employee login
+name: E2E seller access
 on:
   workflow_dispatch:
   push:
-    paths: ['.github/workflows/e2e-fake-login.yml']
+    branches: ["main"]
+    paths:
+      - 'app.js'
+      - 'index.html'
+      - 'styles.css'
+      - '.github/workflows/e2e-fake-login.yml'
 permissions:
   contents: read
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Test login path with fake PIN only
+      - name: Validate seller 10 / 1010 in deployed app
         shell: bash
         run: |
           set -euo pipefail
@@ -20,15 +25,34 @@ jobs:
           import { chromium } from 'playwright';
           const browser=await chromium.launch({headless:true});
           const page=await browser.newPage();
-          await page.goto('https://gioop92z.github.io/control-bodega/?e2e=1',{waitUntil:'networkidle'});
+          const url='https://gioop92z.github.io/control-bodega/?e2e=3.3.0';
+          let ready=false;
+          for(let i=0;i<30;i++){
+            await page.goto(url,{waitUntil:'domcontentloaded'});
+            const body=await page.locator('body').innerText().catch(()=> '');
+            if(body.includes('v3.3.0')){ready=true;break;}
+            await page.waitForTimeout(4000);
+          }
+          if(!ready) throw new Error('GitHub Pages no publicó v3.3.0 durante la prueba.');
+
           await page.locator('#clave').fill('10');
-          await page.locator('#pin').fill('00000000');
+          await page.locator('#pin').fill('0000');
           await page.locator('button[type=submit]').click();
-          await page.waitForTimeout(2500);
-          const text=await page.locator('#loginMsg').innerText().catch(()=> '');
-          console.log('message='+text.replace(/\s+/g,' ').trim());
-          if(text.includes('sesión operativa')) process.exit(2);
-          if(!text.includes('sincronizada')&&!text.includes('incorrect')) process.exit(3);
+          const bad=await page.locator('#loginMsg').innerText();
+          if(!bad.toLowerCase().includes('incorrect')) throw new Error('El PIN incorrecto no fue rechazado.');
+
+          await page.locator('#pin').fill('1010');
+          await page.locator('button[type=submit]').click();
+          await page.waitForLoadState('domcontentloaded');
+          await page.locator('.access-label').waitFor({state:'visible',timeout:15000});
+          const access=await page.locator('.access-label').innerText();
+          if(!access.includes('Vendedor general')) throw new Error('No abrió el acceso Vendedor general.');
+          if(await page.locator('[data-view="admin"]').count()) throw new Error('El vendedor puede ver Ajustes.');
+          if(await page.locator('[data-view="history"]').count()) throw new Error('El vendedor puede ver Historial.');
+
+          await page.locator('[data-view="search"]').click();
+          await page.locator('#manualSearch').waitFor({state:'visible',timeout:10000});
+          console.log('E2E seller access OK');
           await browser.close();
           JS
           node e2e-test.mjs
