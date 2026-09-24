@@ -17,7 +17,7 @@ concurrency:
 jobs:
   deploy:
     environment:
-      name: github-pages
+      name: github-pages-v2-final
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
@@ -45,7 +45,7 @@ jobs:
             local name="$1"
             local payload="$2"
             local body
-            body=$(curl -sS "$API/rpc/$name" -X POST \
+            body=$(curl --connect-timeout 5 --max-time 15 -sS "$API/rpc/$name" -X POST \
               -H "apikey: $KEY" \
               -H 'Content-Type: application/json' \
               --data "$payload")
@@ -59,7 +59,7 @@ jobs:
           probe_table() {
             local name="$1"
             local body
-            body=$(curl -sS "$API/$name?select=*&limit=1" -H "apikey: $KEY")
+            body=$(curl --connect-timeout 5 --max-time 15 -sS "$API/$name?select=*&limit=1" -H "apikey: $KEY")
             if printf '%s' "$body" | grep -Eq 'PGRST205|Could not find the table'; then
               echo "Backend contract missing table: $name"
               printf '%s\n' "$body"
