@@ -30,6 +30,8 @@ jobs:
           node --check scanner.js
           node --check auto-add.js
           node --check location-scan.js
+          node --check login-fix.js
+          node --check employee-reset.js
           node --check runtime.js
           node --check sw.js
           test -s index.html
