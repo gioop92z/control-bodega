@@ -13,6 +13,8 @@ on:
       - 'nova-assistant.css'
       - 'nova-assistant-safe.js'
       - 'nova-network-guard.js'
+      - 'nova-tutorial-slides.css'
+      - 'nova-tutorial-slides.js'
       - 'scanner.js'
       - '.github/workflows/e2e-fake-login.yml'
 permissions:
@@ -21,7 +23,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Validate Nova safe assistant, seller identity and traceability
+      - name: Validate Nova safe assistant, tutorial, seller identity and traceability
         shell: bash
         run: |
           set -euo pipefail
@@ -56,17 +58,17 @@ jobs:
 
           let ready=false;
           for(let i=0;i<30;i++){
-            const url=`https://gioop92z.github.io/control-bodega/?e2e=3.5.1&cb=${Date.now()}-${i}`;
+            const url=`https://gioop92z.github.io/control-bodega/?e2e=3.6.0&cb=${Date.now()}-${i}`;
             const response=await page.goto(url,{waitUntil:'domcontentloaded'});
             const html=await page.content();
             console.log(`pages-attempt=${i+1} status=${response?.status()}`);
-            if(html.includes('nova-enhancements.js?v=3.4.0')&&html.includes('nova-assistant-safe.js?v=3.5.1')&&html.includes('nova-network-guard.js?v=3.5.1')){
+            if(html.includes('nova-assistant-safe.js?v=3.5.1')&&html.includes('nova-network-guard.js?v=3.5.1')&&html.includes('nova-tutorial-slides.js?v=3.6.0')&&html.includes('nova-tutorial-slides.css?v=3.6.0')){
               ready=true;
               break;
             }
             await page.waitForTimeout(4000);
           }
-          if(!ready) throw new Error('GitHub Pages todavía no sirve Nova v3.5.1.');
+          if(!ready) throw new Error('GitHub Pages todavía no sirve Nova v3.6.0.');
 
           await page.locator('#clave').waitFor({state:'visible',timeout:25000});
           if((await page.title())!=='Nova · Control de Inventario') throw new Error('La marca Nova no está activa.');
@@ -97,6 +99,27 @@ jobs:
           if(safeSource.includes("document.addEventListener('click',handleClick")) throw new Error('El asistente seguro todavía intercepta clics operativos.');
           const guardSource=await page.evaluate(async()=>await (await fetch(`nova-network-guard.js?check=${Date.now()}`)).text());
           if(!guardSource.includes('mover_stock_v2')||!guardSource.includes('TIMEOUT_MS=15000')) throw new Error('No está activo el protector de movimientos.');
+
+          // Prueba aislada del nuevo tutorial, sin necesitar acceso administrativo ni tocar datos.
+          await page.evaluate(()=>{
+            const app=document.getElementById('app');
+            const host=document.createElement('div');
+            host.id='tutorialE2EHost';
+            host.innerHTML='<div class="tabs-row"><button data-atab="departments" class="tabbtn">Departamentos</button><button data-atab="locations" class="tabbtn">Ubicaciones</button><button data-atab="onboarding" class="tabbtn">Guía</button></div><section id="adminBody" class="card"></section>';
+            app.appendChild(host);
+          });
+          await page.waitForTimeout(350);
+          if(await page.locator('#tutorialE2EHost [data-atab="onboarding"]').count()) throw new Error('La opción Guía antigua todavía aparece.');
+          await page.locator('#tutorialE2EHost #novaTutorialTab').waitFor({state:'visible',timeout:5000});
+          if(!(await page.locator('#tutorialE2EHost #novaTutorialTab').innerText()).includes('Tutorial Nova')) throw new Error('No apareció Tutorial Nova.');
+          await page.locator('#tutorialE2EHost #novaTutorialTab').click();
+          await page.locator('#novaSlideStage .nova-slide-card').waitFor({state:'visible',timeout:5000});
+          if(!(await page.locator('#novaSlideStage h2').innerText()).includes('Bienvenido a Nova')) throw new Error('El tutorial no inició en la primera diapositiva.');
+          if(!(await page.locator('#novaTutorialSpeak').innerText()).includes('Escuchar')) throw new Error('El tutorial no tiene narración por voz.');
+          if(!(await page.locator('#novaTutorialAuto').innerText()).includes('Reproducir')) throw new Error('El tutorial no tiene recorrido automático.');
+          await page.locator('#novaTutorialNext').click();
+          if(!(await page.locator('#novaSlideStage h2').innerText()).includes('Acceso del vendedor')) throw new Error('El botón Siguiente no cambia de diapositiva.');
+          await page.locator('#tutorialE2EHost').evaluate(el=>el.remove());
 
           await page.evaluate(()=>{
             const input=document.createElement('input');
@@ -130,7 +153,7 @@ jobs:
           console.log(`movement-probe-status=${probe.status()} body=${probeText.slice(0,500)}`);
           if(/sesión operativa|session.*oper|token.*(invál|inval|requer|required)|permission denied|not authorized/i.test(probeText)) throw new Error('El backend exige el sistema antiguo de empleados.');
           if(browserMessages.some(x=>/pageerror:/i.test(x))) throw new Error(`Errores JS en navegador: ${browserMessages.join(' | ')}`);
-          console.log('E2E NOVA SAFE 3.5.1 OK');
+          console.log('E2E NOVA TUTORIAL 3.6 OK');
           await browser.close();
           JS
           node e2e-test.mjs
