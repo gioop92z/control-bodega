@@ -17,27 +17,21 @@ jobs:
           KEY='sb_publishable_iz06RtaObND0dWOpuX2vKg_wZVbrZCv'
           echo '--- validar_empleado fake ---'
           curl -sS "$API/rpc/validar_empleado" -X POST -H "apikey: $KEY" -H 'Content-Type: application/json' --data '{"p_clave":"__fake__","p_pin":"__fake__"}' | python -c 'import sys,json; x=json.load(sys.stdin); print(x if isinstance(x,dict) else {"rows":len(x)})'
-          echo '--- empleados_operativos visible rows ---'
-          curl -sS "$API/empleados_operativos?select=*&limit=1" -H "apikey: $KEY" | python -c 'import sys,json; x=json.load(sys.stdin); print({"rows":len(x)} if isinstance(x,list) else x)'
-          echo '--- OpenAPI employee schema ---'
+          echo '--- OpenAPI operational schema ---'
           curl -sS "$API/" -H "apikey: $KEY" -H 'Accept: application/openapi+json' > /tmp/openapi.json
           python - <<'PY'
           import json
           d=json.load(open('/tmp/openapi.json'))
           defs=d.get('definitions') or d.get('components',{}).get('schemas',{}) or {}
-          for name in ['empleados_operativos']:
+          tables=['departamentos','productos','movimientos','marbetes','producto_marbetes','conteos','conteo_lineas','empleados_operativos','empleado_operativo_departamentos','empleado_sesiones']
+          for name in tables:
               s=defs.get(name,{})
-              print(name+'_columns='+','.join(sorted((s.get('properties') or {}).keys())))
-          for path in ['/rpc/validar_empleado','/rpc/admin_guardar_empleado']:
-              p=d.get('paths',{}).get(path,{})
+              props=s.get('properties') or {}
+              print(name+'_columns='+','.join(sorted(props.keys())))
+              required=s.get('required') or []
+              print(name+'_required='+','.join(sorted(required)))
+          paths=d.get('paths',{})
+          for path in ['/rpc/validar_empleado','/rpc/admin_guardar_empleado','/rpc/mover_stock_v2','/rpc/importar_catalogo','/rpc/ajuste_fisico_masivo']:
+              p=paths.get(path,{})
               print(path+'_methods='+','.join(sorted(p.keys())))
-              post=p.get('post',{})
-              params=post.get('parameters',[])
-              names=[]
-              for q in params:
-                  if q.get('name')=='args':
-                      sch=q.get('schema',{})
-                      names.extend((sch.get('properties') or {}).keys())
-                  elif q.get('name'): names.append(q.get('name'))
-              print(path+'_params='+','.join(sorted(set(names))))
           PY
