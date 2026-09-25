@@ -9,6 +9,9 @@ on:
       - 'styles.css'
       - 'nova.css'
       - 'nova-enhancements.js'
+      - 'nova-admin-welcome.js'
+      - 'nova-assistant.css'
+      - 'nova-assistant.js'
       - 'scanner.js'
       - '.github/workflows/e2e-fake-login.yml'
 permissions:
@@ -17,7 +20,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Validate Nova seller identity and traceability
+      - name: Validate Nova seller identity, assistant and traceability
         shell: bash
         run: |
           set -euo pipefail
@@ -52,17 +55,17 @@ jobs:
 
           let ready=false;
           for(let i=0;i<30;i++){
-            const url=`https://gioop92z.github.io/control-bodega/?e2e=3.4.0&cb=${Date.now()}-${i}`;
+            const url=`https://gioop92z.github.io/control-bodega/?e2e=3.5.0&cb=${Date.now()}-${i}`;
             const response=await page.goto(url,{waitUntil:'domcontentloaded'});
             const html=await page.content();
             console.log(`pages-attempt=${i+1} status=${response?.status()}`);
-            if(html.includes('nova-enhancements.js?v=3.4.0')&&html.includes('nova.css?v=3.4.0')){
+            if(html.includes('nova-enhancements.js?v=3.4.0')&&html.includes('nova-assistant.js?v=3.5.0')&&html.includes('nova-assistant.css?v=3.5.0')){
               ready=true;
               break;
             }
             await page.waitForTimeout(4000);
           }
-          if(!ready) throw new Error('GitHub Pages todavía no sirve Nova v3.4.0.');
+          if(!ready) throw new Error('GitHub Pages todavía no sirve Nova Assistant v3.5.0.');
 
           await page.locator('#clave').waitFor({state:'visible',timeout:25000});
           if((await page.title())!=='Nova · Control de Inventario') throw new Error('La marca Nova no está activa.');
@@ -87,7 +90,12 @@ jobs:
           if(await page.locator('[data-view="admin"]').count()) throw new Error('El vendedor puede ver Ajustes.');
           if(await page.locator('[data-view="history"]').count()) throw new Error('El vendedor puede ver Historial.');
 
-          // Prueba aislada de la barrera de trazabilidad antes de guardar un movimiento.
+          await page.locator('#novaAssistant').waitFor({state:'visible',timeout:7000});
+          const assistantKicker=await page.locator('#novaAssistant .nova-assistant-kicker').innerText();
+          if(!assistantKicker.includes('NOVA')) throw new Error('Nova Assistant no apareció en Inicio.');
+          const assistantHome=await page.locator('#novaAssistant h3').innerText();
+          if(!assistantHome.trim()) throw new Error('Nova Assistant no mostró mensaje contextual en Inicio.');
+
           await page.evaluate(()=>{
             const input=document.createElement('input');
             input.id='moveNote';
@@ -108,9 +116,14 @@ jobs:
           const enhancementSource=await page.evaluate(async()=>await (await fetch(`nova-enhancements.js?check=${Date.now()}`)).text());
           if(!enhancementSource.includes('Bienvenido a Nova')) throw new Error('No se encontró el audio de bienvenida.');
           if(!enhancementSource.includes('Tutorial Nova')||!enhancementSource.includes('Historial y auditoría')) throw new Error('El tutorial completo no está en el bundle publicado.');
+          const assistantSource=await page.evaluate(async()=>await (await fetch(`nova-assistant.js?check=${Date.now()}`)).text());
+          if(!assistantSource.includes('¿Qué vamos a hacer hoy?')||!assistantSource.includes('Vamos a preparar una salida.')||!assistantSource.includes('Conteo finalizado.')) throw new Error('Faltan mensajes contextuales de Nova Assistant.');
 
           await page.locator('[data-view="search"]').click();
           await page.locator('#manualSearch').waitFor({state:'visible',timeout:10000});
+          await page.locator('#novaAssistant').waitFor({state:'visible',timeout:5000});
+          const searchAssistant=await page.locator('#novaAssistant h3').innerText();
+          if(!searchAssistant.includes('¿Qué estamos buscando?')) throw new Error('Nova Assistant no cambió al contexto de búsqueda.');
           await page.locator('#searchCode').fill('__e2e_no_product__');
           await page.locator('#manualSearch button').click();
           await page.waitForTimeout(1000);
@@ -135,7 +148,7 @@ jobs:
           }
 
           if(browserMessages.some(x=>/pageerror:/i.test(x))) throw new Error(`Errores JS en navegador: ${browserMessages.join(' | ')}`);
-          console.log('E2E NOVA 3.4 OK');
+          console.log('E2E NOVA ASSISTANT 3.5 OK');
           await browser.close();
           JS
           node e2e-test.mjs
