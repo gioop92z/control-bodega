@@ -17,21 +17,23 @@ jobs:
           KEY='sb_publishable_iz06RtaObND0dWOpuX2vKg_wZVbrZCv'
           echo '--- validar_empleado fake ---'
           curl -sS "$API/rpc/validar_empleado" -X POST -H "apikey: $KEY" -H 'Content-Type: application/json' --data '{"p_clave":"__fake__","p_pin":"__fake__"}' | python -c 'import sys,json; x=json.load(sys.stdin); print(x if isinstance(x,dict) else {"rows":len(x)})'
-          echo '--- OpenAPI operational schema ---'
-          curl -sS "$API/" -H "apikey: $KEY" -H 'Accept: application/openapi+json' > /tmp/openapi.json
+          echo '--- operational table columns from visible sample rows ---'
           python - <<'PY'
-          import json
-          d=json.load(open('/tmp/openapi.json'))
-          defs=d.get('definitions') or d.get('components',{}).get('schemas',{}) or {}
+          import json, subprocess
+          api='https://dkqovohxkxlcccvagpij.supabase.co/rest/v1'
+          key='sb_publishable_iz06RtaObND0dWOpuX2vKg_wZVbrZCv'
           tables=['departamentos','productos','movimientos','marbetes','producto_marbetes','conteos','conteo_lineas','empleados_operativos','empleado_operativo_departamentos','empleado_sesiones']
           for name in tables:
-              s=defs.get(name,{})
-              props=s.get('properties') or {}
-              print(name+'_columns='+','.join(sorted(props.keys())))
-              required=s.get('required') or []
-              print(name+'_required='+','.join(sorted(required)))
-          paths=d.get('paths',{})
-          for path in ['/rpc/validar_empleado','/rpc/admin_guardar_empleado','/rpc/mover_stock_v2','/rpc/importar_catalogo','/rpc/ajuste_fisico_masivo']:
-              p=paths.get(path,{})
-              print(path+'_methods='+','.join(sorted(p.keys())))
+              raw=subprocess.check_output(['curl','-sS',f'{api}/{name}?select=*&limit=1','-H',f'apikey: {key}'], text=True)
+              try: data=json.loads(raw)
+              except Exception:
+                  print(name+'_columns=UNPARSEABLE'); continue
+              if isinstance(data,list) and data:
+                  print(name+'_columns='+','.join(sorted(data[0].keys())))
+              elif isinstance(data,list):
+                  print(name+'_columns=NO_VISIBLE_ROWS')
+              elif isinstance(data,dict):
+                  print(name+'_error_keys='+','.join(sorted(data.keys())))
+              else:
+                  print(name+'_columns=UNKNOWN')
           PY
