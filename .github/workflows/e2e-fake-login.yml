@@ -99,7 +99,7 @@ jobs:
             button.textContent='Guardar E2E';
             document.body.appendChild(button);
           });
-          await page.locator('#saveMove').click();
+          await page.locator('#saveMove').evaluate(el=>el.click());
           const tagged=await page.locator('#moveNote').inputValue();
           if(!tagged.includes(`Empleado ${EMPLOYEE}`)) throw new Error('Nova no insertó el número de empleado en la nota del movimiento.');
           await page.locator('#saveMove').evaluate(el=>el.remove());
