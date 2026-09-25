@@ -1,4 +1,4 @@
-name: E2E seller access
+name: E2E Nova seller identity
 on:
   workflow_dispatch:
   push:
@@ -7,6 +7,9 @@ on:
       - 'app.js'
       - 'index.html'
       - 'styles.css'
+      - 'nova.css'
+      - 'nova-enhancements.js'
+      - 'scanner.js'
       - '.github/workflows/e2e-fake-login.yml'
 permissions:
   contents: read
@@ -14,7 +17,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Validate seller 10 / 1010 in deployed app
+      - name: Validate Nova seller identity and traceability
         shell: bash
         run: |
           set -euo pipefail
@@ -24,6 +27,7 @@ jobs:
           cat > e2e-test.mjs <<'JS'
           import { chromium } from 'playwright';
 
+          const EMPLOYEE='472918';
           const browser=await chromium.launch({headless:true});
           const page=await browser.newPage();
           const browserMessages=[];
@@ -48,46 +52,68 @@ jobs:
 
           let ready=false;
           for(let i=0;i<30;i++){
-            const url=`https://gioop92z.github.io/control-bodega/?e2e=3.3.0&cb=${Date.now()}-${i}`;
+            const url=`https://gioop92z.github.io/control-bodega/?e2e=3.4.0&cb=${Date.now()}-${i}`;
             const response=await page.goto(url,{waitUntil:'domcontentloaded'});
             const html=await page.content();
             console.log(`pages-attempt=${i+1} status=${response?.status()}`);
-            if(html.includes('app.js?v=3.3.0')&&html.includes('styles.css?v=3.3.0')){
+            if(html.includes('nova-enhancements.js?v=3.4.0')&&html.includes('nova.css?v=3.4.0')){
               ready=true;
               break;
             }
             await page.waitForTimeout(4000);
           }
-          if(!ready) throw new Error('GitHub Pages todavía no sirve el HTML de v3.3.0.');
+          if(!ready) throw new Error('GitHub Pages todavía no sirve Nova v3.4.0.');
 
-          try{
-            await page.locator('#clave').waitFor({state:'visible',timeout:25000});
-          }catch(e){
-            console.log('BROWSER_DIAGNOSTICS_START');
-            console.log(browserMessages.join('\n'));
-            console.log('BROWSER_DIAGNOSTICS_END');
-            throw new Error('El HTML v3.3.0 llegó, pero JavaScript no renderizó el login.');
-          }
+          await page.locator('#clave').waitFor({state:'visible',timeout:25000});
+          if((await page.title())!=='Nova · Control de Inventario') throw new Error('La marca Nova no está activa.');
 
           await page.locator('#clave').fill('10');
-          await page.locator('#pin').fill('0000');
-          await page.locator('button[type=submit]').click();
-          const bad=await page.locator('#loginMsg').innerText();
-          if(!bad.toLowerCase().includes('incorrect')) throw new Error('El PIN incorrecto no fue rechazado.');
+          await page.locator('#clave').dispatchEvent('input');
+          await page.locator('#scanEmployeeLogin').waitFor({state:'visible',timeout:5000});
+          const label=await page.locator('#pin').evaluate(el=>el.previousElementSibling?.textContent||'');
+          if(!label.includes('Gafete')) throw new Error('El acceso 10 no cambió a identificación por gafete.');
 
-          await page.locator('#pin').fill('1010');
+          await page.locator('#pin').fill(EMPLOYEE);
           await page.locator('button[type=submit]').click();
-          await page.locator('.access-label').waitFor({state:'visible',timeout:20000});
+          await page.locator('.access-label').waitFor({state:'visible',timeout:25000});
+
           const access=await page.locator('.access-label').innerText();
           if(!access.includes('Vendedor general')) throw new Error('No abrió el acceso Vendedor general.');
+          await page.locator('.nova-employee-chip').waitFor({state:'visible',timeout:7000});
+          const chip=await page.locator('.nova-employee-chip').innerText();
+          if(!chip.includes(EMPLOYEE)) throw new Error('El número de empleado no aparece en la sesión.');
+          const stored=await page.evaluate(()=>sessionStorage.getItem('nova.employeeNumber'));
+          if(stored!==EMPLOYEE) throw new Error('El número de empleado no quedó guardado en la sesión.');
           if(await page.locator('[data-view="admin"]').count()) throw new Error('El vendedor puede ver Ajustes.');
           if(await page.locator('[data-view="history"]').count()) throw new Error('El vendedor puede ver Historial.');
+
+          // Prueba aislada de la barrera de trazabilidad antes de guardar un movimiento.
+          await page.evaluate(()=>{
+            const input=document.createElement('input');
+            input.id='moveNote';
+            input.value='Devolución E2E';
+            document.body.appendChild(input);
+            const button=document.createElement('button');
+            button.id='saveMove';
+            button.type='button';
+            button.textContent='Guardar E2E';
+            document.body.appendChild(button);
+          });
+          await page.locator('#saveMove').click();
+          const tagged=await page.locator('#moveNote').inputValue();
+          if(!tagged.includes(`Empleado ${EMPLOYEE}`)) throw new Error('Nova no insertó el número de empleado en la nota del movimiento.');
+          await page.locator('#saveMove').evaluate(el=>el.remove());
+          await page.locator('#moveNote').evaluate(el=>el.remove());
+
+          const enhancementSource=await page.evaluate(async()=>await (await fetch(`nova-enhancements.js?check=${Date.now()}`)).text());
+          if(!enhancementSource.includes('Bienvenido a Nova')) throw new Error('No se encontró el audio de bienvenida.');
+          if(!enhancementSource.includes('Tutorial Nova')||!enhancementSource.includes('Historial y auditoría')) throw new Error('El tutorial completo no está en el bundle publicado.');
 
           await page.locator('[data-view="search"]').click();
           await page.locator('#manualSearch').waitFor({state:'visible',timeout:10000});
           await page.locator('#searchCode').fill('__e2e_no_product__');
           await page.locator('#manualSearch button').click();
-          await page.waitForTimeout(1200);
+          await page.waitForTimeout(1000);
 
           if(!apiHeaders) throw new Error('No se capturó una sesión autenticada de Supabase para el vendedor.');
           const probe=await page.context().request.post('https://dkqovohxkxlcccvagpij.supabase.co/rest/v1/rpc/mover_stock_v2',{
@@ -99,16 +125,17 @@ jobs:
               p_tipo:'ENTRADA',
               p_cantidad:1,
               p_marbete:null,
-              p_nota:'E2E SIN CAMBIOS'
+              p_nota:`Empleado ${EMPLOYEE} · E2E SIN CAMBIOS`
             }
           });
           const probeText=await probe.text();
           console.log(`movement-probe-status=${probe.status()} body=${probeText.slice(0,500)}`);
-          if(/emplead|employee|sesión operativa|session.*oper|token.*(invál|inval|requer|required)|permission denied|not authorized/i.test(probeText)){
-            throw new Error('Las entradas/salidas del vendedor todavía dependen del sistema antiguo de empleados.');
+          if(/sesión operativa|session.*oper|token.*(invál|inval|requer|required)|permission denied|not authorized/i.test(probeText)){
+            throw new Error('El backend todavía exige el sistema antiguo de empleados.');
           }
 
-          console.log('E2E seller access OK');
+          if(browserMessages.some(x=>/pageerror:/i.test(x))) throw new Error(`Errores JS en navegador: ${browserMessages.join(' | ')}`);
+          console.log('E2E NOVA 3.4 OK');
           await browser.close();
           JS
           node e2e-test.mjs
