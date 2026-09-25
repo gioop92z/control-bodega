@@ -1,0 +1,45 @@
+/* Nova v3.4.0 — capa visual adicional, sin modificar estilos base */
+:root{--nova:#0f7184;--nova2:#18a0b4;--nova-dark:#122936;--nova-soft:#e8f5f7;--nova-violet:#6a64d8}
+
+/* Branding */
+.brandmark{background:linear-gradient(145deg,#122936,#0f7184)!important;position:relative;overflow:hidden}
+.brandmark:after,.nova-orbit-logo:after{content:"";position:absolute;width:120%;height:24%;left:-10%;top:38%;border:1px solid rgba(255,255,255,.34);border-radius:50%;transform:rotate(-18deg)}
+.brandmark span{position:relative;z-index:2;font-size:27px!important}
+
+/* Login de vendedor */
+.nova-scan-employee{width:100%;border:1px solid #cfe5e9;background:linear-gradient(135deg,#eef9fa,#fff);border-radius:16px;padding:12px 14px;margin-top:8px;display:flex;align-items:center;gap:12px;text-align:left;color:var(--text);box-shadow:0 6px 16px rgba(15,113,132,.07);transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease}
+.nova-scan-employee[hidden]{display:none!important}
+.nova-scan-employee:active{transform:scale(.985)}
+.nova-scan-employee:hover{border-color:#9fd0d8;box-shadow:0 10px 24px rgba(15,113,132,.11)}
+.nova-scan-icon{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;background:linear-gradient(145deg,var(--nova),var(--nova2));color:white;font-size:22px;box-shadow:0 7px 16px rgba(15,113,132,.2)}
+.nova-scan-employee b,.nova-scan-employee small{display:block}.nova-scan-employee b{font-size:13px}.nova-scan-employee small{font-size:10px;color:var(--muted);margin-top:2px}
+.nova-login-help{margin:9px 0 4px;padding:10px 12px;border-radius:13px;background:#f4f8f9;border:1px solid #e0eaed;display:grid;gap:2px}
+.nova-login-help[hidden]{display:none!important}.nova-login-help b{font-size:10px;color:var(--nova);text-transform:uppercase;letter-spacing:.05em}.nova-login-help span{font-size:10px;color:var(--muted);line-height:1.35}
+
+/* Sesión identificada */
+.nova-employee-chip{display:inline-flex;align-items:center;margin-left:5px;padding:3px 7px;border-radius:999px;background:#e6f6f1;color:#19734f;font-size:9px;font-weight:900;letter-spacing:.02em;border:1px solid #cde9dd}
+.nova-toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));z-index:300;transform:translateX(-50%);max-width:min(92vw,460px);background:#122936;color:#fff;padding:12px 15px;border-radius:14px;font-size:12px;font-weight:800;box-shadow:0 15px 40px rgba(0,0,0,.25);animation:novaToastIn .28s cubic-bezier(.2,.9,.2,1)}
+.nova-toast.error{background:#b73b3b}
+
+/* Gate para sesiones antiguas */
+.nova-identity-gate{position:fixed;inset:0;z-index:250;background:rgba(10,24,33,.74);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);display:grid;place-items:center;padding:20px;animation:novaFade .24s ease}
+.nova-identity-card{width:min(100%,430px);background:#fff;border-radius:27px;padding:25px;box-shadow:0 30px 90px rgba(0,0,0,.3);animation:novaCardIn .38s cubic-bezier(.2,.9,.2,1)}
+.nova-identity-card h2{font-size:27px;margin:6px 0 8px}.nova-identity-card p{color:var(--muted);font-size:13px;line-height:1.5}.nova-identity-card small{display:block;color:var(--muted);font-size:10px;line-height:1.45;margin-top:13px}.nova-gate-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:13px}.nova-gate-actions .primary,.nova-gate-actions .secondary{width:100%;margin:0}
+.nova-orbit-logo{width:62px;height:62px;border-radius:19px;background:linear-gradient(145deg,#122936,#0f7184);color:white;display:grid;place-items:center;font-weight:900;font-size:26px;position:relative;overflow:hidden;margin-bottom:16px;box-shadow:0 12px 26px rgba(18,41,54,.2)}.nova-orbit-logo span{z-index:2}
+
+/* Tutorial */
+.nova-tutorial-tab{background:linear-gradient(135deg,#e8f5f7,#f4f1ff)!important;color:#34515c!important;border:1px solid #d9e7eb!important}
+.nova-tutorial-tab.active{background:linear-gradient(135deg,#122936,#0f7184)!important;color:white!important}
+.nova-tutorial-container{padding:0!important;background:transparent!important;border:0!important;box-shadow:none!important}
+.nova-tutorial-head{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;background:white;border:1px solid var(--line);border-radius:22px;padding:18px;box-shadow:var(--shadow);margin-bottom:11px}.nova-tutorial-head h2{font-size:25px;margin:5px 0 5px}.nova-tutorial-head p{margin:0}.nova-tutorial-count{min-width:74px;background:linear-gradient(145deg,var(--nova-soft),#fff);border:1px solid #d8e9ec;border-radius:17px;padding:12px;text-align:center}.nova-tutorial-count b{display:block;font-size:24px;color:var(--nova)}.nova-tutorial-count span{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.nova-tutorial-index{display:flex;gap:6px;overflow:auto;padding:3px 1px 10px;scrollbar-width:none}.nova-tutorial-index::-webkit-scrollbar{display:none}.nova-tutorial-index button{border:1px solid #dfe8ea;background:#fff;color:#51636d;border-radius:999px;padding:8px 11px;font-size:10px;font-weight:800;white-space:nowrap;transition:transform .15s ease,background .15s ease,color .15s ease}.nova-tutorial-index button:active{transform:scale(.96)}.nova-tutorial-index button:hover{background:var(--nova-soft);color:var(--nova)}
+.nova-tutorial-list{display:grid;gap:14px}.nova-tutorial-card{scroll-margin-top:110px;background:#fff;border:1px solid var(--line);border-radius:23px;overflow:hidden;box-shadow:var(--shadow);display:grid;grid-template-columns:minmax(0,1.05fr) minmax(270px,.95fr);align-items:stretch;animation:novaCardIn .32s ease both}.nova-tutorial-image{background:linear-gradient(145deg,#edf5f7,#f8fafb);display:grid;place-items:center;padding:14px;min-height:245px;overflow:hidden}.nova-tutorial-svg{display:block;width:100%;height:auto;filter:saturate(.98);transition:transform .35s cubic-bezier(.2,.8,.2,1)}.nova-tutorial-card:hover .nova-tutorial-svg{transform:scale(1.018) translateY(-2px)}.nova-tutorial-copy{padding:20px 20px 22px}.nova-step-number{font-size:9px;letter-spacing:.09em;font-weight:900;color:var(--nova);margin-bottom:7px}.nova-tutorial-copy h3{font-size:20px;margin:0 0 7px}.nova-tutorial-copy>p{font-size:12px;line-height:1.5;color:var(--muted);margin-bottom:12px}.nova-tutorial-copy ol{padding-left:19px;margin:0;display:grid;gap:7px}.nova-tutorial-copy li{font-size:11px;line-height:1.45;color:#40525d;padding-left:2px}.nova-tutorial-copy li::marker{font-weight:900;color:var(--nova)}
+
+/* Sutil profundidad en tarjetas sin afectar rendimiento */
+.action-card,.card,.nova-tutorial-card{transform:translateZ(0)}
+@media (prefers-reduced-motion:no-preference){.action-card:hover{transform:translateY(-3px);box-shadow:0 16px 36px rgba(23,45,61,.11)}.nova-tutorial-image{perspective:700px}}
+
+@keyframes novaFade{from{opacity:0}to{opacity:1}}@keyframes novaCardIn{from{opacity:0;transform:translateY(9px) scale(.985)}to{opacity:1;transform:none}}@keyframes novaToastIn{from{opacity:0;transform:translate(-50%,12px) scale(.96)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
+
+@media(max-width:720px){.nova-tutorial-card{grid-template-columns:1fr}.nova-tutorial-image{min-height:0;padding:10px}.nova-tutorial-copy{padding:17px}.nova-tutorial-head{align-items:center}.nova-gate-actions{grid-template-columns:1fr}}
+@media(max-width:390px){.nova-tutorial-head{display:block}.nova-tutorial-count{margin-top:12px;width:75px}.nova-identity-card{padding:21px}}
