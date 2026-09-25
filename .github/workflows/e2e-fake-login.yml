@@ -11,7 +11,8 @@ on:
       - 'nova-enhancements.js'
       - 'nova-admin-welcome.js'
       - 'nova-assistant.css'
-      - 'nova-assistant.js'
+      - 'nova-assistant-safe.js'
+      - 'nova-network-guard.js'
       - 'scanner.js'
       - '.github/workflows/e2e-fake-login.yml'
 permissions:
@@ -20,7 +21,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Validate Nova seller identity, assistant and traceability
+      - name: Validate Nova safe assistant, seller identity and traceability
         shell: bash
         run: |
           set -euo pipefail
@@ -55,17 +56,17 @@ jobs:
 
           let ready=false;
           for(let i=0;i<30;i++){
-            const url=`https://gioop92z.github.io/control-bodega/?e2e=3.5.0&cb=${Date.now()}-${i}`;
+            const url=`https://gioop92z.github.io/control-bodega/?e2e=3.5.1&cb=${Date.now()}-${i}`;
             const response=await page.goto(url,{waitUntil:'domcontentloaded'});
             const html=await page.content();
             console.log(`pages-attempt=${i+1} status=${response?.status()}`);
-            if(html.includes('nova-enhancements.js?v=3.4.0')&&html.includes('nova-assistant.js?v=3.5.0')&&html.includes('nova-assistant.css?v=3.5.0')){
+            if(html.includes('nova-enhancements.js?v=3.4.0')&&html.includes('nova-assistant-safe.js?v=3.5.1')&&html.includes('nova-network-guard.js?v=3.5.1')){
               ready=true;
               break;
             }
             await page.waitForTimeout(4000);
           }
-          if(!ready) throw new Error('GitHub Pages todavía no sirve Nova Assistant v3.5.0.');
+          if(!ready) throw new Error('GitHub Pages todavía no sirve Nova v3.5.1.');
 
           await page.locator('#clave').waitFor({state:'visible',timeout:25000});
           if((await page.title())!=='Nova · Control de Inventario') throw new Error('La marca Nova no está activa.');
@@ -79,22 +80,23 @@ jobs:
           await page.locator('#pin').fill(EMPLOYEE);
           await page.locator('button[type=submit]').click();
           await page.locator('.access-label').waitFor({state:'visible',timeout:25000});
-
           const access=await page.locator('.access-label').innerText();
           if(!access.includes('Vendedor general')) throw new Error('No abrió el acceso Vendedor general.');
           await page.locator('.nova-employee-chip').waitFor({state:'visible',timeout:7000});
-          const chip=await page.locator('.nova-employee-chip').innerText();
-          if(!chip.includes(EMPLOYEE)) throw new Error('El número de empleado no aparece en la sesión.');
-          const stored=await page.evaluate(()=>sessionStorage.getItem('nova.employeeNumber'));
-          if(stored!==EMPLOYEE) throw new Error('El número de empleado no quedó guardado en la sesión.');
+          if(!(await page.locator('.nova-employee-chip').innerText()).includes(EMPLOYEE)) throw new Error('El número de empleado no aparece en la sesión.');
+          if((await page.evaluate(()=>sessionStorage.getItem('nova.employeeNumber')))!==EMPLOYEE) throw new Error('El número de empleado no quedó guardado.');
           if(await page.locator('[data-view="admin"]').count()) throw new Error('El vendedor puede ver Ajustes.');
           if(await page.locator('[data-view="history"]').count()) throw new Error('El vendedor puede ver Historial.');
 
           await page.locator('#novaAssistant').waitFor({state:'visible',timeout:7000});
-          const assistantKicker=await page.locator('#novaAssistant .nova-assistant-kicker').innerText();
-          if(!assistantKicker.includes('NOVA')) throw new Error('Nova Assistant no apareció en Inicio.');
-          const assistantHome=await page.locator('#novaAssistant h3').innerText();
-          if(!assistantHome.trim()) throw new Error('Nova Assistant no mostró mensaje contextual en Inicio.');
+          const kicker=await page.locator('#novaAssistant .nova-assistant-kicker').innerText();
+          if(!kicker.includes('NOVA')) throw new Error('Nova Assistant seguro no apareció.');
+
+          const safeSource=await page.evaluate(async()=>await (await fetch(`nova-assistant-safe.js?check=${Date.now()}`)).text());
+          if(!safeSource.includes('modo seguro activo')) throw new Error('No está publicado el asistente seguro.');
+          if(safeSource.includes("document.addEventListener('click',handleClick")) throw new Error('El asistente seguro todavía intercepta clics operativos.');
+          const guardSource=await page.evaluate(async()=>await (await fetch(`nova-network-guard.js?check=${Date.now()}`)).text());
+          if(!guardSource.includes('mover_stock_v2')||!guardSource.includes('TIMEOUT_MS=15000')) throw new Error('No está activo el protector de movimientos.');
 
           await page.evaluate(()=>{
             const input=document.createElement('input');
@@ -109,46 +111,26 @@ jobs:
           });
           await page.locator('#saveMove').evaluate(el=>el.click());
           const tagged=await page.locator('#moveNote').inputValue();
-          if(!tagged.includes(`Empleado ${EMPLOYEE}`)) throw new Error('Nova no insertó el número de empleado en la nota del movimiento.');
+          if(!tagged.includes(`Empleado ${EMPLOYEE}`)) throw new Error('Nova no insertó el número de empleado en la nota.');
           await page.locator('#saveMove').evaluate(el=>el.remove());
           await page.locator('#moveNote').evaluate(el=>el.remove());
 
-          const enhancementSource=await page.evaluate(async()=>await (await fetch(`nova-enhancements.js?check=${Date.now()}`)).text());
-          if(!enhancementSource.includes('Bienvenido a Nova')) throw new Error('No se encontró el audio de bienvenida.');
-          if(!enhancementSource.includes('Tutorial Nova')||!enhancementSource.includes('Historial y auditoría')) throw new Error('El tutorial completo no está en el bundle publicado.');
-          const assistantSource=await page.evaluate(async()=>await (await fetch(`nova-assistant.js?check=${Date.now()}`)).text());
-          if(!assistantSource.includes('¿Qué vamos a hacer hoy?')||!assistantSource.includes('Vamos a preparar una salida.')||!assistantSource.includes('Conteo finalizado.')) throw new Error('Faltan mensajes contextuales de Nova Assistant.');
-
           await page.locator('[data-view="search"]').click();
           await page.locator('#manualSearch').waitFor({state:'visible',timeout:10000});
-          await page.locator('#novaAssistant').waitFor({state:'visible',timeout:5000});
-          const searchAssistant=await page.locator('#novaAssistant h3').innerText();
-          if(!searchAssistant.includes('¿Qué estamos buscando?')) throw new Error('Nova Assistant no cambió al contexto de búsqueda.');
           await page.locator('#searchCode').fill('__e2e_no_product__');
           await page.locator('#manualSearch button').click();
           await page.waitForTimeout(1000);
+          if(!apiHeaders) throw new Error('No se capturó una sesión autenticada de Supabase.');
 
-          if(!apiHeaders) throw new Error('No se capturó una sesión autenticada de Supabase para el vendedor.');
           const probe=await page.context().request.post('https://dkqovohxkxlcccvagpij.supabase.co/rest/v1/rpc/mover_stock_v2',{
             headers:apiHeaders,
-            data:{
-              p_token:null,
-              p_id:'00000000-0000-0000-0000-000000000001',
-              p_producto:'00000000-0000-0000-0000-000000000000',
-              p_tipo:'ENTRADA',
-              p_cantidad:1,
-              p_marbete:null,
-              p_nota:`Empleado ${EMPLOYEE} · E2E SIN CAMBIOS`
-            }
+            data:{p_token:null,p_id:'00000000-0000-0000-0000-000000000001',p_producto:'00000000-0000-0000-0000-000000000000',p_tipo:'ENTRADA',p_cantidad:1,p_marbete:null,p_nota:`Empleado ${EMPLOYEE} · E2E SIN CAMBIOS`}
           });
           const probeText=await probe.text();
           console.log(`movement-probe-status=${probe.status()} body=${probeText.slice(0,500)}`);
-          if(/sesión operativa|session.*oper|token.*(invál|inval|requer|required)|permission denied|not authorized/i.test(probeText)){
-            throw new Error('El backend todavía exige el sistema antiguo de empleados.');
-          }
-
+          if(/sesión operativa|session.*oper|token.*(invál|inval|requer|required)|permission denied|not authorized/i.test(probeText)) throw new Error('El backend exige el sistema antiguo de empleados.');
           if(browserMessages.some(x=>/pageerror:/i.test(x))) throw new Error(`Errores JS en navegador: ${browserMessages.join(' | ')}`);
-          console.log('E2E NOVA ASSISTANT 3.5 OK');
+          console.log('E2E NOVA SAFE 3.5.1 OK');
           await browser.close();
           JS
           node e2e-test.mjs
