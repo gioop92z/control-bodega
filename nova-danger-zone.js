@@ -17,7 +17,7 @@ function jwtEmail(token){
 function admin(){const s=session();return !!s?.access_token&&jwtEmail(s.access_token).toLowerCase()==='99@bodega.local'}
 function h(extra={}){const s=session();if(!s?.access_token)throw Error('Tu sesión expiró. Vuelve a entrar.');return{apikey:KEY,Authorization:`Bearer ${s.access_token}`,...extra}}
 async function req(path,opts={}){const r=await fetch(`${BASE}/${path}`,{...opts,headers:h(opts.headers||{})});const text=await r.text();if(!r.ok){let m=text;try{const j=JSON.parse(text);m=j.message||j.details||j.hint||text}catch{}throw Error(m||`Error ${r.status}`)}return r}
-async function count(table,filter){const r=await req(`${table}?select=id&${filter}&limit=1`,{headers:{Prefer:'count=exact',Range:'0-0'}});const n=Number((r.headers.get('content-range')||'0/0').split('/')[1]);return Number.isFinite(n)?n:0}
+async function count(table,filter){const r=await req(`${table}?select=*&${filter}&limit=1`,{headers:{Prefer:'count=exact',Range:'0-0'}});const n=Number((r.headers.get('content-range')||'0/0').split('/')[1]);return Number.isFinite(n)?n:0}
 async function erase(table,filter){await req(`${table}?${filter}`,{method:'DELETE',headers:{Prefer:'return=minimal'}})}
 function phrase(action,name){return `${action} ${name}`}
 async function confirmAction(kind,id,name){
