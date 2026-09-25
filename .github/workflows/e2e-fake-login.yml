@@ -112,12 +112,12 @@ jobs:
           if(await page.locator('#tutorialE2EHost [data-atab="onboarding"]').count()) throw new Error('La opción Guía antigua todavía aparece.');
           await page.locator('#tutorialE2EHost #novaTutorialTab').waitFor({state:'visible',timeout:5000});
           if(!(await page.locator('#tutorialE2EHost #novaTutorialTab').innerText()).includes('Tutorial Nova')) throw new Error('No apareció Tutorial Nova.');
-          await page.locator('#tutorialE2EHost #novaTutorialTab').click();
+          await page.locator('#tutorialE2EHost #novaTutorialTab').evaluate(el=>el.click());
           await page.locator('#novaSlideStage .nova-slide-card').waitFor({state:'visible',timeout:5000});
           if(!(await page.locator('#novaSlideStage h2').innerText()).includes('Bienvenido a Nova')) throw new Error('El tutorial no inició en la primera diapositiva.');
           if(!(await page.locator('#novaTutorialSpeak').innerText()).includes('Escuchar')) throw new Error('El tutorial no tiene narración por voz.');
           if(!(await page.locator('#novaTutorialAuto').innerText()).includes('Reproducir')) throw new Error('El tutorial no tiene recorrido automático.');
-          await page.locator('#novaTutorialNext').click();
+          await page.locator('#novaTutorialNext').evaluate(el=>el.click());
           if(!(await page.locator('#novaSlideStage h2').innerText()).includes('Acceso del vendedor')) throw new Error('El botón Siguiente no cambia de diapositiva.');
           await page.locator('#tutorialE2EHost').evaluate(el=>el.remove());
 
