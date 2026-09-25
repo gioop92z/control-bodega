@@ -1,4 +1,4 @@
-const NOVA_DANGER_VERSION='3.7.0';
+const NOVA_DANGER_VERSION='3.7.1';
 const PROJECT='dkqovohxkxlcccvagpij';
 const BASE=`https://${PROJECT}.supabase.co/rest/v1`;
 const KEY='sb_publishable_iz06RtaObND0dWOpuX2vKg_wZVbrZCv';
@@ -29,13 +29,15 @@ async function confirmAction(kind,id,name){
   const action=removeDept?'ELIMINAR':'BORRAR';
   const required=phrase(action,name);
   const summary=removeDept
-    ?`Se eliminará DEFINITIVAMENTE el departamento “${name}”.\n\nProductos: ${products}\nMovimientos: ${moves}\nUbicaciones: ${locations}\nConteos: ${counts}\n\nSolo continuará si la base de datos confirma que todas sus relaciones pueden eliminarse de forma segura.`
+    ?`Se eliminará DEFINITIVAMENTE el departamento “${name}”.\n\nProductos: ${products}\nMovimientos: ${moves}\nUbicaciones: ${locations}\nConteos: ${counts}\n\nNova limpiará primero los movimientos vinculados para respetar las relaciones de Supabase.`
     :`Se borrará DEFINITIVAMENTE el catálogo e inventario de “${name}”.\n\nProductos: ${products}\nMovimientos relacionados: ${moves}\nConteos: ${counts}\n\nEl departamento se conservará.`;
   if(!confirm(summary+'\n\nEsta acción no se puede deshacer. ¿Continuar?'))return;
   const typed=prompt(`Escribe exactamente:\n${required}`,'');
   if(typed!==required)return alert('Confirmación incorrecta. No se borró nada.');
   try{
+    await erase('movimientos',filter);
     if(removeDept){
+      await erase('productos',filter);
       await erase('departamentos',`id=eq.${encodeURIComponent(id)}`);
       const left=await count('departamentos',`id=eq.${encodeURIComponent(id)}`);
       if(left!==0)throw Error('La base de datos bloqueó el borrado. No se eliminó el departamento.');
