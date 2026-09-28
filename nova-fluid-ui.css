@@ -1,0 +1,42 @@
+/* Nova 3.9.0 — navegación fluida y carrusel de acciones */
+:root{--nova-ease:cubic-bezier(.22,.85,.25,1);--nova-motion:430ms}
+html{scroll-behavior:smooth}
+.content{view-transition-name:nova-content;contain:paint}
+.topbar{view-transition-name:nova-header}
+.bottom-nav{view-transition-name:nova-bottom-nav}
+
+::view-transition-old(root),::view-transition-new(root){animation:none;mix-blend-mode:normal}
+::view-transition-old(nova-header),::view-transition-new(nova-header),::view-transition-old(nova-bottom-nav),::view-transition-new(nova-bottom-nav){animation:none;mix-blend-mode:normal}
+::view-transition-old(nova-content),::view-transition-new(nova-content){animation-duration:var(--nova-motion);animation-timing-function:var(--nova-ease);mix-blend-mode:normal;transform-origin:center center}
+html[data-nova-direction="forward"]::view-transition-old(nova-content){animation-name:novaPageOutLeft}
+html[data-nova-direction="forward"]::view-transition-new(nova-content){animation-name:novaPageInRight}
+html[data-nova-direction="back"]::view-transition-old(nova-content){animation-name:novaPageOutRight}
+html[data-nova-direction="back"]::view-transition-new(nova-content){animation-name:novaPageInLeft}
+html[data-nova-direction="same"]::view-transition-old(nova-content){animation-name:novaPageFadeOut}
+html[data-nova-direction="same"]::view-transition-new(nova-content){animation-name:novaPageFadeIn}
+
+@keyframes novaPageOutLeft{to{opacity:0;transform:translate3d(-11%,0,0) scale(.985);filter:blur(3px)}}
+@keyframes novaPageInRight{from{opacity:0;transform:translate3d(12%,0,0) scale(.985);filter:blur(3px)}to{opacity:1;transform:none;filter:none}}
+@keyframes novaPageOutRight{to{opacity:0;transform:translate3d(11%,0,0) scale(.985);filter:blur(3px)}}
+@keyframes novaPageInLeft{from{opacity:0;transform:translate3d(-12%,0,0) scale(.985);filter:blur(3px)}to{opacity:1;transform:none;filter:none}}
+@keyframes novaPageFadeOut{to{opacity:0;transform:scale(.99)}}
+@keyframes novaPageFadeIn{from{opacity:0;transform:scale(.99)}to{opacity:1;transform:none}}
+
+.tabs-row{scroll-behavior:smooth;scroll-snap-type:x proximity;overscroll-behavior-x:contain}.tabs-row .tabbtn{scroll-snap-align:center}
+.nova-rail-controls{display:none}
+.nova-rail-label{display:none}
+
+@media(max-width:720px){
+  .action-grid.nova-fluid-rail{display:flex!important;grid-template-columns:none!important;gap:12px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scroll-padding:0 14px;scroll-behavior:smooth;overscroll-behavior-x:contain;touch-action:pan-x pan-y;margin-inline:-14px;padding:4px 14px 9px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .action-grid.nova-fluid-rail::-webkit-scrollbar{display:none}
+  .action-grid.nova-fluid-rail .action-card{flex:0 0:min(78vw,310px);min-height:176px;scroll-snap-align:center;scroll-snap-stop:always;transform:scale(.955);opacity:.74;transition:transform .3s var(--nova-ease),opacity .3s ease,box-shadow .3s ease,border-color .3s ease}
+  .action-grid.nova-fluid-rail .action-card.nova-active-card{transform:scale(1);opacity:1;box-shadow:0 18px 42px rgba(23,45,61,.14);border-color:#c9dde2}
+  .nova-rail-label{display:flex;align-items:center;justify-content:space-between;margin:-1px 1px 1px;color:var(--muted);font-size:10px;font-weight:750;letter-spacing:.02em}.nova-rail-label span:last-child{color:var(--accent)}
+  .nova-rail-controls{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;margin-top:-3px}
+  .nova-rail-controls>button{width:36px;height:36px;border:1px solid var(--line);border-radius:50%;background:rgba(255,255,255,.92);color:var(--primary);display:grid;place-items:center;font-size:18px;font-weight:900;box-shadow:0 5px 14px rgba(23,45,61,.07);transition:transform .15s ease,opacity .15s ease}
+  .nova-rail-controls>button:active{transform:scale(.91)}.nova-rail-controls>button:disabled{opacity:.3}
+  .nova-rail-dots{display:flex;justify-content:center;align-items:center;gap:6px}.nova-rail-dots button{border:0;padding:0;width:6px;height:6px;border-radius:99px;background:#cbd6da;transition:width .22s var(--nova-ease),background .22s ease}.nova-rail-dots button.active{width:23px;background:var(--accent)}
+  .content>.hero,.content>.card,.content>.page-title,.content>.scan-btn,.content>.inline-form,.content>.quick-row,.content>.tip-card{scroll-margin-top:105px}
+}
+
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.action-grid.nova-fluid-rail,.tabs-row{scroll-behavior:auto}.action-grid.nova-fluid-rail .action-card{transition:none!important;transform:none!important;opacity:1!important}::view-transition-old(nova-content),::view-transition-new(nova-content){animation:none!important}}
