@@ -403,7 +403,7 @@ function inventoryView() {
 
 async function loadInventory() {
   const q=$('invQ')?.value.trim()||'', f=$('stockFilter')?.value||'all';
-  let req=sb.from('productos').select('id,sku,upc,descripcion,marca,talla,color,precio,stock,stock_minimo').eq('activo',true).eq('departamento_id',S.deptId).order('descripcion').limit(100);
+  let req=sb.from('productos').select('id,sku,upc,descripcion,marca,talla,color,precio,stock,stock_minimo').eq('activo',true).eq('departamento_id',S.deptId).gt('created_at',VISUAL_CLEANUP_CUTOFF).order('descripcion').limit(100);
   if (q) {
     const s=q.replace(/[,%]/g,' ');
     req=req.or(`sku.ilike.%${s}%,upc.ilike.%${s}%,descripcion.ilike.%${s}%,marca.ilike.%${s}%,talla.ilike.%${s}%,color.ilike.%${s}%`);
@@ -434,7 +434,7 @@ function countView() {
 }
 
 async function loadCounts() {
-  const r=await sb.from('conteos').select('*').eq('departamento_id',S.deptId).order('created_at',{ascending:false}).limit(20);
+  const r=await sb.from('conteos').select('*').eq('departamento_id',S.deptId).gt('created_at',VISUAL_CLEANUP_CUTOFF).order('created_at',{ascending:false}).limit(20);
   if (!$('countArea')) return;
   if (S.count) return renderActiveCount();
   const open=(r.data||[]).filter(x=>x.estado!=='CERRADO');
@@ -565,7 +565,7 @@ function historyView() {
 }
 
 async function loadHistory() {
-  let q=sb.from('movimientos').select('tipo,sku,upc,descripcion,cantidad,impacto,stock_anterior,stock_resultante,user_nombre,empleado_puesto,marbete_codigo,nota,created_at').eq('departamento_id',S.deptId).order('created_at',{ascending:false}).limit(1000);
+  let q=sb.from('movimientos').select('tipo,sku,upc,descripcion,cantidad,impacto,stock_anterior,stock_resultante,user_nombre,empleado_puesto,marbete_codigo,nota,created_at').eq('departamento_id',S.deptId).gt('created_at',VISUAL_CLEANUP_CUTOFF).order('created_at',{ascending:false}).limit(1000);
   const from=$('hFrom').value,to=$('hTo').value,type=$('hType').value,user=$('hUser').value.trim(),code=$('hCode').value.trim(),loc=$('hLoc').value.trim();
   if (from) q=q.gte('created_at',`${from}T00:00:00`);
   if (to) q=q.lte('created_at',`${to}T23:59:59`);
@@ -614,7 +614,7 @@ async function loadAdminTab(tab) {
   if (tab==='locations') {
     const r=await sb.from('marbetes').select('*').eq('departamento_id',S.deptId).gt('created_at',VISUAL_CLEANUP_CUTOFF).order('zona').order('codigo').limit(200);
     box.innerHTML=`<h3>Ubicaciones · ${esc(deptName())}</h3><div class="two"><div><label>Código / marbete</label><input id="locCode"></div><div><label>Tipo</label><input id="locZone" list="zones" placeholder="BODEGA"><datalist id="zones"><option>BODEGA</option><option>PISO</option><option>CAJA</option><option>MUEBLE</option><option>RACK</option><option>CAJÓN</option></datalist></div></div><label>Descripción</label><input id="locDesc" placeholder="Ej. Rack A, nivel 2"><button id="saveLoc" class="primary">Guardar ubicación</button><hr><h3>Asignar producto</h3><div class="two"><div><label>UPC / SKU</label><input id="assignProduct"></div><div><label>Ubicación</label><input id="assignLoc"></div></div><label>Cantidad ubicada (opcional)</label><input id="assignQty" type="number" min="0"><button id="saveAssign" class="secondary">Asignar</button><hr><h3>Registradas</h3>${(r.data||[]).map(m=>`<div class="product-row"><div><b>${esc(m.codigo)}</b><span>${esc(m.zona)}${m.descripcion?' · '+esc(m.descripcion):''}</span></div><span class="pill">${m.activo?'Activa':'Inactiva'}</span></div>`).join('')||'<p class="muted">Aún no hay ubicaciones.</p>'}`;
-    $('saveLoc').onclick=async()=>{const codigo=$('locCode').value.trim(),zona=$('locZone').value.trim().toUpperCase();if(!codigo||!zona)return toast('Falta código o tipo.','error');const x=await sb.from('marbetes').upsert({codigo,zona,descripcion:$('locDesc').value.trim()||null,activo:true,departamento_id:S.deptId,updated_at:new Date().toISOString()},{onConflict:'codigo'});if(x.error)return toast(humanError(x.error),'error');toast('Ubicación guardada.');loadAdminTab('locations')};
+    $('saveLoc').onclick=async()=>{const codigo=$('locCode').value.trim(),zona=$('locZone').value.trim().toUpperCase();if(!codigo||!zona)return toast('Falta código o tipo.','error');const x=await sb.from('marbetes').upsert({codigo,zona,descripcion:$('locDesc').value.trim()||null,activo:true,departamento_id:S.deptId,created_at:new Date().toISOString(),updated_at:new Date().toISOString()},{onConflict:'codigo'});if(x.error)return toast(humanError(x.error),'error');toast('Ubicación guardada.');loadAdminTab('locations')};
     $('saveAssign').onclick=async()=>{const p=await findProduct($('assignProduct').value),mar=$('assignLoc').value.trim();if(!p)return toast('Producto no encontrado.','error');const m=await sb.from('marbetes').select('codigo').eq('codigo',mar).eq('departamento_id',S.deptId).maybeSingle();if(!m.data)return toast('Ubicación no encontrada.','error');const v=$('assignQty').value.trim(),x=await sb.from('producto_marbetes').upsert({sku:p.sku,marbete_codigo:mar,cantidad:v===''?null:Math.max(0,Number(v)||0),updated_at:new Date().toISOString()},{onConflict:'sku,marbete_codigo'});if(x.error)return toast(humanError(x.error),'error');toast('Producto asignado.')};
     return;
   }
