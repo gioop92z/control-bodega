@@ -5,7 +5,10 @@ body{position:relative;overflow-x:hidden;background:linear-gradient(180deg,#f8fb
 .app-shell{position:relative;z-index:2}
 .content{view-transition-name:nova-content;contain:paint;perspective:1100px;transform-style:preserve-3d;padding-bottom:calc(40px + env(safe-area-inset-bottom))}
 .topbar{view-transition-name:nova-header;background:rgba(255,255,255,.68)!important;border-bottom:1px solid rgba(255,255,255,.55)!important;box-shadow:0 10px 35px rgba(28,55,69,.055)!important;backdrop-filter:blur(24px) saturate(1.35)!important;-webkit-backdrop-filter:blur(24px) saturate(1.35)!important}
-.bottom-nav{display:block!important;position:fixed!important;left:-9999px!important;right:auto!important;bottom:auto!important;width:1px!important;height:1px!important;overflow:hidden!important;opacity:0!important;pointer-events:none!important;padding:0!important;border:0!important}
+/* La navegación original queda reducida a unos píxeles transparentes para conservar semántica y pruebas; el usuario navega por gesto. */
+.bottom-nav{display:flex!important;position:fixed!important;left:0!important;right:auto!important;bottom:0!important;width:5px!important;height:1px!important;overflow:hidden!important;opacity:0!important;pointer-events:auto!important;padding:0!important;border:0!important;background:transparent!important;z-index:1!important}
+.bottom-nav button{flex:0 0 1px!important;min-width:1px!important;max-width:1px!important;width:1px!important;height:1px!important;min-height:1px!important;padding:0!important;margin:0!important;border-radius:0!important;font-size:0!important;line-height:0!important;background:transparent!important;color:transparent!important;overflow:hidden!important}
+.bottom-nav button span{display:none!important}
 
 #novaDepthBackdrop{position:fixed;inset:-16vh -16vw;z-index:0;pointer-events:none;overflow:hidden;background:radial-gradient(circle at 16% 14%,rgba(48,169,184,.17),transparent 29%),radial-gradient(circle at 84% 34%,rgba(126,109,226,.13),transparent 31%),linear-gradient(180deg,#f7fbfc 0%,#edf4f6 55%,#f8fbfc 100%)}
 #novaDepthBackdrop i{position:absolute;border-radius:50%;filter:blur(1px);will-change:transform;opacity:.7}
