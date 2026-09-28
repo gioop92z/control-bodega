@@ -1,0 +1,109 @@
+/* VANTIS 1.0.0 — Enterprise Inventory Operations */
+:root{
+  --bg:#F6F7F9;
+  --card:#FFFFFF;
+  --surface:#FFFFFF;
+  --surface-2:#F9FAFB;
+  --text:#101828;
+  --muted:#667085;
+  --line:#E4E7EC;
+  --line-strong:#D0D5DD;
+  --primary:#123B4A;
+  --primary-2:#0F3340;
+  --accent:#087E8B;
+  --accent-soft:#EAF6F7;
+  --green:#16835D;
+  --green-soft:#ECF8F3;
+  --red:#B42318;
+  --red-soft:#FEF3F2;
+  --warn:#B54708;
+  --warn-soft:#FFFAEB;
+  --shadow:0 1px 2px rgba(16,24,40,.04),0 8px 24px rgba(16,24,40,.05);
+  --shadow-strong:0 2px 5px rgba(16,24,40,.06),0 14px 36px rgba(16,24,40,.08);
+  --vantis-ease:cubic-bezier(.2,.75,.25,1);
+  --vantis-motion:190ms;
+  --vantis-swipe:0;
+}
+
+*{box-sizing:border-box}
+html{background:var(--bg);scroll-behavior:smooth}
+body{margin:0;background:var(--bg)!important;color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+body:before{display:none!important}
+
+.app-shell{min-height:100vh;background:var(--bg);position:relative}
+.content{max-width:920px!important;margin:0 auto;padding:22px 16px calc(46px + env(safe-area-inset-bottom))!important;display:grid;gap:14px;view-transition-name:vantis-content;contain:layout paint;transform:translateZ(0);will-change:auto}
+.view-enter{animation:vantisFallbackIn var(--vantis-motion) var(--vantis-ease)!important}
+
+.topbar{position:sticky;top:0;z-index:40;padding:calc(11px + env(safe-area-inset-top)) 16px 11px!important;background:rgba(255,255,255,.97)!important;border-bottom:1px solid var(--line)!important;box-shadow:0 1px 0 rgba(16,24,40,.02)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;animation:none!important;view-transition-name:vantis-header}
+.topbar h2{font-size:21px!important;letter-spacing:-.025em!important;color:var(--text)}
+.topbar .eyebrow{font-size:10px!important;letter-spacing:.14em!important;color:var(--primary)!important;font-weight:850!important}
+.top-actions{gap:8px!important}.compact{border-radius:10px!important;background:#fff!important;border-color:var(--line-strong)!important;padding:9px 11px!important}.ghost{background:#F2F4F7!important;color:#344054!important;border:1px solid transparent!important;border-radius:10px!important;box-shadow:none!important;padding:10px 12px!important}
+.access-label{color:var(--muted)!important}.status-dot,.live-badge i{animation:none!important;box-shadow:none!important;background:var(--green)!important}.nova-employee-chip{background:#F2F4F7!important;border-color:var(--line)!important;color:#344054!important;box-shadow:none!important}
+
+.eyebrow{text-transform:uppercase;letter-spacing:.13em;font-size:10px;font-weight:850;color:var(--accent)}
+h1{font-size:30px!important;letter-spacing:-.035em!important;line-height:1.08!important;color:var(--text)}
+h2{letter-spacing:-.025em!important}h3{color:var(--text)}
+.muted{color:var(--muted)!important}.tiny{color:var(--muted)!important}
+
+.card,.tip-card,.count-product,.nova-slide-card,.nova-tutorial-card{background:#fff!important;border:1px solid var(--line)!important;border-radius:14px!important;box-shadow:var(--shadow)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;transform:none!important;filter:none!important}
+.card:hover{box-shadow:var(--shadow)!important;transform:none!important}
+
+.hero{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:10px 2px 5px!important}
+.hero:after,.page-title:after{display:none!important}
+.hero h1{margin:5px 0 6px!important}.hero p{max-width:560px;line-height:1.45}
+.live-badge{background:var(--green-soft)!important;border:1px solid #CFE9DC!important;color:#126B4C!important;border-radius:999px!important;padding:7px 10px!important;font-size:10px!important;box-shadow:none!important}
+
+.vantis-overview{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:-1px}
+.vantis-metric{background:#fff;border:1px solid var(--line);border-radius:12px;padding:13px 14px;min-height:88px;box-shadow:0 1px 2px rgba(16,24,40,.025);display:flex;flex-direction:column;justify-content:space-between;gap:8px}
+.vantis-metric span{font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.025em}.vantis-metric strong{font-size:23px;line-height:1;color:var(--text);letter-spacing:-.03em}.vantis-metric small{font-size:9px;color:#98A2B3}.vantis-metric[data-tone="attention"] strong{color:var(--warn)}.vantis-metric[data-tone="good"] strong{color:var(--green)}
+.vantis-overview-loading strong{display:block;width:42px;height:20px;background:#EAECF0;border-radius:6px;color:transparent}
+
+.action-grid,.action-grid.nova-fluid-rail{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:10px!important;overflow:visible!important;margin:0!important;padding:0!important;perspective:none!important;scroll-snap-type:none!important}
+.action-card,.action-grid.nova-fluid-rail .action-card{min-height:142px!important;flex:auto!important;padding:15px!important;background:#fff!important;border:1px solid var(--line)!important;border-radius:14px!important;box-shadow:0 1px 2px rgba(16,24,40,.03)!important;opacity:1!important;filter:none!important;transform:none!important;animation:none!important;transition:border-color 140ms ease,box-shadow 140ms ease,transform 100ms ease!important}
+.action-card:before{display:none!important}.action-card:hover{border-color:#C9D4D8!important;box-shadow:0 4px 14px rgba(16,24,40,.055)!important}.action-card:active{transform:scale(.985)!important}
+.action-card b{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;font-size:23px!important;line-height:1;background:var(--accent-soft);color:var(--accent)!important;margin-bottom:18px}.action-card.green b{background:var(--green-soft);color:var(--green)!important}.action-card.red b{background:var(--red-soft);color:var(--red)!important}.action-card strong{font-size:14px!important;color:var(--text)!important;line-height:1.25}.action-card span{font-size:11px!important;color:var(--muted)!important;line-height:1.35}
+.nova-rail-label,.nova-rail-controls{display:none!important}
+
+.kpis{gap:8px!important}.kpi{background:#F8FAFC!important;border:1px solid #EEF1F4;border-radius:11px!important;padding:12px!important;animation:none!important;min-height:72px!important}.kpi.good{background:var(--green-soft)!important;color:var(--green)!important}.kpi.bad{background:var(--red-soft)!important;color:var(--red)!important}.kpi strong{font-size:20px!important}.kpi span{font-size:9px!important}
+
+.primary,.danger,.secondary,.scan-btn,.file-btn,.mini,.tabbtn{background-image:none!important;box-shadow:none!important;transition:background 130ms ease,border-color 130ms ease,transform 90ms ease,color 130ms ease!important}
+.primary,.file-btn{background:var(--primary)!important;color:#fff!important;border:1px solid var(--primary)!important;border-radius:10px!important}.primary:hover,.file-btn:hover{background:var(--primary-2)!important}.secondary{background:#fff!important;color:#344054!important;border:1px solid var(--line-strong)!important;border-radius:10px!important}.danger{background:var(--red)!important;border:1px solid var(--red)!important;border-radius:10px!important}.scan-btn{background:var(--accent)!important;border:1px solid var(--accent)!important;border-radius:11px!important;color:#fff!important;box-shadow:none!important}.scan-btn:after{display:none!important}.mini{background:#F2F4F7!important;border:1px solid var(--line)!important;border-radius:8px!important}.primary:active,.secondary:active,.danger:active,.scan-btn:active,.file-btn:active,.mini:active{transform:scale(.985)!important}
+
+input,select{border:1px solid var(--line-strong)!important;background:#fff!important;color:var(--text)!important;border-radius:10px!important;padding:12px 13px!important;box-shadow:none!important;transition:border-color 130ms ease,box-shadow 130ms ease!important}input:focus,select:focus{border-color:var(--accent)!important;box-shadow:0 0 0 3px rgba(8,126,139,.10)!important}
+
+.tabs-row{display:flex;gap:6px;overflow:auto;background:transparent!important;border:0!important;border-radius:0!important;padding:0 0 2px!important;box-shadow:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;scroll-snap-type:none!important}.tabbtn{background:#F2F4F7!important;color:#475467!important;border:1px solid transparent!important;border-radius:9px!important;padding:9px 12px!important}.tabbtn.active{background:var(--primary)!important;color:#fff!important;border-color:var(--primary)!important}
+
+.page-title{padding:2px 2px 0!important}.page-title h1{margin:10px 0 5px!important}.quick-row{gap:8px!important}.notice{background:var(--warn-soft)!important;color:#7A2E0E!important;border:1px solid #FDE3B4!important;border-radius:10px!important}.success{background:var(--green-soft)!important;color:#126B4C!important;border:1px solid #D2EEDF!important}.error{background:var(--red-soft)!important;color:#912018!important;border:1px solid #F7D6D2!important}
+.product-row,.history-row{animation:none!important}.history-note{background:#F2F4F7!important;color:#475467!important}.count-row{border-radius:10px!important}.table-scroll{border-radius:10px!important}th{background:#F8FAFC!important;color:#475467!important}
+
+/* Navegación técnica invisible: la interfaz se recorre con gestos. */
+.bottom-nav{display:flex!important;position:fixed!important;left:0!important;bottom:0!important;width:5px!important;height:1px!important;overflow:hidden!important;opacity:0!important;pointer-events:auto!important;padding:0!important;margin:0!important;border:0!important;background:transparent!important;z-index:1!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;animation:none!important}
+.bottom-nav button{flex:0 0 1px!important;width:1px!important;min-width:1px!important;max-width:1px!important;height:1px!important;min-height:1px!important;padding:0!important;margin:0!important;border:0!important;font-size:0!important;line-height:0!important;overflow:hidden!important;background:transparent!important;color:transparent!important}.bottom-nav button span{display:none!important}
+
+.vantis-position{position:fixed;z-index:45;left:50%;bottom:calc(10px + env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;align-items:center;gap:5px;pointer-events:none;opacity:.72;transition:opacity 180ms ease}.vantis-position i{display:block;width:4px;height:4px;border-radius:99px;background:#C4CCD3;transition:width 170ms var(--vantis-ease),background 170ms ease}.vantis-position i.active{width:18px;background:var(--primary)}
+
+::view-transition-old(root),::view-transition-new(root),::view-transition-old(vantis-header),::view-transition-new(vantis-header){animation:none;mix-blend-mode:normal}
+::view-transition-old(vantis-content),::view-transition-new(vantis-content){animation-duration:var(--vantis-motion);animation-timing-function:var(--vantis-ease);mix-blend-mode:normal;backface-visibility:hidden}
+html[data-vantis-direction="forward"]::view-transition-old(vantis-content){animation-name:vantisOutLeft}html[data-vantis-direction="forward"]::view-transition-new(vantis-content){animation-name:vantisInRight}html[data-vantis-direction="back"]::view-transition-old(vantis-content){animation-name:vantisOutRight}html[data-vantis-direction="back"]::view-transition-new(vantis-content){animation-name:vantisInLeft}html[data-vantis-direction="same"]::view-transition-old(vantis-content){animation-name:vantisFadeOut}html[data-vantis-direction="same"]::view-transition-new(vantis-content){animation-name:vantisFadeIn}
+@keyframes vantisOutLeft{to{opacity:0;transform:translate3d(-22px,0,0)}}@keyframes vantisInRight{from{opacity:0;transform:translate3d(26px,0,0)}to{opacity:1;transform:none}}@keyframes vantisOutRight{to{opacity:0;transform:translate3d(22px,0,0)}}@keyframes vantisInLeft{from{opacity:0;transform:translate3d(-26px,0,0)}to{opacity:1;transform:none}}@keyframes vantisFadeOut{to{opacity:0}}@keyframes vantisFadeIn{from{opacity:0}to{opacity:1}}@keyframes vantisFallbackIn{from{opacity:.01;transform:translate3d(0,5px,0)}to{opacity:1;transform:none}}
+html.vantis-swipe-live .content{transform:translate3d(calc(var(--vantis-swipe)*10px),0,0);opacity:calc(1 - var(--vantis-swipe-abs)*.04);transition:none!important}
+
+.login-shell{background:var(--bg)!important}.login-card{border-radius:16px!important;background:#fff!important;border:1px solid var(--line)!important;box-shadow:var(--shadow-strong)!important}.brandmark{background:var(--primary)!important;color:#fff!important;border-radius:12px!important;box-shadow:none!important}.login-card .eyebrow{color:var(--accent)!important}.login-accesses>div{background:#F8FAFC!important;border-color:var(--line)!important}
+
+#toast{border-radius:10px!important;box-shadow:0 10px 30px rgba(16,24,40,.14)!important}
+#novaDepthBackdrop,.nova-gesture-hint{display:none!important}
+[data-nova-depth],[data-vantis-depth]{opacity:1!important;transform:none!important;filter:none!important;transition:none!important}
+
+@media(max-width:720px){
+  .content{padding:18px 14px calc(42px + env(safe-area-inset-bottom))!important;gap:12px!important}
+  .topbar{padding-left:14px!important;padding-right:14px!important}.top-actions{gap:6px}.compact{max-width:126px!important}
+  .hero{padding-top:7px!important}.hero h1{font-size:28px!important}.live-badge{margin-top:1px}
+  .vantis-overview{grid-template-columns:1fr 1fr;gap:8px}.vantis-metric{min-height:80px;padding:12px}
+  .action-grid,.action-grid.nova-fluid-rail{grid-template-columns:1fr 1fr!important;gap:8px!important}.action-card,.action-grid.nova-fluid-rail .action-card{min-height:134px!important;padding:13px!important}.action-card b{margin-bottom:14px}.action-card strong{font-size:13px!important}
+  .card{padding:15px!important}.kpis{grid-template-columns:1fr 1fr!important}.quick-row{flex-wrap:wrap}.quick-row>*{min-width:calc(50% - 4px)}
+  .vantis-position{bottom:calc(7px + env(safe-area-inset-bottom))}
+}
+
+@media(min-width:721px){.content{padding-top:28px!important}.action-card:hover{transform:translateY(-1px)!important}}
+
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.view-enter{animation:none!important}::view-transition-old(vantis-content),::view-transition-new(vantis-content){animation:none!important}.vantis-position i{transition:none!important}}
