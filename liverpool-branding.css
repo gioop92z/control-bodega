@@ -1,0 +1,138 @@
+/* VANTIS 1.1.0 — Interfaz visual adaptada a la operación Liverpool */
+:root{
+  --lp-magenta:#E5007D;
+  --lp-magenta-dark:#B80063;
+  --lp-magenta-soft:#FDE7F2;
+  --lp-magenta-softer:#FFF5FA;
+  --lp-charcoal:#24252A;
+  --lp-gray:#6F7177;
+  --lp-line:#E7E0E4;
+  --lp-bg:#F8F7F8;
+  --lp-surface:#FFFFFF;
+  --lp-success:#138A67;
+  --lp-danger:#B42318;
+}
+
+html{background:var(--lp-bg)!important}
+body{background:var(--lp-bg)!important;color:var(--lp-charcoal)!important}
+.app-shell{background:var(--lp-bg)!important}
+
+/* Barra superior: blanca, sobria y con firma Liverpool */
+.topbar{
+  background:#fff!important;
+  border-bottom:1px solid var(--lp-line)!important;
+  box-shadow:0 2px 8px rgba(36,37,42,.035)!important;
+  position:sticky!important;
+}
+.topbar:after{
+  content:"";
+  position:absolute;
+  left:0;right:0;bottom:-1px;height:2px;
+  background:linear-gradient(90deg,var(--lp-magenta),#F25DAA 42%,transparent 82%);
+  opacity:.88;
+}
+.topbar .eyebrow{color:var(--lp-magenta)!important;letter-spacing:.11em!important}
+.topbar h2{color:var(--lp-charcoal)!important}
+
+.lp-top-lockup{display:flex;align-items:center;gap:9px;margin-bottom:5px;min-height:25px}
+.lp-top-lockup .lp-word{font-size:17px}.lp-top-lockup .lp-mark{width:23px;height:23px}
+.lp-top-lockup .lp-divider{width:1px;height:20px;background:#E8E1E5;margin:0 2px}
+.lp-top-lockup .lp-product{font-size:9px;line-height:1.1;font-weight:850;letter-spacing:.13em;color:#686A70;text-transform:uppercase}
+
+/* Logotipo construido en vectores CSS para mantener nitidez y carga ligera */
+.lp-lockup{display:inline-flex;align-items:center;gap:9px;color:var(--lp-magenta);white-space:nowrap}
+.lp-word{font-size:24px;line-height:1;font-weight:520;letter-spacing:-.045em;color:var(--lp-magenta)}
+.lp-mark{position:relative;display:inline-block;width:30px;height:30px;flex:0 0 auto}
+.lp-mark i{position:absolute;border-left:3px solid var(--lp-magenta);border-bottom:3px solid var(--lp-magenta);border-radius:1px}
+.lp-mark i:nth-child(1){inset:2px 9px 9px 2px}
+.lp-mark i:nth-child(2){inset:5px 6px 6px 5px}
+.lp-mark i:nth-child(3){inset:8px 3px 3px 8px}
+.lp-mark i:nth-child(4){left:11px;top:11px;width:17px;height:17px}
+
+/* Login */
+.login-shell{background:linear-gradient(180deg,#fff 0%,#FBF8FA 54%,#F8F7F8 100%)!important}
+.login-card{border:1px solid #E9E3E6!important;box-shadow:0 18px 52px rgba(60,31,46,.10)!important;position:relative;overflow:hidden}
+.login-card:before{content:"";position:absolute;left:0;right:0;top:0;height:4px;background:var(--lp-magenta)}
+.lp-login-brand{display:flex;justify-content:space-between;align-items:center;gap:18px;margin:3px 0 22px;padding-bottom:18px;border-bottom:1px solid #EEE7EB}
+.lp-login-brand .lp-lockup{flex:0 0 auto}
+.lp-login-brand .lp-vantis{display:grid;text-align:right;gap:2px}
+.lp-login-brand .lp-vantis b{font-size:17px;letter-spacing:.12em;color:var(--lp-charcoal)}
+.lp-login-brand .lp-vantis span{font-size:8px;letter-spacing:.11em;text-transform:uppercase;color:#8A7F85;font-weight:800}
+.login-card>.brandmark{display:none!important}
+.login-card .eyebrow{color:var(--lp-magenta)!important}
+.login-card h1{color:var(--lp-charcoal)!important}
+.login-accesses>div{background:#FCFAFB!important;border:1px solid #ECE5E9!important}
+
+/* Paleta corporativa aplicada a componentes */
+:root{
+  --bg:var(--lp-bg);
+  --card:#fff;
+  --surface:#fff;
+  --surface-2:#FCFAFB;
+  --text:var(--lp-charcoal);
+  --muted:#74767C;
+  --line:#E9E4E7;
+  --line-strong:#D9D1D6;
+  --primary:var(--lp-magenta);
+  --primary-2:var(--lp-magenta-dark);
+  --accent:var(--lp-magenta);
+  --accent-soft:var(--lp-magenta-soft);
+  --green:var(--lp-success);
+  --red:var(--lp-danger);
+}
+
+.eyebrow{color:var(--lp-magenta)!important}
+.primary,.file-btn{background:var(--lp-magenta)!important;border-color:var(--lp-magenta)!important;color:#fff!important}
+.primary:hover,.file-btn:hover{background:var(--lp-magenta-dark)!important}
+.scan-btn{background:var(--lp-magenta)!important;border-color:var(--lp-magenta)!important}
+.secondary{background:#fff!important;border-color:#DCD4D9!important;color:#3B3C41!important}
+.secondary:hover{border-color:#BFB3BA!important;background:#FCFAFB!important}
+.ghost{background:#F4F1F3!important;color:#3E3F44!important}
+.tabbtn.active{background:var(--lp-magenta)!important;border-color:var(--lp-magenta)!important;color:#fff!important}
+input:focus,select:focus{border-color:var(--lp-magenta)!important;box-shadow:0 0 0 3px rgba(229,0,125,.10)!important}
+.nova-scan-employee{border-color:#E6CDD9!important;background:#FFF8FC!important;color:#4D3340!important}
+.nova-scan-icon{color:var(--lp-magenta)!important}
+
+.card,.tip-card,.count-product,.nova-slide-card,.nova-tutorial-card{border-color:#EAE4E7!important;box-shadow:0 1px 2px rgba(36,37,42,.025),0 8px 22px rgba(36,37,42,.035)!important}
+.action-card,.action-grid.nova-fluid-rail .action-card{border-color:#EAE4E7!important;box-shadow:0 1px 2px rgba(36,37,42,.025)!important}
+.action-card:hover{border-color:#D7C6CF!important;box-shadow:0 6px 18px rgba(80,30,55,.055)!important}
+.action-card b{background:var(--lp-magenta-soft)!important;color:var(--lp-magenta)!important}
+.action-card.green b{background:#EAF7F2!important;color:var(--lp-success)!important}
+.action-card.red b{background:#FEF0F0!important;color:var(--lp-danger)!important}
+.vantis-position i.active{background:var(--lp-magenta)!important}
+.vantis-metric{border-color:#EAE4E7!important}.vantis-metric strong{color:#28292E!important}
+.live-badge{background:#EEF8F4!important;border-color:#D5EDE3!important;color:#157555!important}
+
+/* Franja institucional inspirada en las marcas de El Puerto de Liverpool */
+.lp-family-strip{background:#fff;border:1px solid #E9E3E6;border-radius:14px;overflow:hidden;box-shadow:0 1px 2px rgba(36,37,42,.025)}
+.lp-family-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:11px 13px 9px;border-bottom:1px solid #F0EAED}
+.lp-family-head span:first-child{font-size:9px;font-weight:850;letter-spacing:.12em;text-transform:uppercase;color:#7C7479}
+.lp-family-head strong{font-size:12px;font-weight:650;color:var(--lp-magenta)}
+.lp-family-rail{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));align-items:stretch}
+.lp-family-item{min-height:55px;display:flex;align-items:center;justify-content:center;gap:7px;padding:10px 8px;color:#5C5E63;border-right:1px solid #EFE9EC;font-size:10px;font-weight:740;text-align:center;line-height:1.08}
+.lp-family-item:last-child{border-right:0}.lp-family-item i{width:18px;height:18px;border-radius:5px;background:#F3F0F2;color:#6D676B;display:grid;place-items:center;font-style:normal;font-size:9px;font-weight:900;flex:0 0 auto}
+.lp-family-item.lp-main{color:var(--lp-magenta)}.lp-family-item.lp-main i{background:var(--lp-magenta-soft);color:var(--lp-magenta)}
+
+/* Matices Liverpool en encabezados de sección */
+.page-title,.hero{position:relative}
+.page-title:before,.hero:before{content:"";position:absolute;left:0;top:-2px;width:34px;height:3px;border-radius:3px;background:var(--lp-magenta)}
+.page-title{padding-top:11px!important}.hero{padding-top:15px!important}
+.section-head h3{position:relative;padding-left:11px}.section-head h3:before{content:"";position:absolute;left:0;top:2px;bottom:2px;width:3px;border-radius:3px;background:var(--lp-magenta)}
+
+/* Tutorial coherente con la nueva identidad */
+.nova-slide-progress i,.nova-slide-progress span{background:var(--lp-magenta)!important}
+.nova-slide-do-number,.nova-slide-number,.nova-slide-tip{color:var(--lp-magenta)!important}
+#novaTutorialSpeak,#novaTutorialAuto,.nova-slide-next{border-color:var(--lp-magenta)!important}
+.nova-slide-next{background:var(--lp-magenta)!important;color:#fff!important}
+
+@media(max-width:720px){
+  .lp-top-lockup .lp-divider,.lp-top-lockup .lp-product{display:none}
+  .lp-top-lockup{margin-bottom:4px}.lp-top-lockup .lp-word{font-size:15px}.lp-top-lockup .lp-mark{width:20px;height:20px}
+  .lp-login-brand{align-items:flex-start}.lp-login-brand .lp-word{font-size:22px}.lp-login-brand .lp-vantis b{font-size:14px}
+  .lp-family-strip{margin-inline:0}
+  .lp-family-head{padding:10px 11px 8px}.lp-family-head strong{font-size:11px}
+  .lp-family-rail{display:flex;overflow-x:auto;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;scrollbar-width:none}.lp-family-rail::-webkit-scrollbar{display:none}
+  .lp-family-item{flex:0 0 124px;scroll-snap-align:start;border-right:1px solid #EFE9EC;min-height:52px}
+}
+
+@media(prefers-reduced-motion:reduce){.lp-family-rail{scroll-behavior:auto}}
