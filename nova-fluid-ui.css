@@ -1,5 +1,5 @@
 /* Nova 4.0.0 — navegación gestual, profundidad y transparencia */
-:root{--nova-ease:cubic-bezier(.2,.82,.24,1);--nova-motion:520ms;--nova-scroll:0;--nova-swipe:0}
+:root{--nova-ease:cubic-bezier(.2,.82,.24,1);--nova-motion:520ms;--nova-scroll:0;--nova-swipe:0;--nova-swipe-abs:0}
 html{scroll-behavior:smooth;background:#edf3f5}
 body{position:relative;overflow-x:hidden;background:linear-gradient(180deg,#f8fbfc 0%,#eef4f6 38%,#f7fafb 100%)}
 .app-shell{position:relative;z-index:2}
@@ -38,7 +38,7 @@ html[data-nova-direction="same"]::view-transition-new(nova-content){animation-na
 @keyframes novaDepthFadeOut{to{opacity:0;transform:translateZ(-90px) scale(.95);filter:blur(8px)}}
 @keyframes novaDepthFadeIn{from{opacity:0;transform:translateZ(-90px) scale(.95);filter:blur(8px)}to{opacity:1;transform:none;filter:none}}
 
-html.nova-swipe-live .content{transform:translate3d(calc(var(--nova-swipe)*20px),0,calc(abs(var(--nova-swipe))*-28px));transition:none!important;filter:brightness(calc(1 - abs(var(--nova-swipe))*.04))}
+html.nova-swipe-live .content{transform:translate3d(calc(var(--nova-swipe)*20px),0,calc(var(--nova-swipe-abs)*-28px));transition:none!important;filter:brightness(calc(1 - var(--nova-swipe-abs)*.04))}
 
 .tabs-row{scroll-behavior:smooth;scroll-snap-type:x proximity;overscroll-behavior-x:contain;background:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.72);border-radius:999px;padding:5px;backdrop-filter:blur(17px);-webkit-backdrop-filter:blur(17px);box-shadow:0 9px 24px rgba(25,49,61,.06)}
 .tabs-row .tabbtn{scroll-snap-align:center;background:rgba(238,244,246,.72)}
