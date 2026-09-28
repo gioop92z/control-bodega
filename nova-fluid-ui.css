@@ -1,42 +1,81 @@
-/* Nova 3.9.0 — navegación fluida y carrusel de acciones */
-:root{--nova-ease:cubic-bezier(.22,.85,.25,1);--nova-motion:430ms}
-html{scroll-behavior:smooth}
-.content{view-transition-name:nova-content;contain:paint}
-.topbar{view-transition-name:nova-header}
-.bottom-nav{view-transition-name:nova-bottom-nav}
+/* Nova 4.0.0 — navegación gestual, profundidad y transparencia */
+:root{--nova-ease:cubic-bezier(.2,.82,.24,1);--nova-motion:520ms;--nova-scroll:0;--nova-swipe:0}
+html{scroll-behavior:smooth;background:#edf3f5}
+body{position:relative;overflow-x:hidden;background:linear-gradient(180deg,#f8fbfc 0%,#eef4f6 38%,#f7fafb 100%)}
+.app-shell{position:relative;z-index:2}
+.content{view-transition-name:nova-content;contain:paint;perspective:1100px;transform-style:preserve-3d;padding-bottom:calc(40px + env(safe-area-inset-bottom))}
+.topbar{view-transition-name:nova-header;background:rgba(255,255,255,.68)!important;border-bottom:1px solid rgba(255,255,255,.55)!important;box-shadow:0 10px 35px rgba(28,55,69,.055)!important;backdrop-filter:blur(24px) saturate(1.35)!important;-webkit-backdrop-filter:blur(24px) saturate(1.35)!important}
+.bottom-nav{display:block!important;position:fixed!important;left:-9999px!important;right:auto!important;bottom:auto!important;width:1px!important;height:1px!important;overflow:hidden!important;opacity:0!important;pointer-events:none!important;padding:0!important;border:0!important}
+
+#novaDepthBackdrop{position:fixed;inset:-16vh -16vw;z-index:0;pointer-events:none;overflow:hidden;background:radial-gradient(circle at 16% 14%,rgba(48,169,184,.17),transparent 29%),radial-gradient(circle at 84% 34%,rgba(126,109,226,.13),transparent 31%),linear-gradient(180deg,#f7fbfc 0%,#edf4f6 55%,#f8fbfc 100%)}
+#novaDepthBackdrop i{position:absolute;border-radius:50%;filter:blur(1px);will-change:transform;opacity:.7}
+#novaDepthBackdrop i:nth-child(1){width:48vw;height:48vw;min-width:320px;min-height:320px;left:-8vw;top:14vh;background:radial-gradient(circle,rgba(15,113,132,.15),rgba(15,113,132,0) 68%);transform:translate3d(0,calc(var(--nova-scroll)*-.055px),0)}
+#novaDepthBackdrop i:nth-child(2){width:56vw;height:56vw;min-width:380px;min-height:380px;right:-17vw;top:34vh;background:radial-gradient(circle,rgba(106,100,216,.12),rgba(106,100,216,0) 70%);transform:translate3d(0,calc(var(--nova-scroll)*-.035px),0)}
+#novaDepthBackdrop i:nth-child(3){width:38vw;height:38vw;min-width:260px;min-height:260px;left:24vw;bottom:-12vh;background:radial-gradient(circle,rgba(30,163,132,.11),rgba(30,163,132,0) 70%);transform:translate3d(0,calc(var(--nova-scroll)*-.075px),0)}
+
+.card,.action-card,.tip-card,.count-product,.nova-tutorial-card{background:rgba(255,255,255,.72)!important;border-color:rgba(255,255,255,.78)!important;backdrop-filter:blur(20px) saturate(1.25);-webkit-backdrop-filter:blur(20px) saturate(1.25);box-shadow:0 22px 55px rgba(30,55,67,.09),inset 0 1px 0 rgba(255,255,255,.9)!important}
+.action-card{background:linear-gradient(155deg,rgba(255,255,255,.88),rgba(247,251,252,.64))!important}
+.page-title,.hero{position:relative}
+.hero:after,.page-title:after{content:"";position:absolute;left:2%;right:20%;bottom:-10px;height:1px;background:linear-gradient(90deg,rgba(15,113,132,.18),transparent)}
+
+[data-nova-depth="1"]{opacity:.48;transform:translate3d(0,18px,-34px) scale(.986);filter:blur(2px);transition:opacity .6s var(--nova-ease),transform .7s var(--nova-ease),filter .55s ease}
+[data-nova-depth="1"].nova-depth-visible{opacity:1;transform:translate3d(0,0,0) scale(1);filter:none}
+[data-nova-depth="1"]:nth-child(even).nova-depth-visible{transform:translate3d(0,0,8px) scale(1)}
 
 ::view-transition-old(root),::view-transition-new(root){animation:none;mix-blend-mode:normal}
-::view-transition-old(nova-header),::view-transition-new(nova-header),::view-transition-old(nova-bottom-nav),::view-transition-new(nova-bottom-nav){animation:none;mix-blend-mode:normal}
-::view-transition-old(nova-content),::view-transition-new(nova-content){animation-duration:var(--nova-motion);animation-timing-function:var(--nova-ease);mix-blend-mode:normal;transform-origin:center center}
-html[data-nova-direction="forward"]::view-transition-old(nova-content){animation-name:novaPageOutLeft}
-html[data-nova-direction="forward"]::view-transition-new(nova-content){animation-name:novaPageInRight}
-html[data-nova-direction="back"]::view-transition-old(nova-content){animation-name:novaPageOutRight}
-html[data-nova-direction="back"]::view-transition-new(nova-content){animation-name:novaPageInLeft}
-html[data-nova-direction="same"]::view-transition-old(nova-content){animation-name:novaPageFadeOut}
-html[data-nova-direction="same"]::view-transition-new(nova-content){animation-name:novaPageFadeIn}
+::view-transition-old(nova-header),::view-transition-new(nova-header){animation:none;mix-blend-mode:normal}
+::view-transition-old(nova-content),::view-transition-new(nova-content){animation-duration:var(--nova-motion);animation-timing-function:var(--nova-ease);mix-blend-mode:normal;transform-origin:center center;backface-visibility:hidden}
+html[data-nova-direction="forward"]::view-transition-old(nova-content){animation-name:novaDepthOutLeft}
+html[data-nova-direction="forward"]::view-transition-new(nova-content){animation-name:novaDepthInRight}
+html[data-nova-direction="back"]::view-transition-old(nova-content){animation-name:novaDepthOutRight}
+html[data-nova-direction="back"]::view-transition-new(nova-content){animation-name:novaDepthInLeft}
+html[data-nova-direction="same"]::view-transition-old(nova-content){animation-name:novaDepthFadeOut}
+html[data-nova-direction="same"]::view-transition-new(nova-content){animation-name:novaDepthFadeIn}
+@keyframes novaDepthOutLeft{to{opacity:0;transform:translate3d(-16%,0,-110px) rotateY(3deg) scale(.94);filter:blur(9px)}}
+@keyframes novaDepthInRight{from{opacity:0;transform:translate3d(19%,0,-125px) rotateY(-3deg) scale(.93);filter:blur(10px)}to{opacity:1;transform:none;filter:none}}
+@keyframes novaDepthOutRight{to{opacity:0;transform:translate3d(16%,0,-110px) rotateY(-3deg) scale(.94);filter:blur(9px)}}
+@keyframes novaDepthInLeft{from{opacity:0;transform:translate3d(-19%,0,-125px) rotateY(3deg) scale(.93);filter:blur(10px)}to{opacity:1;transform:none;filter:none}}
+@keyframes novaDepthFadeOut{to{opacity:0;transform:translateZ(-90px) scale(.95);filter:blur(8px)}}
+@keyframes novaDepthFadeIn{from{opacity:0;transform:translateZ(-90px) scale(.95);filter:blur(8px)}to{opacity:1;transform:none;filter:none}}
 
-@keyframes novaPageOutLeft{to{opacity:0;transform:translate3d(-11%,0,0) scale(.985);filter:blur(3px)}}
-@keyframes novaPageInRight{from{opacity:0;transform:translate3d(12%,0,0) scale(.985);filter:blur(3px)}to{opacity:1;transform:none;filter:none}}
-@keyframes novaPageOutRight{to{opacity:0;transform:translate3d(11%,0,0) scale(.985);filter:blur(3px)}}
-@keyframes novaPageInLeft{from{opacity:0;transform:translate3d(-12%,0,0) scale(.985);filter:blur(3px)}to{opacity:1;transform:none;filter:none}}
-@keyframes novaPageFadeOut{to{opacity:0;transform:scale(.99)}}
-@keyframes novaPageFadeIn{from{opacity:0;transform:scale(.99)}to{opacity:1;transform:none}}
+html.nova-swipe-live .content{transform:translate3d(calc(var(--nova-swipe)*20px),0,calc(abs(var(--nova-swipe))*-28px));transition:none!important;filter:brightness(calc(1 - abs(var(--nova-swipe))*.04))}
 
-.tabs-row{scroll-behavior:smooth;scroll-snap-type:x proximity;overscroll-behavior-x:contain}.tabs-row .tabbtn{scroll-snap-align:center}
-.nova-rail-controls{display:none}
-.nova-rail-label{display:none}
+.tabs-row{scroll-behavior:smooth;scroll-snap-type:x proximity;overscroll-behavior-x:contain;background:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.72);border-radius:999px;padding:5px;backdrop-filter:blur(17px);-webkit-backdrop-filter:blur(17px);box-shadow:0 9px 24px rgba(25,49,61,.06)}
+.tabs-row .tabbtn{scroll-snap-align:center;background:rgba(238,244,246,.72)}
+.tabs-row .tabbtn.active{box-shadow:0 8px 20px rgba(18,41,54,.16)}
+
+.nova-gesture-hint{position:fixed;z-index:150;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));transform:translate(-50%,18px) scale(.97);opacity:0;pointer-events:none;display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:999px;background:rgba(18,41,54,.72);color:#fff;border:1px solid rgba(255,255,255,.18);backdrop-filter:blur(18px) saturate(1.25);-webkit-backdrop-filter:blur(18px) saturate(1.25);box-shadow:0 16px 42px rgba(18,41,54,.22);transition:opacity .35s ease,transform .45s var(--nova-ease)}
+.nova-gesture-hint.show{opacity:1;transform:translate(-50%,0) scale(1)}
+.nova-gesture-hint b{font-size:10px;letter-spacing:.02em}.nova-gesture-hint span{font-size:18px;opacity:.8}
+
+.nova-rail-controls{display:none}.nova-rail-label{display:none}
 
 @media(max-width:720px){
-  .action-grid.nova-fluid-rail{display:flex!important;grid-template-columns:none!important;gap:12px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scroll-padding:0 14px;scroll-behavior:smooth;overscroll-behavior-x:contain;touch-action:pan-x pan-y;margin-inline:-14px;padding:4px 14px 9px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .content{padding-left:14px;padding-right:14px;padding-bottom:calc(34px + env(safe-area-inset-bottom))}
+  .action-grid.nova-fluid-rail{display:flex!important;grid-template-columns:none!important;gap:14px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scroll-padding:0 14px;scroll-behavior:smooth;overscroll-behavior-x:contain;touch-action:pan-x pan-y;margin-inline:-14px;padding:8px 14px 14px;scrollbar-width:none;-webkit-overflow-scrolling:touch;perspective:900px}
   .action-grid.nova-fluid-rail::-webkit-scrollbar{display:none}
-  .action-grid.nova-fluid-rail .action-card{flex:0 0:min(78vw,310px);min-height:176px;scroll-snap-align:center;scroll-snap-stop:always;transform:scale(.955);opacity:.74;transition:transform .3s var(--nova-ease),opacity .3s ease,box-shadow .3s ease,border-color .3s ease}
-  .action-grid.nova-fluid-rail .action-card.nova-active-card{transform:scale(1);opacity:1;box-shadow:0 18px 42px rgba(23,45,61,.14);border-color:#c9dde2}
-  .nova-rail-label{display:flex;align-items:center;justify-content:space-between;margin:-1px 1px 1px;color:var(--muted);font-size:10px;font-weight:750;letter-spacing:.02em}.nova-rail-label span:last-child{color:var(--accent)}
-  .nova-rail-controls{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;margin-top:-3px}
-  .nova-rail-controls>button{width:36px;height:36px;border:1px solid var(--line);border-radius:50%;background:rgba(255,255,255,.92);color:var(--primary);display:grid;place-items:center;font-size:18px;font-weight:900;box-shadow:0 5px 14px rgba(23,45,61,.07);transition:transform .15s ease,opacity .15s ease}
-  .nova-rail-controls>button:active{transform:scale(.91)}.nova-rail-controls>button:disabled{opacity:.3}
-  .nova-rail-dots{display:flex;justify-content:center;align-items:center;gap:6px}.nova-rail-dots button{border:0;padding:0;width:6px;height:6px;border-radius:99px;background:#cbd6da;transition:width .22s var(--nova-ease),background .22s ease}.nova-rail-dots button.active{width:23px;background:var(--accent)}
+  .action-grid.nova-fluid-rail .action-card{flex:0 0:min(78vw,315px);min-height:182px;scroll-snap-align:center;scroll-snap-stop:always;transform:translateZ(-36px) scale(.945);opacity:.58;filter:saturate(.84);transition:transform .36s var(--nova-ease),opacity .32s ease,filter .32s ease,box-shadow .32s ease,border-color .32s ease}
+  .action-grid.nova-fluid-rail .action-card.nova-active-card{transform:translateZ(0) scale(1);opacity:1;filter:none;box-shadow:0 25px 55px rgba(23,45,61,.14),inset 0 1px 0 rgba(255,255,255,.94)!important;border-color:rgba(196,221,226,.9)!important}
+  .nova-rail-label{display:flex;align-items:center;justify-content:space-between;margin:-2px 1px 2px;color:var(--muted);font-size:10px;font-weight:760;letter-spacing:.02em}.nova-rail-label span:last-child{color:var(--accent)}
+  .nova-rail-controls{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;margin-top:-4px}
+  .nova-rail-controls>button{width:38px;height:38px;border:1px solid rgba(255,255,255,.8);border-radius:50%;background:rgba(255,255,255,.72);color:var(--primary);display:grid;place-items:center;font-size:19px;font-weight:900;box-shadow:0 9px 25px rgba(23,45,61,.08);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);transition:transform .15s ease,opacity .15s ease}
+  .nova-rail-controls>button:active{transform:scale(.9)}.nova-rail-controls>button:disabled{opacity:.26}
+  .nova-rail-dots{display:flex;justify-content:center;align-items:center;gap:6px}.nova-rail-dots button{border:0;padding:0;width:6px;height:6px;border-radius:99px;background:rgba(103,125,136,.32);transition:width .24s var(--nova-ease),background .22s ease}.nova-rail-dots button.active{width:25px;background:var(--accent)}
+  .topbar{padding-bottom:9px!important}
+  .card{border-radius:24px!important}
   .content>.hero,.content>.card,.content>.page-title,.content>.scan-btn,.content>.inline-form,.content>.quick-row,.content>.tip-card{scroll-margin-top:105px}
 }
 
-@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.action-grid.nova-fluid-rail,.tabs-row{scroll-behavior:auto}.action-grid.nova-fluid-rail .action-card{transition:none!important;transform:none!important;opacity:1!important}::view-transition-old(nova-content),::view-transition-new(nova-content){animation:none!important}}
+@media(min-width:721px){
+  .content{max-width:860px}
+  .card:hover,.action-card:hover{transform:translateY(-4px) translateZ(10px);box-shadow:0 28px 70px rgba(23,45,61,.13)!important}
+}
+
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  #novaDepthBackdrop i{transform:none!important}
+  [data-nova-depth="1"]{opacity:1!important;transform:none!important;filter:none!important;transition:none!important}
+  .action-grid.nova-fluid-rail,.tabs-row{scroll-behavior:auto}
+  .action-grid.nova-fluid-rail .action-card{transition:none!important;transform:none!important;opacity:1!important;filter:none!important}
+  ::view-transition-old(nova-content),::view-transition-new(nova-content){animation:none!important}
+}
