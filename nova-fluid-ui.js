@@ -101,11 +101,13 @@ function isGestureBlocked(target){
 function updateSwipeVisual(dx){
   const p=Math.max(-1,Math.min(1,dx/180));
   document.documentElement.style.setProperty('--nova-swipe',String(p));
+  document.documentElement.style.setProperty('--nova-swipe-abs',String(Math.abs(p)));
   document.documentElement.classList.add('nova-swipe-live');
 }
 
 function resetSwipeVisual(){
   document.documentElement.style.removeProperty('--nova-swipe');
+  document.documentElement.style.removeProperty('--nova-swipe-abs');
   document.documentElement.classList.remove('nova-swipe-live');
 }
 
