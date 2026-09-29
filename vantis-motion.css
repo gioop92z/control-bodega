@@ -1,0 +1,130 @@
+/* VANTIS 1.2.0 — Motion system: físico, premium y ligero */
+:root{
+  --vm-ease:cubic-bezier(.22,.9,.28,1);
+  --vm-spring:cubic-bezier(.16,1,.3,1);
+  --vm-fast:160ms;
+  --vm-med:260ms;
+  --vm-long:420ms;
+  --vm-glow:rgba(229,0,125,.16);
+  --vm-x:50%;
+  --vm-y:35%;
+}
+
+body::after{
+  content:"";
+  position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:
+    radial-gradient(480px circle at var(--vm-x) var(--vm-y),rgba(229,0,125,.055),transparent 62%),
+    linear-gradient(180deg,rgba(255,255,255,.22),transparent 22%);
+  transition:background-position 120ms linear;
+}
+.app-shell,.login-shell{position:relative;z-index:1}
+
+/* Entrada de contenido con sensación de masa, no de “fade” plano */
+.content{transform-origin:50% 16%}
+.view-enter{animation:vmContentIn var(--vm-med) var(--vm-spring)!important}
+@keyframes vmContentIn{
+  from{opacity:.01;transform:translate3d(0,10px,0) scale(.992)}
+  60%{opacity:1}
+  to{opacity:1;transform:none}
+}
+
+/* Tarjetas con profundidad realista */
+.action-card,.vantis-metric,.card,.lp-family-strip,.login-card{
+  transform-style:preserve-3d;
+  backface-visibility:hidden;
+}
+.action-card,.vantis-metric{
+  position:relative;
+  overflow:hidden;
+  transition:transform var(--vm-fast) var(--vm-spring),box-shadow var(--vm-fast) ease,border-color var(--vm-fast) ease!important;
+}
+.action-card::after,.vantis-metric::after{
+  content:"";
+  position:absolute;inset:-1px;
+  pointer-events:none;
+  background:radial-gradient(180px circle at var(--card-x,50%) var(--card-y,50%),rgba(255,255,255,.62),rgba(229,0,125,.055) 28%,transparent 62%);
+  opacity:0;
+  transition:opacity 140ms ease;
+  mix-blend-mode:screen;
+}
+.action-card.vm-lit::after,.vantis-metric.vm-lit::after{opacity:1}
+.action-card.vm-tilt,.vantis-metric.vm-tilt{
+  transform:perspective(820px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)) translateZ(0) scale(1.012)!important;
+  box-shadow:0 14px 34px rgba(44,26,35,.11),0 2px 8px rgba(229,0,125,.07)!important;
+}
+.action-card:active,.vantis-metric:active{transform:scale(.972)!important;transition-duration:75ms!important}
+
+/* Botones: compresión + destello físico */
+.primary,.secondary,.scan-btn,.file-btn,.danger,.ghost,.mini,.tabbtn{
+  position:relative;overflow:hidden;isolation:isolate;
+}
+.vm-ripple{
+  position:absolute;border-radius:999px;pointer-events:none;z-index:0;
+  width:12px;height:12px;transform:translate(-50%,-50%) scale(0);
+  background:rgba(255,255,255,.42);
+  animation:vmRipple 560ms ease-out forwards;
+}
+.secondary .vm-ripple,.ghost .vm-ripple,.mini .vm-ripple,.tabbtn .vm-ripple{background:rgba(229,0,125,.13)}
+@keyframes vmRipple{to{transform:translate(-50%,-50%) scale(22);opacity:0}}
+
+/* Header con barrido de luz muy sutil */
+.topbar{overflow:hidden}
+.topbar::before{
+  content:"";position:absolute;top:0;bottom:0;width:26%;left:-32%;pointer-events:none;
+  background:linear-gradient(105deg,transparent,rgba(255,255,255,.7),transparent);
+  transform:skewX(-12deg);
+  animation:vmHeaderSheen 7s ease-in-out infinite;
+  opacity:.42;
+}
+@keyframes vmHeaderSheen{0%,76%{left:-32%}88%,100%{left:112%}}
+
+/* Liverpool: línea institucional viva, discreta */
+.topbar:after{box-shadow:0 0 16px rgba(229,0,125,.18)}
+.lp-family-strip{animation:vmStripIn 480ms var(--vm-spring) both}
+.lp-family-item{transition:transform 170ms var(--vm-spring),background 170ms ease,color 170ms ease}
+.lp-family-item:active{transform:scale(.96)}
+@keyframes vmStripIn{from{opacity:0;transform:translate3d(0,8px,0)}to{opacity:1;transform:none}}
+
+/* Métricas al actualizar */
+.vantis-metric.vm-pop strong{animation:vmMetricPop 420ms var(--vm-spring)}
+@keyframes vmMetricPop{0%{opacity:.1;transform:translateY(6px) scale(.94)}70%{transform:translateY(-1px) scale(1.035)}100%{opacity:1;transform:none}}
+
+/* Swipe: más físico, con profundidad */
+html.vantis-swipe-live .content{
+  transform:perspective(1000px) translate3d(calc(var(--vantis-swipe)*18px),0,0) rotateY(calc(var(--vantis-swipe)*-1.7deg)) scale(.996)!important;
+  opacity:calc(1 - var(--vantis-swipe-abs)*.08)!important;
+  transition:none!important;
+}
+::view-transition-old(vantis-content),::view-transition-new(vantis-content){animation-duration:260ms!important;animation-timing-function:var(--vm-spring)!important}
+html[data-vantis-direction="forward"]::view-transition-old(vantis-content){animation-name:vmOutLeft!important}
+html[data-vantis-direction="forward"]::view-transition-new(vantis-content){animation-name:vmInRight!important}
+html[data-vantis-direction="back"]::view-transition-old(vantis-content){animation-name:vmOutRight!important}
+html[data-vantis-direction="back"]::view-transition-new(vantis-content){animation-name:vmInLeft!important}
+@keyframes vmOutLeft{to{opacity:0;transform:perspective(1000px) translate3d(-44px,0,-30px) rotateY(2.4deg) scale(.985)}}
+@keyframes vmInRight{from{opacity:0;transform:perspective(1000px) translate3d(54px,0,-34px) rotateY(-2.6deg) scale(.982)}to{opacity:1;transform:none}}
+@keyframes vmOutRight{to{opacity:0;transform:perspective(1000px) translate3d(44px,0,-30px) rotateY(-2.4deg) scale(.985)}}
+@keyframes vmInLeft{from{opacity:0;transform:perspective(1000px) translate3d(-54px,0,-34px) rotateY(2.6deg) scale(.982)}to{opacity:1;transform:none}}
+
+/* Indicador de posición con “pulso” breve al cambiar */
+.vantis-position i.active{box-shadow:0 0 0 0 rgba(229,0,125,.24);animation:vmDot 520ms ease-out}
+@keyframes vmDot{55%{box-shadow:0 0 0 7px rgba(229,0,125,0)}100%{box-shadow:none}}
+
+/* Login más cinematográfico, sin filtros caros */
+.login-card{animation:vmLoginIn 540ms var(--vm-spring) both}
+@keyframes vmLoginIn{from{opacity:0;transform:translate3d(0,14px,0) scale(.988)}to{opacity:1;transform:none}}
+
+@media (hover:hover) and (pointer:fine){
+  .action-card:hover,.vantis-metric:hover{border-color:#DCC7D2!important}
+}
+
+@media(max-width:720px){
+  body::after{background:radial-gradient(330px circle at 78% 16%,rgba(229,0,125,.05),transparent 66%)}
+  .action-card.vm-tilt,.vantis-metric.vm-tilt{transform:translateY(-2px) scale(1.01)!important}
+}
+
+@media(prefers-reduced-motion:reduce){
+  body::after,.topbar::before{display:none!important}
+  .view-enter,.login-card,.lp-family-strip,.vantis-metric.vm-pop strong,.vantis-position i.active{animation:none!important}
+  .action-card,.vantis-metric{transform:none!important;transition:none!important}
+}
