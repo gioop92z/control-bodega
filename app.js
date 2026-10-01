@@ -12,7 +12,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '3.3.1';
+const APP_VERSION = '3.3.2';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 
 const S = {
@@ -296,13 +296,36 @@ function productMoveCard(sellerNote) {
     <button id="saveMove" class="${S.moveType==='ENTRADA'?'primary':'danger'}">${S.moveType==='ENTRADA'?'Registrar entrada':'Registrar salida'}</button>`;
 }
 
+function lookupCodeVariants(value) {
+  const raw=String(value||'').replace(/[\u200B-\u200D\uFEFF]/g,'').trim();
+  if (!raw) return [];
+  const compact=raw.replace(/\s+/g,'');
+  const out=new Set([raw,compact]);
+  if (/^\d+$/.test(compact)) {
+    // Algunos lectores entregan UPC-A (12 dígitos) y otros el mismo código
+    // como EAN-13 con un cero inicial. Aceptamos ambas representaciones.
+    if (compact.length===12) out.add('0'+compact);
+    if (compact.length===13 && compact.startsWith('0')) out.add(compact.slice(1));
+  }
+  return [...out].filter(Boolean);
+}
+
 async function findProduct(code) {
-  code = String(code||'').trim();
-  if (!code) return null;
-  const bySku=await sb.from('productos').select('*').eq('departamento_id',S.deptId).eq('activo',true).gt('created_at',VISUAL_CLEANUP_CUTOFF).eq('sku',code).maybeSingle();
-  if(bySku.data)return bySku.data;
-  const byUpc=await sb.from('productos').select('*').eq('departamento_id',S.deptId).eq('activo',true).gt('created_at',VISUAL_CLEANUP_CUTOFF).eq('upc',code).maybeSingle();
-  return byUpc.data||null;
+  const variants=lookupCodeVariants(code);
+  if (!variants.length) return null;
+
+  // No usamos el corte de limpieza por created_at aquí: un SKU vigente puede
+  // haber sido actualizado por una importación reciente conservando su fecha
+  // original de creación. El departamento + activo siguen limitando el alcance.
+  for (const candidate of variants) {
+    const bySku=await sb.from('productos').select('*').eq('departamento_id',S.deptId).eq('activo',true).eq('sku',candidate).limit(1).maybeSingle();
+    if (bySku.data) return bySku.data;
+  }
+  for (const candidate of variants) {
+    const byUpc=await sb.from('productos').select('*').eq('departamento_id',S.deptId).eq('activo',true).eq('upc',candidate).limit(1).maybeSingle();
+    if (byUpc.data) return byUpc.data;
+  }
+  return null;
 }
 
 async function loadLocations(sku) {
