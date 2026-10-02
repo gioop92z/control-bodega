@@ -3,13 +3,14 @@ name: Harden VANTIS catalog validation
 on:
   push:
     branches: ["main"]
-    paths: [".github/workflows/patch-catalog-scale.yml"]
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   patch:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
