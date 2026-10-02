@@ -42,7 +42,7 @@ function chip(){
 function finish(g,r,d){
   sessionStorage.setItem(ROLE,r);sessionStorage.setItem(DEPT,d);sessionStorage.setItem(READY,'1');
   if(d!=='__none__'){localStorage.setItem('inv.dept',d);const s=$('deptSelect');if(s&&s.value!==d){s.value=d;s.dispatchEvent(new Event('change',{bubbles:true}))}}
-  g.remove();requestAnimationFrame(chip);
+  g.remove();document.documentElement.classList.remove('vantis-session-pending');requestAnimationFrame(chip);
 }
 function departmentStep(g,r){
   const ds=depts(),n=emp(),current=localStorage.getItem('inv.dept')||'',who=r==='admin'?'Jefe':'Vendedor';
@@ -63,7 +63,7 @@ function identityStep(g,r){
 function gate(){
   if(!document.querySelector('.app-shell'))return;
   const r=role();if(!r)return;const ds=depts();
-  if(valid(r,ds)){chip();return}
+  if(valid(r,ds)){document.documentElement.classList.remove('vantis-session-pending');chip();return}
   if($('vantisSessionGate'))return;styles();
   const g=document.createElement('div');g.id='vantisSessionGate';g.className='vantis-session-gate';document.body.appendChild(g);
   if(emp())departmentStep(g,r);else identityStep(g,r);
@@ -71,7 +71,7 @@ function gate(){
 function adminTag(){
   if(role()!=='admin')return;const i=$('moveNote'),n=emp();if(!i||!n)return;const t='Jefe '+n;if(!i.value.toLowerCase().includes(t.toLowerCase()))i.value=i.value.trim()?t+' · '+i.value.trim():t;
 }
-document.addEventListener('click',e=>{const t=e.target instanceof Element?e.target:null;if(!t)return;if(t.closest('#logout')){clear();$('vantisSessionGate')?.remove();return}if(t.closest('#saveMove'))adminTag()},true);
+document.addEventListener('click',e=>{const t=e.target instanceof Element?e.target:null;if(!t)return;if(t.closest('#logout')){clear();$('vantisSessionGate')?.remove();document.documentElement.classList.add('vantis-session-pending');return}if(t.closest('#saveMove'))adminTag()},true);
 document.addEventListener('change',e=>{const x=e.target;if(x instanceof HTMLSelectElement&&x.id==='deptSelect'&&sessionStorage.getItem(READY)==='1')sessionStorage.setItem(DEPT,x.value)});
 const ob=new MutationObserver(()=>requestAnimationFrame(()=>{gate();chip()}));ob.observe(document.getElementById('app')||document.body,{childList:true,subtree:true});
 document.addEventListener('DOMContentLoaded',()=>{gate();chip()},{once:true});gate();chip();
