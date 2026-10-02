@@ -19,6 +19,7 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+import re
 
           p=Path("app.js")
           s=p.read_text()
@@ -90,21 +91,16 @@ jobs:
           if old not in s: raise SystemExit("numeric parser block not found")
           s=s.replace(old,new,1)
 
-          old="""      const upc=normalizeImportCode(get(r,'upc'),{upc:true});
-              const item={sku,upc,descripcion:String(get(r,'descripcion')).trim(),marca:String(get(r,'marca')).trim(),talla:String(get(r,'talla')).trim(),color:String(get(r,'color')).trim(),precio:num(get(r,'precio')),stock:Math.round(num(get(r,'stock'))),minimo:Math.max(0,Math.round(num(get(r,'minimo'))))};
-
-              if (upc) {"""
-          new="""      const upc=normalizeImportCode(get(r,'upc'),{upc:true});
-              const priceRaw=get(r,'precio'), stockRaw=get(r,'stock'), minRaw=get(r,'minimo');
-              const price=num(priceRaw), stock=Math.round(num(stockRaw)), minimo=Math.round(num(minRaw));
-              if ((invalidNum(priceRaw)||price<0) && conflicts.length<12) conflicts.push(`SKU ${sku}: precio inválido`);
-              if ((invalidNum(stockRaw)||stock<0) && conflicts.length<12) conflicts.push(`SKU ${sku}: stock inválido`);
-              if ((invalidNum(minRaw)||minimo<0) && conflicts.length<12) conflicts.push(`SKU ${sku}: mínimo inválido`);
-              const item={sku,upc,descripcion:String(get(r,'descripcion')).trim(),marca:String(get(r,'marca')).trim(),talla:String(get(r,'talla')).trim(),color:String(get(r,'color')).trim(),precio:Math.max(0,price),stock:Math.max(0,stock),minimo:Math.max(0,minimo)};
-
-              if (upc) {"""
-          if old not in s: raise SystemExit("item validation block not found")
-          s=s.replace(old,new,1)
+          pattern=r"""(\s+)const upc=normalizeImportCode\(get\(r,'upc'\),\{upc:true\}\);\n\s+const item=\{sku,upc,descripcion:String\(get\(r,'descripcion'\)\)\.trim\(\),marca:String\(get\(r,'marca'\)\)\.trim\(\),talla:String\(get\(r,'talla'\)\)\.trim\(\),color:String\(get\(r,'color'\)\)\.trim\(\),precio:num\(get\(r,'precio'\)\),stock:Math\.round\(num\(get\(r,'stock'\)\)\),minimo:Math\.max\(0,Math\.round\(num\(get\(r,'minimo'\)\)\)\)\};"""
+          repl="""    const upc=normalizeImportCode(get(r,'upc'),{upc:true});
+    const priceRaw=get(r,'precio'), stockRaw=get(r,'stock'), minRaw=get(r,'minimo');
+    const price=num(priceRaw), stock=Math.round(num(stockRaw)), minimo=Math.round(num(minRaw));
+    if ((invalidNum(priceRaw)||price<0) && conflicts.length<12) conflicts.push(`SKU ${sku}: precio inválido`);
+    if ((invalidNum(stockRaw)||stock<0) && conflicts.length<12) conflicts.push(`SKU ${sku}: stock inválido`);
+    if ((invalidNum(minRaw)||minimo<0) && conflicts.length<12) conflicts.push(`SKU ${sku}: mínimo inválido`);
+    const item={sku,upc,descripcion:String(get(r,'descripcion')).trim(),marca:String(get(r,'marca')).trim(),talla:String(get(r,'talla')).trim(),color:String(get(r,'color')).trim(),precio:Math.max(0,price),stock:Math.max(0,stock),minimo:Math.max(0,minimo)};"""
+          s,n=re.subn(pattern,repl,s,count=1)
+          if n!=1: raise SystemExit(f"item validation block not found ({n})")
 
           p.write_text(s)
 
