@@ -73,5 +73,6 @@ function adminTag(){
 }
 document.addEventListener('click',e=>{const t=e.target instanceof Element?e.target:null;if(!t)return;if(t.closest('#logout')){clear();$('vantisSessionGate')?.remove();document.documentElement.classList.add('vantis-session-pending');return}if(t.closest('#saveMove'))adminTag()},true);
 document.addEventListener('change',e=>{const x=e.target;if(x instanceof HTMLSelectElement&&x.id==='deptSelect'&&sessionStorage.getItem(READY)==='1')sessionStorage.setItem(DEPT,x.value)});
-const ob=new MutationObserver(()=>requestAnimationFrame(()=>{gate();chip()}));ob.observe(document.getElementById('app')||document.body,{childList:true,subtree:true});
-document.addEventListener('DOMContentLoaded',()=>{gate();chip()},{once:true});gate();chip();
+function resetLoginState(){if(!document.querySelector('.login-shell'))return;sessionStorage.removeItem(READY);sessionStorage.removeItem(DEPT);sessionStorage.removeItem(ROLE);document.documentElement.classList.add('vantis-session-pending')}
+const ob=new MutationObserver(()=>requestAnimationFrame(()=>{resetLoginState();gate();chip()}));ob.observe(document.getElementById('app')||document.body,{childList:true,subtree:true});
+document.addEventListener('DOMContentLoaded',()=>{resetLoginState();gate();chip()},{once:true});resetLoginState();gate();chip();
