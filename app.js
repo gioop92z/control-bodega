@@ -12,7 +12,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '3.3.2';
+const APP_VERSION = '3.4.0';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 
 const S = {
@@ -277,7 +277,7 @@ function moveView() {
   `);
   $('backHome').onclick = () => { S.view='home'; S.product=null; render(); };
   $('scanMove').onclick = () => openScanner(findForMove,'UPC o SKU');
-  $('manualMove').onsubmit = e => { e.preventDefault(); findForMove($('manualCode').value); };
+  $('manualMove').onsubmit = e => { e.preventDefault(); findForMove($('manualCode').value).catch(x=>toast(humanError(x),'error')); };
   $('saveMove')?.addEventListener('click', saveMove);
 }
 
@@ -296,41 +296,81 @@ function productMoveCard(sellerNote) {
     <button id="saveMove" class="${S.moveType==='ENTRADA'?'primary':'danger'}">${S.moveType==='ENTRADA'?'Registrar entrada':'Registrar salida'}</button>`;
 }
 
+function cleanCodeText(value) {
+  return String(value ?? '')
+    .replace(/[\u200B-\u200D\uFEFF]/g,'')
+    .replace(/\u00A0/g,' ')
+    .trim()
+    .replace(/^['’]+|['’]+$/g,'');
+}
+
 function lookupCodeVariants(value) {
-  const raw=String(value||'').replace(/[\u200B-\u200D\uFEFF]/g,'').trim();
+  const raw=cleanCodeText(value);
   if (!raw) return [];
   const compact=raw.replace(/\s+/g,'');
-  const out=new Set([raw,compact]);
-  if (/^\d+$/.test(compact)) {
-    // Algunos lectores entregan UPC-A (12 dígitos) y otros el mismo código
-    // como EAN-13 con un cero inicial. Aceptamos ambas representaciones.
-    if (compact.length===12) out.add('0'+compact);
-    if (compact.length===13 && compact.startsWith('0')) out.add(compact.slice(1));
+  return [...new Set([raw,compact])].filter(Boolean);
+}
+
+function upcLookupVariants(value) {
+  const raw=cleanCodeText(value);
+  if (!raw) return [];
+  const compact=raw.replace(/[\s-]+/g,'');
+  if (!/^\d+$/.test(compact)) return [compact];
+
+  const out=new Set([compact]);
+  const stripped=compact.replace(/^0+(?=\d)/,'');
+  out.add(stripped);
+
+  if (stripped.length >= 10 && stripped.length <= 14) {
+    for (const len of [11,12,13,14]) {
+      if (stripped.length <= len) out.add(stripped.padStart(len,'0'));
+    }
   }
   return [...out].filter(Boolean);
 }
 
-async function findProduct(code) {
-  const variants=lookupCodeVariants(code);
-  if (!variants.length) return null;
+function pickByPriority(rows, field, values) {
+  if (!rows?.length) return null;
+  const order=new Map(values.map((v,i)=>[String(v),i]));
+  return [...rows].sort((a,b)=>(order.get(String(a?.[field])) ?? 999)-(order.get(String(b?.[field])) ?? 999))[0] || null;
+}
 
-  // No usamos el corte de limpieza por created_at aquí: un SKU vigente puede
-  // haber sido actualizado por una importación reciente conservando su fecha
-  // original de creación. El departamento + activo siguen limitando el alcance.
-  for (const candidate of variants) {
-    const bySku=await sb.from('productos').select('*').eq('departamento_id',S.deptId).eq('activo',true).eq('sku',candidate).limit(1).maybeSingle();
-    if (bySku.data) return bySku.data;
-  }
-  for (const candidate of variants) {
-    const byUpc=await sb.from('productos').select('*').eq('departamento_id',S.deptId).eq('activo',true).eq('upc',candidate).limit(1).maybeSingle();
-    if (byUpc.data) return byUpc.data;
-  }
-  return null;
+async function findProduct(code) {
+  const skuCandidates=lookupCodeVariants(code);
+  const upcCandidates=upcLookupVariants(code);
+  if (!skuCandidates.length) return null;
+
+  const cols='id,sku,upc,descripcion,marca,talla,color,precio,stock,stock_minimo,departamento_id,activo';
+  const skuReq=sb.from('productos')
+    .select(cols)
+    .eq('departamento_id',S.deptId)
+    .eq('activo',true)
+    .in('sku',skuCandidates)
+    .limit(Math.max(1,skuCandidates.length));
+
+  const upcReq=upcCandidates.length
+    ? sb.from('productos')
+        .select(cols)
+        .eq('departamento_id',S.deptId)
+        .eq('activo',true)
+        .in('upc',upcCandidates)
+        .limit(Math.max(1,upcCandidates.length))
+    : Promise.resolve({data:[],error:null});
+
+  const [bySku,byUpc]=await Promise.all([skuReq,upcReq]);
+  if (bySku.error) throw bySku.error;
+  if (byUpc.error) throw byUpc.error;
+
+  return pickByPriority(bySku.data||[],'sku',skuCandidates)
+    || pickByPriority(byUpc.data||[],'upc',upcCandidates)
+    || null;
 }
 
 async function loadLocations(sku) {
   const r = await sb.from('producto_marbetes').select('marbete_codigo,cantidad,marbetes(zona,descripcion,activo,departamento_id)').eq('sku',sku);
-  return (r.data||[]).filter(x => x.marbetes?.activo !== false).map(x => ({marbete_codigo:x.marbete_codigo,cantidad:x.cantidad,zona:x.marbetes?.zona||'',descripcion:x.marbetes?.descripcion||''}));
+  return (r.data||[])
+  .filter(x => x.marbetes?.activo !== false && x.marbetes?.departamento_id === S.deptId)
+  .map(x => ({marbete_codigo:x.marbete_codigo,cantidad:x.cantidad,zona:x.marbetes?.zona||'',descripcion:x.marbetes?.descripcion||''}));
 }
 
 function locationList(locs) {
@@ -380,7 +420,7 @@ async function saveMove() {
 function searchView() {
   shell(`<section class="page-title"><h1>Buscar</h1><p class="muted">Escanea UPC, SKU o un marbete.</p></section><button id="scanSearch" class="scan-btn">📷 Escanear código</button><form id="manualSearch" class="inline-form"><input id="searchCode" placeholder="UPC, SKU o marbete" autocomplete="off"><button class="secondary">Buscar</button></form><section class="card">${searchResultHtml()}</section>`);
   $('scanSearch').onclick = () => openScanner(doSearch,'UPC, SKU o marbete');
-  $('manualSearch').onsubmit = e => { e.preventDefault(); doSearch($('searchCode').value); };
+  $('manualSearch').onsubmit = e => { e.preventDefault(); doSearch($('searchCode').value).catch(x=>toast(humanError(x),'error')); };
 }
 
 function searchResultHtml() {
@@ -424,21 +464,50 @@ function inventoryView() {
   loadInventory();
 }
 
+function inventoryPassesFilter(p,f) {
+  if (f==='positive') return Number(p.stock)>0;
+  if (f==='zero') return Number(p.stock)<=0;
+  if (f==='low') return Number(p.stock)>0 && Number(p.stock)<=Number(p.stock_minimo||0);
+  return true;
+}
+
+function renderInventoryRows(rows) {
+  if (!$('invList')) return;
+  $('invList').innerHTML=rows.map(p=>`<div class="product-row"><div><b>${esc(p.descripcion)}</b><span>SKU ${esc(p.sku)}${p.upc?' · UPC '+esc(p.upc):''}</span><span>${esc([p.marca,p.talla,p.color].filter(Boolean).join(' · '))}</span></div><div class="right"><strong>${p.stock}</strong>${S.admin?`<button class="mini" data-edit="${p.id}">Editar</button>`:''}</div></div>`).join('')||'<p class="muted">Sin resultados.</p>';
+  document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editProduct(b.dataset.edit,rows.find(x=>x.id===b.dataset.edit)));
+}
+
 async function loadInventory() {
   const q=$('invQ')?.value.trim()||'', f=$('stockFilter')?.value||'all';
+
+  if (q && /^[A-Za-z0-9._\-\s]{5,40}$/.test(q)) {
+    try {
+      const exact=await findProduct(q);
+      if (exact) {
+        renderInventoryRows(inventoryPassesFilter(exact,f)?[exact]:[]);
+        return;
+      }
+    } catch(e) {
+      if ($('invList')) $('invList').innerHTML=`<div class="error">${esc(humanError(e))}</div>`;
+      return;
+    }
+  }
+
   let req=sb.from('productos').select('id,sku,upc,descripcion,marca,talla,color,precio,stock,stock_minimo').eq('activo',true).eq('departamento_id',S.deptId).gt('created_at',VISUAL_CLEANUP_CUTOFF).order('descripcion').limit(100);
   if (q) {
-    const s=q.replace(/[,%]/g,' ');
-    req=req.or(`sku.ilike.%${s}%,upc.ilike.%${s}%,descripcion.ilike.%${s}%,marca.ilike.%${s}%,talla.ilike.%${s}%,color.ilike.%${s}%`);
+    const x=q.replace(/[,%]/g,' ');
+    req=req.or(`sku.ilike.%${x}%,upc.ilike.%${x}%,descripcion.ilike.%${x}%,marca.ilike.%${x}%,talla.ilike.%${x}%,color.ilike.%${x}%`);
   }
   if (f==='positive') req=req.gt('stock',0);
   if (f==='zero') req=req.lte('stock',0);
   const r=await req;
+  if (r.error) {
+    if ($('invList')) $('invList').innerHTML=`<div class="error">${esc(humanError(r.error))}</div>`;
+    return;
+  }
   let rows=r.data||[];
-  if (f==='low') rows=rows.filter(p=>p.stock>0&&p.stock<=p.stock_minimo);
-  if (!$('invList')) return;
-  $('invList').innerHTML=rows.map(p=>`<div class="product-row"><div><b>${esc(p.descripcion)}</b><span>SKU ${esc(p.sku)}${p.upc?' · UPC '+esc(p.upc):''}</span><span>${esc([p.marca,p.talla,p.color].filter(Boolean).join(' · '))}</span></div><div class="right"><strong>${p.stock}</strong>${S.admin?`<button class="mini" data-edit="${p.id}">Editar</button>`:''}</div></div>`).join('')||'<p class="muted">Sin resultados.</p>';
-  document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editProduct(b.dataset.edit,rows.find(x=>x.id===b.dataset.edit)));
+  if (f==='low') rows=rows.filter(p=>inventoryPassesFilter(p,'low'));
+  renderInventoryRows(rows);
 }
 
 async function editProduct(id,p) {
@@ -480,7 +549,7 @@ async function renderActiveCount() {
   $('countArea').innerHTML=`<div class="count-head"><div><h2>${esc(c.nombre)}</h2><span class="pill">${esc(c.estado)}</span></div><button id="exitCount" class="ghost">Cambiar conteo</button></div><button id="scanCount" class="scan-btn" ${c.estado==='CERRADO'?'disabled':''}>📷 Escanear producto</button><form id="manualCount" class="inline-form"><input id="countCode" placeholder="UPC o SKU" ${c.estado==='CERRADO'?'disabled':''}><button class="secondary">Buscar</button></form><div id="countProduct"></div><h3>Contados (${(lines.data||[]).length})</h3><div>${(lines.data||[]).map(x=>`<div class="product-row"><div><b>SKU ${esc(x.sku)}</b><span>${new Date(x.updated_at).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}</span></div><strong>${x.contado}</strong></div>`).join('')||'<p class="muted">Aún no has contado productos.</p>'}</div><div class="quick-row">${c.estado!=='CERRADO'?`<button id="pauseCount" class="secondary">${c.estado==='PAUSADO'?'Reanudar':'Pausar'}</button>`:''}${S.admin&&c.estado!=='CERRADO'?'<button id="closeCount" class="danger">Cerrar y ajustar</button>':''}</div>`;
   $('exitCount').onclick=()=>{S.count=null;loadCounts()};
   $('scanCount')?.addEventListener('click',()=>openScanner(findForCount,'UPC o SKU'));
-  $('manualCount').onsubmit=e=>{e.preventDefault();findForCount($('countCode').value)};
+  $('manualCount').onsubmit=e=>{e.preventDefault();findForCount($('countCode').value).catch(x=>toast(humanError(x),'error'))};
   $('pauseCount')?.addEventListener('click',async()=>{const next=c.estado==='PAUSADO'?'ABIERTO':'PAUSADO',r=await sb.from('conteos').update({estado:next}).eq('id',c.id).select().single();if(r.data){S.count=r.data;renderActiveCount()}});
   $('closeCount')?.addEventListener('click',closeCount);
 }
@@ -518,13 +587,37 @@ function importView() {
   $('template').onclick=downloadTemplate;
 }
 
+const MAX_IMPORT_ROWS=100000;
+const IMPORT_BATCH_SIZE=500;
+
+function normalizeImportCode(value,{upc=false}={}) {
+  let x=cleanCodeText(value).replace(/\s+/g,'');
+  if (!x) return '';
+  if (/^[+-]?\d+(?:\.\d+)?e[+-]?\d+$/i.test(x)) {
+    const n=Number(x);
+    if (Number.isSafeInteger(n)) x=String(n);
+  }
+  if (upc) x=x.replace(/-/g,'');
+  return x;
+}
+
 async function readImportFile(e) {
   const f=e.target.files?.[0]; if (!f) return;
-  const buf=await f.arrayBuffer(), wb=XLSX.read(buf,{type:'array'}), ws=wb.Sheets[wb.SheetNames[0]], arr=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
-  if (arr.length<2) return toast('El archivo no tiene filas de datos.','error');
-  S.importHeaders=arr[0].map(x=>String(x).trim());
-  S.importRows=arr.slice(1).filter(r=>r.some(x=>String(x).trim()!==''));
-  autoMap(); renderImportMapping();
+  try {
+    const buf=await f.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array',cellDates:false});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const arr=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false});
+    if (arr.length<2) return toast('El archivo no tiene filas de datos.','error');
+    const rows=arr.slice(1).filter(r=>r.some(x=>String(x).trim()!==''));
+    if (rows.length>MAX_IMPORT_ROWS) return toast(`El máximo por importación es ${MAX_IMPORT_ROWS.toLocaleString('es-MX')} filas. Divide el archivo en bloques.`,'error');
+    S.importHeaders=arr[0].map(x=>String(x).replace(/\u00A0/g,' ').trim());
+    S.importRows=rows;
+    autoMap();
+    renderImportMapping();
+  } catch(err) {
+    toast('No pude leer ese Excel/CSV. Verifica que el archivo no esté dañado.','error');
+  }
 }
 
 function autoMap() {
@@ -542,35 +635,96 @@ function renderImportMapping() {
   $('runImport').onclick=runImport;
 }
 
-function mappedItems() {
+function mappedItems(mode='catalog') {
   const get=(r,k)=>S.importMap[k]===''?'':r[Number(S.importMap[k])];
-  const num=v=>{let s=String(v??'').trim().replace(/[$\s]/g,'');if(s.includes(',')&&!s.includes('.'))s=s.replace(',','.');else s=s.replace(/,/g,'');const n=Number(s);return Number.isFinite(n)?n:0};
-  return S.importRows.map(r=>({sku:String(get(r,'sku')).trim(),upc:String(get(r,'upc')).trim(),descripcion:String(get(r,'descripcion')).trim(),marca:String(get(r,'marca')).trim(),talla:String(get(r,'talla')).trim(),color:String(get(r,'color')).trim(),precio:num(get(r,'precio')),stock:Math.round(num(get(r,'stock'))),minimo:Math.round(num(get(r,'minimo')))})).filter(x=>x.sku);
+  const num=v=>{let x=String(v??'').trim().replace(/[$\s]/g,'');if(x.includes(',')&&!x.includes('.'))x=x.replace(',','.');else x=x.replace(/,/g,'');const n=Number(x);return Number.isFinite(n)?n:0};
+  const bySku=new Map();
+  const upcOwner=new Map();
+  const conflicts=[];
+  let duplicateSkuRows=0;
+
+  for (const r of S.importRows) {
+    const sku=normalizeImportCode(get(r,'sku'));
+    if (!sku) continue;
+    const upc=normalizeImportCode(get(r,'upc'),{upc:true});
+    const item={sku,upc,descripcion:String(get(r,'descripcion')).trim(),marca:String(get(r,'marca')).trim(),talla:String(get(r,'talla')).trim(),color:String(get(r,'color')).trim(),precio:num(get(r,'precio')),stock:Math.round(num(get(r,'stock'))),minimo:Math.max(0,Math.round(num(get(r,'minimo'))))};
+
+    if (upc) {
+      const canonical=upc.replace(/^0+(?=\d)/,'');
+      const owner=upcOwner.get(canonical);
+      if (owner && owner!==sku && conflicts.length<12) conflicts.push(`UPC ${upc}: SKU ${owner} y ${sku}`);
+      else if (!owner) upcOwner.set(canonical,sku);
+    }
+
+    const prev=bySku.get(sku);
+    if (prev) {
+      duplicateSkuRows++;
+      const a=prev.upc?.replace(/^0+(?=\d)/,'')||'';
+      const b=upc?.replace(/^0+(?=\d)/,'')||'';
+      if (a && b && a!==b && conflicts.length<12) conflicts.push(`SKU ${sku}: UPC ${prev.upc} y ${upc}`);
+      prev.upc=prev.upc||item.upc;
+      prev.descripcion=item.descripcion||prev.descripcion;
+      prev.marca=item.marca||prev.marca;
+      prev.talla=item.talla||prev.talla;
+      prev.color=item.color||prev.color;
+      if (item.precio) prev.precio=item.precio;
+      if (mode==='physical') prev.stock+=item.stock;
+      continue;
+    }
+    bySku.set(sku,item);
+  }
+  return {items:[...bySku.values()],duplicateSkuRows,conflicts};
+}
+
+function retryableImportError(error) {
+  const x=String(error?.message||error?.details||error?.code||'');
+  return /fetch|network|timeout|timed out|502|503|504|connection/i.test(x);
+}
+
+async function rpcWithRetry(name,payload,maxAttempts=3) {
+  let last=null;
+  for (let attempt=1; attempt<=maxAttempts; attempt++) {
+    const r=await sb.rpc(name,payload);
+    if (!r.error) return r;
+    last=r.error;
+    if (!retryableImportError(r.error) || attempt===maxAttempts) break;
+    await new Promise(resolve=>setTimeout(resolve,300*attempt));
+  }
+  return {data:null,error:last};
 }
 
 async function runImport() {
-  const mode=document.querySelector('input[name="imode"]:checked').value, items=mappedItems();
+  const mode=document.querySelector('input[name="imode"]:checked').value;
+  const prepared=mappedItems(mode), items=prepared.items;
   if (!items.length) return toast('No encontré SKUs para importar.','error');
   if (mode==='physical'&&S.importMap.stock==='') return toast('Selecciona la columna Stock.','error');
+  if (prepared.conflicts.length) return toast(`Hay códigos ambiguos en el archivo. Corrige: ${prepared.conflicts.slice(0,3).join(' · ')}`,'error');
+
   const b=$('runImport'); b.disabled=true;
   let done=0, summary={};
   try {
-    for (let i=0;i<items.length;i+=250) {
-      const batch=items.slice(i,i+250), r=await sb.rpc('importar_catalogo',{p_departamento:S.deptId,p_items:batch});
+    for (let i=0;i<items.length;i+=IMPORT_BATCH_SIZE) {
+      const batch=items.slice(i,i+IMPORT_BATCH_SIZE);
+      const r=await rpcWithRetry('importar_catalogo',{p_departamento:S.deptId,p_items:batch});
       if (r.error) throw r.error;
       Object.keys(r.data||{}).forEach(k=>summary[k]=(summary[k]||0)+(r.data[k]||0));
       if (mode==='physical') {
-        const a=await sb.rpc('ajuste_fisico_masivo',{p_items:batch.map(x=>({sku:x.sku,stock:x.stock})),p_nota:`Importación física · ${deptName()}`});
+        const a=await rpcWithRetry('ajuste_fisico_masivo',{p_items:batch.map(x=>({sku:x.sku,stock:x.stock})),p_nota:`Importación física · ${deptName()}`});
         if (a.error) throw a.error;
         Object.keys(a.data||{}).forEach(k=>summary[k]=(summary[k]||0)+(a.data[k]||0));
       }
       done+=batch.length;
-      $('importProgress').innerHTML=`<div class="progress"><i style="width:${Math.round(done/items.length*100)}%"></i></div><p class="tiny">${done} / ${items.length}</p>`;
+      if ($('importProgress')) $('importProgress').innerHTML=`<div class="progress"><i style="width:${Math.round(done/items.length*100)}%"></i></div><p class="tiny">${done.toLocaleString('es-MX')} / ${items.length.toLocaleString('es-MX')}</p>`;
     }
-    $('importProgress').innerHTML+=`<div class="success">Importación terminada. Nuevos: ${summary.nuevos||0} · Actualizados: ${summary.actualizados||0}${mode==='physical'?` · Ajustados: ${summary.ajustados||0}`:''}</div>`;
+    const dup=prepared.duplicateSkuRows?` · Filas SKU consolidadas: ${prepared.duplicateSkuRows}`:'';
+    if ($('importProgress')) $('importProgress').innerHTML+=`<div class="success">Importación terminada. Nuevos: ${summary.nuevos||0} · Actualizados: ${summary.actualizados||0}${mode==='physical'?` · Ajustados: ${summary.ajustados||0}`:''}${dup}</div>`;
     toast('Importación terminada.');
-  } catch(e) { toast(humanError(e),'error'); }
-  finally { b.disabled=false; }
+  } catch(e) {
+    if ($('importProgress')) $('importProgress').innerHTML+=`<div class="error">Se detuvo en ${done.toLocaleString('es-MX')} de ${items.length.toLocaleString('es-MX')}: ${esc(humanError(e))}</div>`;
+    toast(humanError(e),'error');
+  } finally {
+    b.disabled=false;
+  }
 }
 
 function downloadTemplate() {
