@@ -19,7 +19,7 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-import re
+          import re
 
           p=Path("app.js")
           s=p.read_text()
