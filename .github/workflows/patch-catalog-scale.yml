@@ -1,373 +1,146 @@
-name: Apply VANTIS catalog scale patch
+name: Harden VANTIS catalog validation
 
 on:
   push:
     branches: ["main"]
     paths: [".github/workflows/patch-catalog-scale.yml"]
-  workflow_dispatch:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 jobs:
-  patch-and-deploy:
+  patch:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages-v2-final
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Patch catalog lookup and import engine
+      - name: Apply validation hardening
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
-          import re
 
           p=Path("app.js")
           s=p.read_text()
 
-          def replace_once(pattern, replacement, label):
-              global s
-              s2,n=re.subn(pattern, lambda m: replacement, s, count=1, flags=re.S)
-              if n != 1:
-                  raise SystemExit(f"Patch failed: {label} ({n} matches)")
-              s=s2
-
-          s=s.replace("const APP_VERSION = '3.3.2';","const APP_VERSION = '3.4.0';",1)
-
-          replace_once(
-              r"function lookupCodeVariants\(value\) \{.*?\n\}\n\nasync function findProduct\(code\) \{.*?\n\}\n\nasync function loadLocations",
-              """function cleanCodeText(value) {
-            return String(value ?? '')
-              .replace(/[\\u200B-\\u200D\\uFEFF]/g,'')
-              .replace(/\\u00A0/g,' ')
-              .trim()
-              .replace(/^['’]+|['’]+$/g,'');
-          }
-
-          function lookupCodeVariants(value) {
-            const raw=cleanCodeText(value);
-            if (!raw) return [];
-            const compact=raw.replace(/\\s+/g,'');
-            return [...new Set([raw,compact])].filter(Boolean);
-          }
-
-          function upcLookupVariants(value) {
-            const raw=cleanCodeText(value);
-            if (!raw) return [];
-            const compact=raw.replace(/[\\s-]+/g,'');
-            if (!/^\\d+$/.test(compact)) return [compact];
-
-            const out=new Set([compact]);
-            const stripped=compact.replace(/^0+(?=\\d)/,'');
-            out.add(stripped);
-
-            if (stripped.length >= 10 && stripped.length <= 14) {
-              for (const len of [11,12,13,14]) {
-                if (stripped.length <= len) out.add(stripped.padStart(len,'0'));
-              }
-            }
-            return [...out].filter(Boolean);
-          }
-
-          function pickByPriority(rows, field, values) {
-            if (!rows?.length) return null;
-            const order=new Map(values.map((v,i)=>[String(v),i]));
-            return [...rows].sort((a,b)=>(order.get(String(a?.[field])) ?? 999)-(order.get(String(b?.[field])) ?? 999))[0] || null;
-          }
-
-          async function findProduct(code) {
-            const skuCandidates=lookupCodeVariants(code);
-            const upcCandidates=upcLookupVariants(code);
-            if (!skuCandidates.length) return null;
-
-            const cols='id,sku,upc,descripcion,marca,talla,color,precio,stock,stock_minimo,departamento_id,activo';
-            const skuReq=sb.from('productos')
-              .select(cols)
-              .eq('departamento_id',S.deptId)
-              .eq('activo',true)
-              .in('sku',skuCandidates)
-              .limit(Math.max(1,skuCandidates.length));
-
-            const upcReq=upcCandidates.length
-              ? sb.from('productos')
-                  .select(cols)
-                  .eq('departamento_id',S.deptId)
-                  .eq('activo',true)
-                  .in('upc',upcCandidates)
-                  .limit(Math.max(1,upcCandidates.length))
-              : Promise.resolve({data:[],error:null});
-
-            const [bySku,byUpc]=await Promise.all([skuReq,upcReq]);
+          old="""  const [bySku,byUpc]=await Promise.all([skuReq,upcReq]);
             if (bySku.error) throw bySku.error;
             if (byUpc.error) throw byUpc.error;
 
             return pickByPriority(bySku.data||[],'sku',skuCandidates)
               || pickByPriority(byUpc.data||[],'upc',upcCandidates)
-              || null;
-          }
+              || null;"""
+          new="""  const [bySku,byUpc]=await Promise.all([skuReq,upcReq]);
+            if (bySku.error) throw bySku.error;
+            if (byUpc.error) throw byUpc.error;
 
-          async function loadLocations""",
-              "lookup engine"
-          )
+            const skuRows=bySku.data||[];
+            const upcRows=byUpc.data||[];
+            const upcSkus=new Set(upcRows.map(x=>String(x.sku||'')).filter(Boolean));
+            if (upcSkus.size>1) {
+              throw new Error('UPC ambiguo: está relacionado con más de un SKU. Corrige el catálogo antes de continuar.');
+            }
 
-          old="  return (r.data||[]).filter(x => x.marbetes?.activo !== false).map(x => ({marbete_codigo:x.marbete_codigo,cantidad:x.cantidad,zona:x.marbetes?.zona||'',descripcion:x.marbetes?.descripcion||''}));"
-          new="""  return (r.data||[])
-            .filter(x => x.marbetes?.activo !== false && x.marbetes?.departamento_id === S.deptId)
-            .map(x => ({marbete_codigo:x.marbete_codigo,cantidad:x.cantidad,zona:x.marbetes?.zona||'',descripcion:x.marbetes?.descripcion||''}));"""
-          if old not in s: raise SystemExit("Patch failed: location department guard")
+            return pickByPriority(skuRows,'sku',skuCandidates)
+              || pickByPriority(upcRows,'upc',upcCandidates)
+              || null;"""
+          if old not in s: raise SystemExit("findProduct block not found")
           s=s.replace(old,new,1)
 
-          replace_once(
-              r"async function loadInventory\(\) \{.*?\n\}\n\nasync function editProduct",
-              """function inventoryPassesFilter(p,f) {
-            if (f==='positive') return Number(p.stock)>0;
-            if (f==='zero') return Number(p.stock)<=0;
-            if (f==='low') return Number(p.stock)>0 && Number(p.stock)<=Number(p.stock_minimo||0);
-            return true;
-          }
+          old="""async function loadLocations(sku) {
+            const r = await sb.from('producto_marbetes').select('marbete_codigo,cantidad,marbetes(zona,descripcion,activo,departamento_id)').eq('sku',sku);
+            return (r.data||[])"""
+          new="""async function loadLocations(sku) {
+            const r = await sb.from('producto_marbetes').select('marbete_codigo,cantidad,marbetes(zona,descripcion,activo,departamento_id)').eq('sku',sku);
+            if (r.error) throw r.error;
+            return (r.data||[])"""
+          if old not in s: raise SystemExit("loadLocations block not found")
+          s=s.replace(old,new,1)
 
-          function renderInventoryRows(rows) {
-            if (!$('invList')) return;
-            $('invList').innerHTML=rows.map(p=>`<div class="product-row"><div><b>${esc(p.descripcion)}</b><span>SKU ${esc(p.sku)}${p.upc?' · UPC '+esc(p.upc):''}</span><span>${esc([p.marca,p.talla,p.color].filter(Boolean).join(' · '))}</span></div><div class="right"><strong>${p.stock}</strong>${S.admin?`<button class="mini" data-edit="${p.id}">Editar</button>`:''}</div></div>`).join('')||'<p class="muted">Sin resultados.</p>';
-            document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editProduct(b.dataset.edit,rows.find(x=>x.id===b.dataset.edit)));
-          }
+          old="""  const mr=await sb.from('marbetes').select('codigo,zona,descripcion,created_at').eq('codigo',code).eq('activo',true).eq('departamento_id',S.deptId).gt('created_at',VISUAL_CLEANUP_CUTOFF).maybeSingle();
+            if (!mr.data) { S.searchResult=null; render(); return toast('Código no encontrado.','error'); }
+            const pm=await sb.from('producto_marbetes').select('sku,cantidad').eq('marbete_codigo',code);
+            const skus=(pm.data||[]).map(x=>x.sku);
+            let products=[];
+            if (skus.length) {
+              const pr=await sb.from('productos').select('sku,upc,descripcion').in('sku',skus);
+              products=(pr.data||[]).map(p=>({...p,qty:(pm.data||[]).find(x=>x.sku===p.sku)?.cantidad}));
+            }"""
+          new="""  const mr=await sb.from('marbetes').select('codigo,zona,descripcion,created_at').eq('codigo',code).eq('activo',true).eq('departamento_id',S.deptId).gt('created_at',VISUAL_CLEANUP_CUTOFF).maybeSingle();
+            if (mr.error) throw mr.error;
+            if (!mr.data) { S.searchResult=null; render(); return toast('Código no encontrado.','error'); }
+            const pm=await sb.from('producto_marbetes').select('sku,cantidad').eq('marbete_codigo',code);
+            if (pm.error) throw pm.error;
+            const skus=[...new Set((pm.data||[]).map(x=>x.sku).filter(Boolean))];
+            let products=[];
+            if (skus.length) {
+              const pr=await sb.from('productos').select('sku,upc,descripcion').eq('departamento_id',S.deptId).eq('activo',true).in('sku',skus);
+              if (pr.error) throw pr.error;
+              products=(pr.data||[]).map(p=>({...p,qty:(pm.data||[]).find(x=>x.sku===p.sku)?.cantidad}));
+            }"""
+          if old not in s: raise SystemExit("marbete block not found")
+          s=s.replace(old,new,1)
 
-          async function loadInventory() {
-            const q=$('invQ')?.value.trim()||'', f=$('stockFilter')?.value||'all';
+          old="""  const num=v=>{let x=String(v??'').trim().replace(/[$\\s]/g,'');if(x.includes(',')&&!x.includes('.'))x=x.replace(',','.');else x=x.replace(/,/g,'');const n=Number(x);return Number.isFinite(n)?n:0};
+            const bySku=new Map();"""
+          new="""  const normalizedNumber=v=>{let x=String(v??'').trim().replace(/[$\\s]/g,'');if(!x)return '';if(x.includes(',')&&!x.includes('.'))x=x.replace(',','.');else x=x.replace(/,/g,'');return x};
+            const num=v=>{const x=normalizedNumber(v);if(x==='')return 0;const n=Number(x);return Number.isFinite(n)?n:0};
+            const invalidNum=v=>{const x=normalizedNumber(v);return x!==''&&!Number.isFinite(Number(x))};
+            const bySku=new Map();"""
+          if old not in s: raise SystemExit("numeric parser block not found")
+          s=s.replace(old,new,1)
 
-            if (q && /^[A-Za-z0-9._\\-\\s]{5,40}$/.test(q)) {
-              try {
-                const exact=await findProduct(q);
-                if (exact) {
-                  renderInventoryRows(inventoryPassesFilter(exact,f)?[exact]:[]);
-                  return;
-                }
-              } catch(e) {
-                if ($('invList')) $('invList').innerHTML=`<div class="error">${esc(humanError(e))}</div>`;
-                return;
-              }
-            }
-
-            let req=sb.from('productos').select('id,sku,upc,descripcion,marca,talla,color,precio,stock,stock_minimo').eq('activo',true).eq('departamento_id',S.deptId).gt('created_at',VISUAL_CLEANUP_CUTOFF).order('descripcion').limit(100);
-            if (q) {
-              const x=q.replace(/[,%]/g,' ');
-              req=req.or(`sku.ilike.%${x}%,upc.ilike.%${x}%,descripcion.ilike.%${x}%,marca.ilike.%${x}%,talla.ilike.%${x}%,color.ilike.%${x}%`);
-            }
-            if (f==='positive') req=req.gt('stock',0);
-            if (f==='zero') req=req.lte('stock',0);
-            const r=await req;
-            if (r.error) {
-              if ($('invList')) $('invList').innerHTML=`<div class="error">${esc(humanError(r.error))}</div>`;
-              return;
-            }
-            let rows=r.data||[];
-            if (f==='low') rows=rows.filter(p=>inventoryPassesFilter(p,'low'));
-            renderInventoryRows(rows);
-          }
-
-          async function editProduct""",
-              "inventory exact lookup"
-          )
-
-          replace_once(
-              r"async function readImportFile\(e\) \{.*?\n\}\n\nfunction autoMap",
-              """const MAX_IMPORT_ROWS=100000;
-          const IMPORT_BATCH_SIZE=500;
-
-          function normalizeImportCode(value,{upc=false}={}) {
-            let x=cleanCodeText(value).replace(/\\s+/g,'');
-            if (!x) return '';
-            if (/^[+-]?\\d+(?:\\.\\d+)?e[+-]?\\d+$/i.test(x)) {
-              const n=Number(x);
-              if (Number.isSafeInteger(n)) x=String(n);
-            }
-            if (upc) x=x.replace(/-/g,'');
-            return x;
-          }
-
-          async function readImportFile(e) {
-            const f=e.target.files?.[0]; if (!f) return;
-            try {
-              const buf=await f.arrayBuffer();
-              const wb=XLSX.read(buf,{type:'array',cellDates:false});
-              const ws=wb.Sheets[wb.SheetNames[0]];
-              const arr=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false});
-              if (arr.length<2) return toast('El archivo no tiene filas de datos.','error');
-              const rows=arr.slice(1).filter(r=>r.some(x=>String(x).trim()!==''));
-              if (rows.length>MAX_IMPORT_ROWS) return toast(`El máximo por importación es ${MAX_IMPORT_ROWS.toLocaleString('es-MX')} filas. Divide el archivo en bloques.`,'error');
-              S.importHeaders=arr[0].map(x=>String(x).replace(/\\u00A0/g,' ').trim());
-              S.importRows=rows;
-              autoMap();
-              renderImportMapping();
-            } catch(err) {
-              toast('No pude leer ese Excel/CSV. Verifica que el archivo no esté dañado.','error');
-            }
-          }
-
-          function autoMap""",
-              "import reader"
-          )
-
-          replace_once(
-              r"function mappedItems\(\) \{.*?\n\}\n\nasync function runImport\(\) \{.*?\n\}\n\nfunction downloadTemplate",
-              """function mappedItems(mode='catalog') {
-            const get=(r,k)=>S.importMap[k]===''?'':r[Number(S.importMap[k])];
-            const num=v=>{let x=String(v??'').trim().replace(/[$\\s]/g,'');if(x.includes(',')&&!x.includes('.'))x=x.replace(',','.');else x=x.replace(/,/g,'');const n=Number(x);return Number.isFinite(n)?n:0};
-            const bySku=new Map();
-            const upcOwner=new Map();
-            const conflicts=[];
-            let duplicateSkuRows=0;
-
-            for (const r of S.importRows) {
-              const sku=normalizeImportCode(get(r,'sku'));
-              if (!sku) continue;
-              const upc=normalizeImportCode(get(r,'upc'),{upc:true});
+          old="""      const upc=normalizeImportCode(get(r,'upc'),{upc:true});
               const item={sku,upc,descripcion:String(get(r,'descripcion')).trim(),marca:String(get(r,'marca')).trim(),talla:String(get(r,'talla')).trim(),color:String(get(r,'color')).trim(),precio:num(get(r,'precio')),stock:Math.round(num(get(r,'stock'))),minimo:Math.max(0,Math.round(num(get(r,'minimo'))))};
 
-              if (upc) {
-                const canonical=upc.replace(/^0+(?=\\d)/,'');
-                const owner=upcOwner.get(canonical);
-                if (owner && owner!==sku && conflicts.length<12) conflicts.push(`UPC ${upc}: SKU ${owner} y ${sku}`);
-                else if (!owner) upcOwner.set(canonical,sku);
-              }
+              if (upc) {"""
+          new="""      const upc=normalizeImportCode(get(r,'upc'),{upc:true});
+              const priceRaw=get(r,'precio'), stockRaw=get(r,'stock'), minRaw=get(r,'minimo');
+              const price=num(priceRaw), stock=Math.round(num(stockRaw)), minimo=Math.round(num(minRaw));
+              if ((invalidNum(priceRaw)||price<0) && conflicts.length<12) conflicts.push(`SKU ${sku}: precio inválido`);
+              if ((invalidNum(stockRaw)||stock<0) && conflicts.length<12) conflicts.push(`SKU ${sku}: stock inválido`);
+              if ((invalidNum(minRaw)||minimo<0) && conflicts.length<12) conflicts.push(`SKU ${sku}: mínimo inválido`);
+              const item={sku,upc,descripcion:String(get(r,'descripcion')).trim(),marca:String(get(r,'marca')).trim(),talla:String(get(r,'talla')).trim(),color:String(get(r,'color')).trim(),precio:Math.max(0,price),stock:Math.max(0,stock),minimo:Math.max(0,minimo)};
 
-              const prev=bySku.get(sku);
-              if (prev) {
-                duplicateSkuRows++;
-                const a=prev.upc?.replace(/^0+(?=\\d)/,'')||'';
-                const b=upc?.replace(/^0+(?=\\d)/,'')||'';
-                if (a && b && a!==b && conflicts.length<12) conflicts.push(`SKU ${sku}: UPC ${prev.upc} y ${upc}`);
-                prev.upc=prev.upc||item.upc;
-                prev.descripcion=item.descripcion||prev.descripcion;
-                prev.marca=item.marca||prev.marca;
-                prev.talla=item.talla||prev.talla;
-                prev.color=item.color||prev.color;
-                if (item.precio) prev.precio=item.precio;
-                if (mode==='physical') prev.stock+=item.stock;
-                continue;
-              }
-              bySku.set(sku,item);
-            }
-            return {items:[...bySku.values()],duplicateSkuRows,conflicts};
-          }
-
-          function retryableImportError(error) {
-            const x=String(error?.message||error?.details||error?.code||'');
-            return /fetch|network|timeout|timed out|502|503|504|connection/i.test(x);
-          }
-
-          async function rpcWithRetry(name,payload,maxAttempts=3) {
-            let last=null;
-            for (let attempt=1; attempt<=maxAttempts; attempt++) {
-              const r=await sb.rpc(name,payload);
-              if (!r.error) return r;
-              last=r.error;
-              if (!retryableImportError(r.error) || attempt===maxAttempts) break;
-              await new Promise(resolve=>setTimeout(resolve,300*attempt));
-            }
-            return {data:null,error:last};
-          }
-
-          async function runImport() {
-            const mode=document.querySelector('input[name="imode"]:checked').value;
-            const prepared=mappedItems(mode), items=prepared.items;
-            if (!items.length) return toast('No encontré SKUs para importar.','error');
-            if (mode==='physical'&&S.importMap.stock==='') return toast('Selecciona la columna Stock.','error');
-            if (prepared.conflicts.length) return toast(`Hay códigos ambiguos en el archivo. Corrige: ${prepared.conflicts.slice(0,3).join(' · ')}`,'error');
-
-            const b=$('runImport'); b.disabled=true;
-            let done=0, summary={};
-            try {
-              for (let i=0;i<items.length;i+=IMPORT_BATCH_SIZE) {
-                const batch=items.slice(i,i+IMPORT_BATCH_SIZE);
-                const r=await rpcWithRetry('importar_catalogo',{p_departamento:S.deptId,p_items:batch});
-                if (r.error) throw r.error;
-                Object.keys(r.data||{}).forEach(k=>summary[k]=(summary[k]||0)+(r.data[k]||0));
-                if (mode==='physical') {
-                  const a=await rpcWithRetry('ajuste_fisico_masivo',{p_items:batch.map(x=>({sku:x.sku,stock:x.stock})),p_nota:`Importación física · ${deptName()}`});
-                  if (a.error) throw a.error;
-                  Object.keys(a.data||{}).forEach(k=>summary[k]=(summary[k]||0)+(a.data[k]||0));
-                }
-                done+=batch.length;
-                if ($('importProgress')) $('importProgress').innerHTML=`<div class="progress"><i style="width:${Math.round(done/items.length*100)}%"></i></div><p class="tiny">${done.toLocaleString('es-MX')} / ${items.length.toLocaleString('es-MX')}</p>`;
-              }
-              const dup=prepared.duplicateSkuRows?` · Filas SKU consolidadas: ${prepared.duplicateSkuRows}`:'';
-              if ($('importProgress')) $('importProgress').innerHTML+=`<div class="success">Importación terminada. Nuevos: ${summary.nuevos||0} · Actualizados: ${summary.actualizados||0}${mode==='physical'?` · Ajustados: ${summary.ajustados||0}`:''}${dup}</div>`;
-              toast('Importación terminada.');
-            } catch(e) {
-              if ($('importProgress')) $('importProgress').innerHTML+=`<div class="error">Se detuvo en ${done.toLocaleString('es-MX')} de ${items.length.toLocaleString('es-MX')}: ${esc(humanError(e))}</div>`;
-              toast(humanError(e),'error');
-            } finally {
-              b.disabled=false;
-            }
-          }
-
-          function downloadTemplate""",
-              "import validation and batching"
-          )
-
-          s=s.replace("findForMove($('manualCode').value);","findForMove($('manualCode').value).catch(x=>toast(humanError(x),'error'));",1)
-          s=s.replace("doSearch($('searchCode').value);","doSearch($('searchCode').value).catch(x=>toast(humanError(x),'error'));",1)
-          s=s.replace("findForCount($('countCode').value)};","findForCount($('countCode').value).catch(x=>toast(humanError(x),'error'))};",1)
+              if (upc) {"""
+          if old not in s: raise SystemExit("item validation block not found")
+          s=s.replace(old,new,1)
 
           p.write_text(s)
 
-          ip=Path("index.html")
-          h=ip.read_text()
-          h=h.replace("app.js?v=3.3.2","app.js?v=3.4.0",1)
-          h=h.replace("VANTIS 1.2.0: operación empresarial","VANTIS 3.4.0: operación empresarial",1)
-          ip.write_text(h)
+          p=Path("vantis-enterprise.js")
+          s=p.read_text()
+          old="""  const low=(products||[]).filter(p=>Number(p.stock)>0&&Number(p.stock)<=Number(p.stock_minimo||0)).length;
+            const last=lastCounts?.[0];"""
+          new="""  const low=(products||[]).filter(p=>Number(p.stock)>0&&Number(p.stock)<=Number(p.stock_minimo||0)).length;
+            const lowExact=Number(productTotal)<=Number((products||[]).length);
+            const lowValue=lowExact?Number(low).toLocaleString('es-MX'):`≥${Number(low).toLocaleString('es-MX')}`;
+            const lowSub=lowExact?'Requiere atención':'Mínimo detectado · usa el filtro para el total';
+            const last=lastCounts?.[0];"""
+          if old not in s: raise SystemExit("low stock calc block not found")
+          s=s.replace(old,new,1)
+          old="""    metricHtml('Stock bajo',Number(low).toLocaleString('es-MX'),'Requiere atención',low?'attention':'good')+"""
+          new="""    metricHtml('Stock bajo',lowValue,lowSub,low?'attention':'good')+"""
+          if old not in s: raise SystemExit("low stock metric block not found")
+          s=s.replace(old,new,1)
+          p.write_text(s)
           PY
 
-      - name: Validate JavaScript and UPC variants
+      - name: Validate
         shell: bash
         run: |
           node --check app.js
-          node --check scanner.js
-          node <<'NODE'
-          function variants(v){
-            const c=String(v).trim().replace(/[\s-]+/g,'');
-            const o=new Set([c]);
-            const s=c.replace(/^0+(?=\d)/,'');
-            o.add(s);
-            if(/^\d+$/.test(c)&&s.length>=10&&s.length<=14){
-              for(const n of [11,12,13,14]) if(s.length<=n)o.add(s.padStart(n,'0'));
-            }
-            return [...o];
-          }
-          if(!variants('088300601400').includes('88300601400')) throw Error('12→11 UPC failed');
-          if(!variants('88300601400').includes('088300601400')) throw Error('11→12 UPC failed');
-          console.log('UPC variant tests OK');
-          NODE
-          grep -q "MAX_IMPORT_ROWS=100000" app.js
-          grep -q "IMPORT_BATCH_SIZE=500" app.js
-          grep -q "APP_VERSION = '3.4.0'" app.js
+          node --check vantis-enterprise.js
+          grep -q "UPC ambiguo" app.js
+          grep -q "stock inválido" app.js
+          grep -q "lowExact" vantis-enterprise.js
+          git diff --check
 
-      - name: Commit patch
+      - name: Commit
         shell: bash
         run: |
           git config user.name "VANTIS Automation"
           git config user.email "actions@users.noreply.github.com"
-          git add app.js index.html
-          git diff --cached --check
-          git commit -m "Scale SKU UPC lookup and imports to 100k"
+          git add app.js vantis-enterprise.js
+          git commit -m "Harden catalog validation and large-catalog metrics"
           git push origin HEAD:main
-
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-        with:
-          enablement: true
-
-      - name: Upload patched site
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: .
-
-      - name: Deploy patched site
-        id: deployment
-        uses: actions/deploy-pages@v4
