@@ -64,7 +64,7 @@ function gate(){
   if(!document.querySelector('.app-shell'))return;
   const r=role();if(!r)return;const ds=depts();
   if(valid(r,ds)){document.documentElement.classList.remove('vantis-session-pending');chip();return}
-  if($('vantisSessionGate'))return;styles();
+  if($('novaIdentityGate')||$('vantisSessionGate'))return;styles();
   const g=document.createElement('div');g.id='vantisSessionGate';g.className='vantis-session-gate';document.body.appendChild(g);
   if(emp())departmentStep(g,r);else identityStep(g,r);
 }
