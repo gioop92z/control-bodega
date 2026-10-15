@@ -1,6 +1,6 @@
 import {FastExitQueue} from './exit-queue.mjs?v=3.8.0';
 import {lookupSupportCodes, cleanSupportCode, MAX_BATCH_ROWS} from './support-batch.mjs?v=3.8.0';
-import {getMarbete, locationQuery} from './product-location.mjs?v=3.6.0';
+import {getMarbete, registerMarbete, normalizeMarbete, locationQuery} from './product-location.mjs?v=3.6.0';
 
 const validQty = value => Number.isSafeInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 1000000;
 const safeMessage = error => String(error?.message || error || 'Error desconocido');
@@ -43,16 +43,42 @@ export class ReceiveQueue extends FastExitQueue {
 
   async selectMarbete(raw) {
     if (this.busy || !this.accepting || this.confirmation || this.stale || this.storageError) throw Error('Termina o recupera esta recepción antes de cambiar el marbete.');
+    const previous = {
+      code:this.state.activeMarbete,
+      label:this.state.locationLabel,
+      validated:this.activeValidated
+    };
     this.selecting = true; this.activeValidated = false; this.onChange();
     try {
-      const m = await getMarbete(this.sb, raw, this.deptId);
-      this.state.activeMarbete = m.codigo;
-      this.state.locationLabel = [m.zona,m.descripcion].filter(Boolean).join(' · ');
+      const code = normalizeMarbete(raw).toUpperCase();
+      let marbete, created = false;
+      try {
+        marbete = await getMarbete(this.sb, code, this.deptId);
+      } catch (error) {
+        if (error?.code !== 'NOT_REGISTERED') throw error;
+        // Auto-create only our issued bodega labels. Never mistake a SKU/UPC
+        // for a new location, nor overwrite a label from another department.
+        if (!/^ZAP-(?:402|459|405)-\d{3,4}$/.test(code)) {
+          throw Error('El código no es un marbete de zapatería válido. Revisa la etiqueta.');
+        }
+        marbete = await registerMarbete(this.sb, {
+          code,deptId:this.deptId,zona:'BODEGA'
+        });
+        created = true;
+      }
+      this.state.activeMarbete = marbete.codigo;
+      this.state.locationLabel = [marbete.zona,marbete.descripcion].filter(Boolean).join(' · ');
       if (!this.persist()) throw Error(this.storageError || this.message);
       this.activeValidated = true;
-      this.message = 'Ubicación activa: ' + m.codigo + '. Escanea las piezas de este cajón.';
+      this.message = created ? '✓ Marbete ' + marbete.codigo + ' registrado y seleccionado.' : '✓ Marbete ' + marbete.codigo + ' seleccionado.';
       this.onChange();
-      return m;
+      return {...marbete,created};
+    } catch(error) {
+      this.state.activeMarbete = previous.code;
+      this.state.locationLabel = previous.label;
+      this.activeValidated = previous.validated;
+      this.onChange();
+      throw error;
     } finally { this.selecting = false; this.onChange(); }
   }
 
@@ -61,7 +87,7 @@ export class ReceiveQueue extends FastExitQueue {
     this.state.activeMarbete = '';
     this.state.locationLabel = '';
     this.activeValidated = true;
-    this.message = 'Recepción sin ubicación. Puedes escanear mercancía no apta o pendiente de acomodo.';
+    this.message = '';
     if (!this.persist()) throw Error(this.storageError || this.message);
     this.onChange();
   }
@@ -79,7 +105,7 @@ export class ReceiveQueue extends FastExitQueue {
   }
 
   capture(entries, fingerprint = '') {
-    if ((this.state.activeMarbete && !this.activeValidated) || this.selecting) throw Error('Espera a que se valide el marbete o selecciona recibir sin ubicación.');
+    if ((this.state.activeMarbete && !this.activeValidated) || this.selecting) throw Error('Espera a que termine la validación del marbete.');
     if (!this.accepting || this.busy || this.confirmation || this.stale || this.storageError) throw Error(this.storageError || 'Termina o recupera la recepción antes de escanear más piezas.');
     entries = entries.map(entry => {
       const code = cleanSupportCode(entry.code), quantity = Number(entry.quantity);
