@@ -8,10 +8,10 @@ export function mountFastReceive(root,queue,{startScanner,stopScanner,isCurrent=
   const $=id=>root.querySelector('#'+id);
   const current=()=>root.isConnected && isCurrent();
   const ready=()=>current() && ui.phase==='capture' && queue.accepting &&
-    !queue.busy && !queue.stale && !queue.storageError && !queue.selecting && queue.activeValidated;
+    !queue.busy && !queue.stale && !queue.storageError && !queue.selecting && (!queue.state.activeMarbete || queue.activeValidated);
   const inFlight=()=>queue.busy || ui.phase==='preparing' || ui.phase==='confirm';
   let frame=null;
-  root.innerHTML='<section class="card receive-location"><div class="receive-step"><b>1 · Ubicación física</b><small>Primero el marbete; luego todas las piezas del cajón o mueble.</small></div><form id="receiveMarbeteForm" class="inline-form"><input id="receiveMarbete" placeholder="Escanea marbete · Ej. 459-001" aria-label="Marbete del grupo" autocomplete="off" autocapitalize="off" spellcheck="false"><button id="receiveUseMarbete" class="secondary">Usar</button><button id="receiveScanMarbete" type="button" class="secondary">▣ Cámara</button></form><div id="receiveActive" role="status"></div></section>'
+  root.innerHTML='<section class="card receive-location"><div class="receive-step"><b>1 · Ubicación (opcional)</b><small>Escanea el marbete si hay acomodo; si no, recibe sin ubicación.</small></div><form id="receiveMarbeteForm" class="inline-form"><input id="receiveMarbete" placeholder="Escanea marbete · Ej. 459-001" aria-label="Marbete del grupo" autocomplete="off" autocapitalize="off" spellcheck="false"><button id="receiveUseMarbete" class="secondary">Usar</button><button id="receiveScanMarbete" type="button" class="secondary">▣ Cámara</button></form><button id="receiveNoLocation" type="button" class="secondary receive-unlocated">Recibir SIN ubicación / No apto para venta</button><div id="receiveActive" role="status"></div></section>'
     +'<section class="card receive-capture"><div class="receive-step"><b>2 · Escaneo continuo</b><small>Una lectura = una pieza. No hay preguntas entre artículos.</small></div><form id="manualMove"><input id="receiveCode" aria-label="Escáner portátil, SKU o UPC" placeholder="Escanea aquí SKU o UPC" autocomplete="off" autocapitalize="off" spellcheck="false"><button id="receiveCameraButton" type="button" class="secondary">▣ Cámara</button></form><div id="receiveCamera"></div><div id="receiveStatus" class="receive-status" role="status" aria-live="polite"></div><div id="receiveError" class="error" hidden></div></section>'
     +'<section class="card receive-list"><div class="receive-step"><b>3 · Piezas acumuladas</b><small id="receiveLines">0 líneas</small></div><div id="receiveRows"></div></section>'
     +'<div id="receiveRecovery" class="notice" hidden></div>'
@@ -39,11 +39,12 @@ export function mountFastReceive(root,queue,{startScanner,stopScanner,isCurrent=
     $('receiveCameraButton').textContent=ui.camera?'Cerrar cámara':'▣ Cámara';
     $('receiveUseMarbete').disabled=inFlight() || queue.selecting || queue.stale;
     $('receiveScanMarbete').disabled=inFlight() || queue.selecting || queue.stale;
+    $('receiveNoLocation').disabled=inFlight() || queue.selecting || queue.stale;
     $('receiveMarbete').disabled=inFlight() || queue.selecting || queue.stale;
     $('receiveMarbete').placeholder=queue.selecting?'Validando marbete…':'Escanea marbete · Ej. 459-001';
     $('receiveActive').innerHTML=queue.activeValidated && queue.state.activeMarbete
       ? '<div class="receive-active"><span>MARBETE ACTIVO</span><strong>'+esc(queue.state.activeMarbete)+'</strong><small>'+esc(queue.state.locationLabel)+'</small><span>Los siguientes escaneos se guardarán aquí</span></div>'
-      : '<p class="notice">'+(queue.selecting?'Validando ubicación…':'Sin ubicación activa. Escanea un marbete registrado para empezar.')+'</p>';
+      : '<p class="notice">'+(queue.selecting?'Validando ubicación…':'Escanea un marbete o elige recibir sin ubicación; ambos modos permiten agregar piezas.')+'</p>';
     $('receiveStatus').textContent=ui.lastSuccess || (ui.phase==='preparing'?'Verificando el catálogo y los marbetes…':queue.busy?'Registrando piezas…':queue.message||'Selecciona el marbete para comenzar.');
     $('receiveError').hidden=!(ui.error||queue.storageError);
     $('receiveError').textContent=ui.error||queue.storageError;
@@ -51,7 +52,7 @@ export function mountFastReceive(root,queue,{startScanner,stopScanner,isCurrent=
       const label=row.product?.descripcion||row.code;
       const unresolved=!row.resolving && (!row.product || row.saveError || row.lookupError);
       return '<article class="receive-row '+(unresolved?'receive-problem ':'')+(row.status==='done'?'receive-done':'')+'">'
-        +'<div class="receive-row-body"><b>'+esc(label)+'</b><small>SKU '+esc(row.product?.sku||row.code)+' · '+esc(row.location)+'</small>'
+        +'<div class="receive-row-body"><b>'+esc(label)+'</b><small>SKU '+esc(row.product?.sku||row.code)+' · '+esc(row.location||'SIN UBICACIÓN')+'</small>'
         +(row.resolving?'<small>Buscando en catálogo…</small>':'')
         +(unresolved?'<small class="txt-red">'+esc(row.saveError||row.lookupError||'Código no encontrado')+'</small>':'')
         +(row.status==='done'?'<small class="txt-green">✓ Registrado</small>':'')
@@ -76,12 +77,12 @@ export function mountFastReceive(root,queue,{startScanner,stopScanner,isCurrent=
     $('receiveReload')?.addEventListener('click',()=>{queue.sync();input.focus();});
     $('receiveVerify')?.addEventListener('click',()=>work(async()=>queue.verify()));
     $('receiveFooter').hidden=ui.phase==='confirm';
-    $('receiveFinish').disabled=!drafts.length || !queue.activeValidated || queue.busy || queue.stale || !!queue.storageError || ui.phase!=='capture';
+    $('receiveFinish').disabled=!drafts.length || (queue.state.activeMarbete && !queue.activeValidated) || queue.busy || queue.stale || !!queue.storageError || ui.phase!=='capture';
     $('receiveFinal').hidden=ui.phase!=='confirm';
     if(ui.phase==='confirm') {
       const summary=queue.confirmation;
       $('receiveFinalTitle').textContent='Registrar '+(summary?.pieces ?? pieces)+' piezas';
-      $('receiveFinalDetail').textContent=(summary?.rows??drafts.length)+' grupos de SKU/ubicación · '+(summary?.locations??0)+' marbetes. Todas las piezas válidas se agregarán al stock.';
+      $('receiveFinalDetail').textContent=(summary?.rows??drafts.length)+' grupos · '+(summary?.locations??0)+' marbetes. Los no ubicados sumarán stock general.';
       $('registerReceive').disabled=queue.busy;
       $('receiveContinue').disabled=queue.busy;
       $('registerReceive').textContent=queue.busy?'Registrando…':'Confirmar '+(summary?.pieces??pieces)+' piezas';
@@ -102,9 +103,10 @@ export function mountFastReceive(root,queue,{startScanner,stopScanner,isCurrent=
     });
   }
   $('receiveMarbeteForm').onsubmit=event=>{event.preventDefault();setMarbete($('receiveMarbete').value);};
+  $('receiveNoLocation').onclick=()=>work(()=>{stopScanner();ui.camera=false;queue.useWithoutLocation();$('receiveMarbete').value='';input.focus();});
   $('receiveScanMarbete').onclick=()=>work(async()=>{
     stopScanner();
-    await startScanner(code=>{if(current())setMarbete(code);},'marbete de ubicación');
+    await startScanner(code=>{if(current())setMarbete(code);},'marbete de ubicación',{preferZxing:true});
   });
   async function openCamera() {
     if(ui.camera){stopScanner();return;}
