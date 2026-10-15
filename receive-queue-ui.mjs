@@ -11,9 +11,9 @@ export function mountFastReceive(root,queue,{startScanner,stopScanner,isCurrent=
     !queue.busy && !queue.stale && !queue.storageError && !queue.selecting && (!queue.state.activeMarbete || queue.activeValidated);
   const inFlight=()=>queue.busy || ui.phase==='preparing' || ui.phase==='confirm';
   let frame=null;
-  root.innerHTML='<section class="card receive-location"><div class="receive-step"><b>Ubicación opcional</b><small>Solo escanea el marbete cuando quieras asignar las piezas a un cajón. No es necesario para recibir mercancía.</small></div><form id="receiveMarbeteForm" class="inline-form"><input id="receiveMarbete" placeholder="Escanea marbete · Ej. 459-001" aria-label="Marbete del grupo" autocomplete="off" autocapitalize="off" spellcheck="false"><button id="receiveUseMarbete" class="secondary">Usar</button><button id="receiveScanMarbete" type="button" class="secondary">▣ Cámara</button></form><button id="receiveNoLocation" type="button" class="secondary receive-unlocated">Recibir SIN ubicación</button><div id="receiveActive" role="status"></div></section>'
-    +'<section class="card receive-capture"><div class="receive-step"><b>1 · Escanea y agrega mercancía</b><small>Listo para recibir SIN ubicación. Cada lectura suma una pieza sin preguntas ni bloqueos.</small></div><form id="manualMove"><input id="receiveCode" aria-label="Escáner portátil, SKU o UPC" placeholder="Escanea aquí SKU o UPC" autocomplete="off" autocapitalize="off" spellcheck="false"><button id="receiveCameraButton" type="button" class="secondary">▣ Cámara</button></form><div id="receiveCamera"></div><div id="receiveStatus" class="receive-status" role="status" aria-live="polite"></div><div id="receiveError" class="error" hidden></div></section>'
-    +'<section class="card receive-list"><div class="receive-step"><b>2 · Piezas acumuladas</b><small id="receiveLines">0 líneas</small></div><div id="receiveRows"></div></section>'
+  root.innerHTML='<section class="card receive-location"><div class="receive-step"><b>Marbete</b></div><form id="receiveMarbeteForm" class="inline-form"><input id="receiveMarbete" placeholder="Ej. ZAP-402-001" aria-label="Marbete del grupo" autocomplete="off" autocapitalize="off" spellcheck="false"><button id="receiveUseMarbete" class="secondary">Usar</button><button id="receiveScanMarbete" type="button" class="secondary">▣ Cámara</button></form><div id="receiveActive" role="status"></div></section>'
+    +'<section class="card receive-capture"><div class="receive-step"><b>Escanear artículos</b><small>Cada lectura suma una pieza automáticamente.</small></div><form id="manualMove"><input id="receiveCode" aria-label="Escáner portátil, SKU o UPC" placeholder="Escanea aquí SKU o UPC" autocomplete="off" autocapitalize="off" spellcheck="false"><button id="receiveCameraButton" type="button" class="secondary">▣ Cámara</button></form><div id="receiveCamera"></div><div id="receiveStatus" class="receive-status" role="status" aria-live="polite"></div><div id="receiveError" class="error" hidden></div></section>'
+    +'<section class="card receive-list"><div class="receive-step"><b>Piezas acumuladas</b><small id="receiveLines">0 líneas</small></div><div id="receiveRows"></div></section>'
     +'<div id="receiveRecovery" class="notice" hidden></div>'
     +'<section id="receiveFinal" class="card" hidden><h2 id="receiveFinalTitle">Finalizar recepción</h2><p id="receiveFinalDetail"></p><label>Responsable / referencia<input id="receiveNote" maxlength="500" placeholder="Tu nombre, folio o referencia"></label><div class="quick-row"><button id="registerReceive" type="button" class="primary">Registrar recepción</button><button id="receiveContinue" type="button" class="secondary">Seguir escaneando</button></div></section>'
     +'<div id="receiveFooter" class="receive-footer"><strong id="receiveFooterCount">0 piezas</strong><button id="receiveFinish" type="button" class="primary" disabled>Finalizar recepción</button></div>';
@@ -42,13 +42,13 @@ export function mountFastReceive(root,queue,{startScanner,stopScanner,isCurrent=
     $('receiveCameraButton').textContent=ui.camera?'Cerrar cámara':'▣ Cámara';
     $('receiveUseMarbete').disabled=inFlight() || queue.selecting || queue.stale;
     $('receiveScanMarbete').disabled=inFlight() || queue.selecting || queue.stale;
-    $('receiveNoLocation').disabled=inFlight() || queue.selecting || queue.stale;
     $('receiveMarbete').disabled=inFlight() || queue.selecting || queue.stale;
-    $('receiveMarbete').placeholder=queue.selecting?'Validando marbete…':'Escanea marbete · Ej. 459-001';
+    $('receiveMarbete').placeholder=queue.selecting?'Validando…':'Ej. ZAP-402-001';
     $('receiveActive').innerHTML=queue.activeValidated && queue.state.activeMarbete
-      ? '<div class="receive-active"><span>MARBETE ACTIVO</span><strong>'+esc(queue.state.activeMarbete)+'</strong><small>'+esc(queue.state.locationLabel)+'</small><span>Los siguientes escaneos se guardarán aquí</span></div>'
-      : '<div class="receive-active receive-without-location"><span>SIN UBICACIÓN</span><strong>Recepción libre</strong><small>'+(queue.selecting?'Validando el marbete…':'Puedes escanear SKU o UPC y registrar entradas de inmediato.')+'</small></div>';
-    $('receiveStatus').textContent=ui.lastSuccess || (ui.phase==='preparing'?'Verificando el catálogo y los marbetes…':queue.busy?'Registrando piezas…':queue.message||'Escanea mercancía. El marbete es opcional.');
+      ? '<div class="receive-location-chip"><b>✓ '+esc(queue.state.activeMarbete)+'</b><small>'+esc(queue.state.locationLabel)+'</small><button id="receiveClearLocation" type="button" class="ghost" '+(inFlight()||queue.selecting||queue.stale?'disabled':'')+'>Quitar</button></div>'
+      : ''; 
+    $('receiveClearLocation')?.addEventListener('click',()=>work(()=>{queue.useWithoutLocation();$('receiveMarbete').value='';input.focus();}));
+    $('receiveStatus').textContent=ui.lastSuccess || (ui.phase==='preparing'?'Verificando el catálogo y los marbetes…':queue.busy?'Registrando piezas…':queue.message||'');
     $('receiveError').hidden=!(ui.error||queue.storageError);
     $('receiveError').textContent=ui.error||queue.storageError;
     $('receiveRows').innerHTML=rows.length?rows.map(row=>{
@@ -106,10 +106,9 @@ export function mountFastReceive(root,queue,{startScanner,stopScanner,isCurrent=
     });
   }
   $('receiveMarbeteForm').onsubmit=event=>{event.preventDefault();setMarbete($('receiveMarbete').value);};
-  $('receiveNoLocation').onclick=()=>work(()=>{stopScanner();ui.camera=false;queue.useWithoutLocation();$('receiveMarbete').value='';input.focus();});
   $('receiveScanMarbete').onclick=()=>work(async()=>{
     stopScanner();
-    await startScanner(code=>{if(current())setMarbete(code);},'marbete de ubicación',{preferZxing:true});
+    await startScanner(code=>{if(current())setMarbete(code);},'marbete de ubicación');
   });
   async function openCamera() {
     if(ui.camera){stopScanner();return;}
