@@ -31,9 +31,11 @@ export function supportDb(overrides = {}) {
         return {data:structuredClone(this.one ? rows[0]||null : rows), error:null};
       }
       if (this.table==='producto_marbetes') {
-        const prior=data.find(row=>row.sku===this.payload.sku && row.marbete_codigo===this.payload.marbete_codigo);
-        if(!prior)data.push(structuredClone(this.payload));
-        else if(!this.options?.ignoreDuplicates)Object.assign(prior,this.payload);
+        for(const item of (Array.isArray(this.payload)?this.payload:[this.payload])) {
+          const prior=data.find(row=>row.sku===item.sku && row.marbete_codigo===item.marbete_codigo);
+          if(!prior)data.push(structuredClone(item));
+          else if(!this.options?.ignoreDuplicates)Object.assign(prior,item);
+        }
       } else if (this.table==='marbetes') {
         if(data.some(row=>row.codigo===this.payload.codigo))return {data:null,error:{code:'23505',message:'Duplicate label'}};
         data.push(structuredClone(this.payload));
