@@ -179,6 +179,19 @@ export class ReceiveQueue extends FastExitQueue {
       await this.locks.request(this.key,{ifAvailable:true}, async lock => {
         if (!lock) throw Error('Otra pestaña está registrando esta recepción.');
         if (!this.persist()) throw Error(this.storageError || this.message);
+        // Create only missing SKU+marbete assignments. A single grouped UPSERT
+        // is far faster than opening one product-location screen per piece.
+        // Ignore conflicts to NEVER overwrite a quantity counted elsewhere.
+        const missing = this.state.rows.filter(row => row.status === 'draft' &&
+          !(row.locations || []).some(loc => loc.marbete_codigo === row.location));
+        for (let offset=0; offset<missing.length; offset+=75) {
+          const entries=missing.slice(offset,offset+75).map(row=>({
+            sku:row.product.sku,marbete_codigo:row.location,cantidad:null,
+            updated_at:new Date().toISOString()
+          }));
+          await locationQuery(this.sb.from('producto_marbetes')
+            .upsert(entries,{onConflict:'sku,marbete_codigo',ignoreDuplicates:true}));
+        }
         for (const row of this.state.rows.filter(row => row.status === 'draft')) {
           if (!this.online()) throw Error('Se perdió la conexión. El avance quedó guardado.');
           if (row.saveError || !row.product || !row.location) throw Error(row.saveError || 'Artículo incompleto.');
