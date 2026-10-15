@@ -12,13 +12,18 @@ function harness(overrides={}) {
 }
 const scan=code=>[{code,quantity:1}];
 
-test('requires a valid marbete in the same department before capturing',async()=>{
+test('receiving is open without a location, and a valid marbete is optional',async()=>{
   const h=harness();
-  assert.throws(()=>h.queue.capture(scan(SKU)),/Primero escanea/);
+  h.queue.capture(scan(SKU));
+  assert.equal(h.queue.state.rows[0].location,'');
+  assert.equal(h.queue.state.rows[0].quantity,1);
   await assert.rejects(h.queue.selectMarbete('NO-EXISTE'),/no está registrado/i);
+  // A failed marbete scan never discards or relocates the first piece.
+  assert.equal(h.queue.state.rows[0].location,'');
+  h.queue.useWithoutLocation();
   await h.queue.selectMarbete('ZAP-459-001');
   h.queue.capture(scan(SKU));
-  assert.equal(h.queue.state.rows[0].location,'ZAP-459-001');
+  assert.equal(h.queue.state.rows[1].location,'ZAP-459-001');
   assert.equal(h.db.movements.length,0);
 });
 
@@ -67,7 +72,7 @@ test('reload restores the physical marbete and draft, but requires location reva
   const recovered=new ReceiveQueue(h.options);
   assert.equal(recovered.state.activeMarbete,'ZAP-459-001');
   assert.equal(recovered.state.rows.length,1);
-  assert.throws(()=>recovered.capture(scan(SKU)),/Primero escanea/);
+  assert.throws(()=>recovered.capture(scan(SKU)),/valide el marbete/);
   await recovered.validateActive();recovered.capture(scan(SKU));
   assert.equal(recovered.state.rows[0].quantity,2);
 });
@@ -97,4 +102,43 @@ test('finalized receipt records one atomic ENTRADA per SKU/location and never be
   assert.equal(h.db.products[0].stock,15);
   assert.equal(h.db.assignments[0].cantidad,5);
   assert.equal(h.queue.state.rows[0].status,'done');
+});
+
+test('unlocated pieces can be finalized; changing the marbete never reassigns them',async()=>{
+  const h=harness();
+  h.queue.capture(scan(SKU));
+  h.queue.capture(scan(SKU));
+  await h.queue.selectMarbete('ZAP-459-001');
+  h.queue.capture(scan(SKU));
+  h.queue.useWithoutLocation();
+  h.queue.capture(scan(UPC));
+  await h.queue.prepare();
+  assert.equal(h.queue.confirmation.pieces,4);
+  assert.equal(h.queue.confirmation.locations,1);
+  assert.equal(h.queue.state.rows.length,2);
+  assert.equal(h.queue.state.rows.find(x=>x.location==='').quantity,3);
+  assert.equal(h.queue.state.rows.find(x=>x.location==='ZAP-459-001').quantity,1);
+  const h2=harness();
+  h2.queue.capture(scan(SKU));
+  await h2.queue.prepare();
+  assert.equal(h2.queue.confirmation.locations,0);
+  assert.equal(h2.queue.confirmation.pieces,1);
+});
+test('unlocated entry is saved without a fabricated marbete',async()=>{
+  const h=harness();
+  h.sb.rpc=(name,payload)=>({
+    abortSignal(){return this;},then(resolve){
+      assert.equal(name,'mover_stock_v2');
+      assert.equal(payload.p_tipo,'ENTRADA');
+      assert.equal(payload.p_marbete,null);
+      h.db.rpcCalls.push(structuredClone(payload));
+      return Promise.resolve({data:{stock_resultante:11},error:null}).then(resolve);
+    }
+  });
+  h.queue.capture(scan(SKU));
+  await h.queue.prepare();
+  await h.queue.submit();
+  assert.equal(h.db.rpcCalls.length,1);
+  assert.equal(h.queue.state.rows[0].status,'done');
+  assert.equal(h.db.assignments.length,0);
 });
