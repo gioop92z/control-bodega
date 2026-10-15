@@ -17,7 +17,7 @@ test('receiving is open without a location, and a valid marbete is optional',asy
   h.queue.capture(scan(SKU));
   assert.equal(h.queue.state.rows[0].location,'');
   assert.equal(h.queue.state.rows[0].quantity,1);
-  await assert.rejects(h.queue.selectMarbete('NO-EXISTE'),/no está registrado/i);
+  await assert.rejects(h.queue.selectMarbete('NO-EXISTE'),/no es un marbete/i);
   // A failed marbete scan never discards or relocates the first piece.
   assert.equal(h.queue.state.rows[0].location,'');
   h.queue.useWithoutLocation();
@@ -72,7 +72,7 @@ test('reload restores the physical marbete and draft, but requires location reva
   const recovered=new ReceiveQueue(h.options);
   assert.equal(recovered.state.activeMarbete,'ZAP-459-001');
   assert.equal(recovered.state.rows.length,1);
-  assert.throws(()=>recovered.capture(scan(SKU)),/valide el marbete/);
+  assert.throws(()=>recovered.capture(scan(SKU)),/validación del marbete/);
   await recovered.validateActive();recovered.capture(scan(SKU));
   assert.equal(recovered.state.rows[0].quantity,2);
 });
@@ -196,7 +196,7 @@ test('failed marbete write never claims to have registered it',async()=>{
     });
     return query;
   };
-  await assert.rejects(h.queue.selectMarbete('ZAP-402-024'),/permission denied/);
+  await assert.rejects(h.queue.selectMarbete('ZAP-402-024'),error=>error.code==='42501' && error.message==='permission denied');
   assert.equal(h.queue.state.activeMarbete,'');
   assert.equal(h.db.marbetes.length,2);
 });
