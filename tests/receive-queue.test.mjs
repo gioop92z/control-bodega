@@ -142,3 +142,61 @@ test('unlocated entry is saved without a fabricated marbete',async()=>{
   assert.equal(h.queue.state.rows[0].status,'done');
   assert.equal(h.db.assignments.length,0);
 });
+
+
+test('first scan automatically registers a brand-new physical ZAP marbete, then reuses it',async()=>{
+  const h=harness();
+  const first=await h.queue.selectMarbete('ZAP-402-001');
+  assert.equal(first.codigo,'ZAP-402-001');
+  assert.equal(first.created,true);
+  assert.equal(first.zona,'BODEGA');
+  assert.equal(first.departamento_id,'dept1');
+  assert.equal(h.queue.state.activeMarbete,'ZAP-402-001');
+  assert.equal(h.db.marbetes.filter(x=>x.codigo==='ZAP-402-001').length,1);
+  h.queue.capture(scan(SKU));
+  assert.equal(h.queue.state.rows[0].location,'ZAP-402-001');
+  const next=await h.queue.selectMarbete('zap-402-001');
+  assert.equal(next.created,false);
+  assert.equal(h.db.marbetes.filter(x=>x.codigo==='ZAP-402-001').length,1);
+  await h.queue.prepare();
+  assert.equal(h.queue.confirmation.locations,1);
+});
+
+test('unknown SKU barcodes cannot be created as accidental locations',async()=>{
+  const h=harness();
+  await assert.rejects(h.queue.selectMarbete('1200768112'),/no es un marbete/i);
+  assert.equal(h.db.marbetes.length,2);
+  assert.equal(h.queue.state.activeMarbete,'');
+  h.queue.capture(scan(SKU));
+  assert.equal(h.queue.state.rows[0].location,'');
+});
+
+test('an invalid or foreign marbete keeps the last selected marbete usable',async()=>{
+  const h=harness({marbetes:[
+    {codigo:'ZAP-459-001',zona:'BODEGA',activo:true,departamento_id:'dept1'},
+    {codigo:'ZAP-405-001',zona:'BODEGA',activo:true,departamento_id:'dept2'}
+  ]});
+  await h.queue.selectMarbete('ZAP-459-001');
+  await assert.rejects(h.queue.selectMarbete('ZAP-405-001'),/otro departamento/i);
+  assert.equal(h.queue.state.activeMarbete,'ZAP-459-001');
+  assert.equal(h.queue.activeValidated,true);
+  h.queue.capture(scan(SKU));
+  assert.equal(h.queue.state.rows[0].location,'ZAP-459-001');
+  assert.equal(h.db.marbetes.length,2);
+});
+
+test('failed marbete write never claims to have registered it',async()=>{
+  const h=harness();
+  const original=h.sb.from;
+  h.sb.from=table=>{
+    const query=original(table);
+    if(table==='marbetes')query.insert=()=>({
+      abortSignal(){return this;},
+      then(resolve){return Promise.resolve({data:null,error:{code:'42501',message:'permission denied'}}).then(resolve);}
+    });
+    return query;
+  };
+  await assert.rejects(h.queue.selectMarbete('ZAP-402-024'),/permission denied/);
+  assert.equal(h.queue.state.activeMarbete,'');
+  assert.equal(h.db.marbetes.length,2);
+});
