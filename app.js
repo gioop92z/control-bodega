@@ -4,6 +4,8 @@ import { startScanner, stopScanner } from './scanner.js?v=3.8.0';
 import { getMarbete, normalizeMarbete, assignProductLocation, registerMarbete, locationQuery } from './product-location.mjs?v=3.6.0';
 import { FastExitQueue } from './exit-queue.mjs?v=3.8.0';
 import { mountFastExit } from './exit-queue-ui.mjs?v=3.8.0';
+import { ReceiveQueue } from './receive-queue.mjs?v=3.9.0';
+import { mountFastReceive } from './receive-queue-ui.mjs?v=3.9.0';
 
 const sb = createClient(
   'https://dkqovohxkxlcccvagpij.supabase.co',
@@ -15,7 +17,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '3.8.0';
+const APP_VERSION = '3.9.0';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 
 const S = {
@@ -45,6 +47,13 @@ let searchPending = false;
 let lastSearchCode = '';
 let exitQueue = null;
 let exitCleanup = null;
+let receiveQueue = null;
+let receiveCleanup = null;
+
+function receiveBusy() {
+  if(receiveQueue?.busy || receiveQueue?.pending || receiveQueue?.selecting) { toast('Espera a que termine la recepción o la lectura pendiente.','error'); return true; }
+  return false;
+}
 
 function exitBusy() {
   if (exitQueue?.busy || exitQueue?.pending) { toast('Espera a que termine la consulta o el registro de la salida.','error'); return true; }
@@ -208,13 +217,14 @@ function header() {
 
 function shell(body) {
   exitCleanup?.(); exitCleanup = null;
+  receiveCleanup?.(); receiveCleanup = null;
   app.innerHTML = `<div class="app-shell">${header()}<main class="content view-enter">${body}</main>${nav()}</div>`;
   wireShell();
 }
 
 function wireShell() {
   document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => {
-    if (exitBusy()) return;
+    if (exitBusy() || receiveBusy()) return;
     resetSearchContext();
     S.view = b.dataset.view;
     S.product = null;
@@ -229,7 +239,7 @@ function wireShell() {
     location.reload();
   };
   $('deptSelect')?.addEventListener('change', e => {
-    if (exitBusy()) { e.target.value=S.deptId; return; }
+    if (exitBusy() || receiveBusy()) { e.target.value=S.deptId; return; }
     resetSearchContext();
     S.deptId = e.target.value;
     saveState();
@@ -267,7 +277,7 @@ async function homeView() {
       <div class="live-badge"><i></i> En línea</div>
     </section>
     <section class="action-grid">
-      <button class="action-card green" data-act="ENTRADA"><b>＋</b><strong>Recibir mercancía</strong><span>Agregar lo que entra</span></button>
+      <button class="action-card green" data-act="ENTRADA"><b>＋</b><strong>Recibir mercancía</strong><span>Escaneo continuo por marbete</span></button>
       <button class="action-card red" data-act="SALIDA"><b>−</b><strong>Sacar de bodega</strong><span>Registrar lo que sale</span></button>
       <button class="action-card" data-go="search"><b>⌕</b><strong>Buscar producto</strong><span>UPC, SKU o ubicación</span></button>
       <button class="action-card" data-go="count"><b>✓</b><strong>Inventario físico</strong><span>Contar y detectar diferencias</span></button>
@@ -297,6 +307,7 @@ async function homeView() {
 
 function moveView() {
   if (S.moveType==='SALIDA') return fastExitView();
+  if (S.moveType==='ENTRADA') return fastReceiveView();
   const sellerNote = !S.admin;
   shell(`
     <section class="page-title"><button id="backHome" class="ghost">← Inicio</button><h1>${S.moveType==='ENTRADA'?'Recibir mercancía':'Sacar de bodega'}</h1><p class="muted">Escanea, confirma y sigue con el siguiente producto.</p></section>
@@ -322,6 +333,22 @@ function fastExitView() {
   $('backHome').onclick = () => { if(exitBusy())return; S.view='home'; render(); };
   const deptId=S.deptId, current=exitQueue;
   exitCleanup = mountFastExit($('fastExitRoot'),current,{startScanner,stopScanner,admin:S.admin,isCurrent:()=>S.view==='move'&&S.moveType==='SALIDA'&&S.deptId===deptId&&exitQueue===current});
+}
+
+
+function fastReceiveView() {
+  const badge = (sessionStorage.getItem('nova.employeeNumber') || '').trim();
+  const actor = badge ? (S.admin?'Jefe ':'Empleado ') + badge : '';
+  if (!receiveQueue || receiveQueue.deptId!==S.deptId || receiveQueue.userId!==S.user.id || receiveQueue.actor!==actor) {
+    receiveQueue = new ReceiveQueue({sb,deptId:S.deptId,userId:S.user.id,actor,storage:localStorage,uuid:()=>crypto.randomUUID()});
+  }
+  receiveQueue.resume();
+  shell('<section class="page-title"><button id="backHome" type="button" class="ghost">← Inicio</button><h1>Recibir mercancía</h1><p class="muted">Una ubicación, miles de lecturas, una confirmación. Sin perder el catálogo.</p></section><div id="fastReceiveRoot"></div>');
+  $('backHome').onclick = () => {if(receiveBusy())return;S.view='home';render();};
+  const deptId=S.deptId,current=receiveQueue;
+  receiveCleanup=mountFastReceive($('fastReceiveRoot'),current,{
+    startScanner,stopScanner,isCurrent:()=>S.view==='move'&&S.moveType==='ENTRADA'&&S.deptId===deptId&&receiveQueue===current
+  });
 }
 
 function productMoveCard(sellerNote) {
