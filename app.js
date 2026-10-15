@@ -1,6 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
 import * as XLSX from 'https://esm.sh/xlsx@0.18.5';
-import { startScanner, stopScanner } from './scanner.js?v=3.8.0';
+import { startScanner, stopScanner } from './scanner.js?v=3.9.1';
 import { getMarbete, normalizeMarbete, assignProductLocation, registerMarbete, locationQuery } from './product-location.mjs?v=3.6.0';
 import { FastExitQueue } from './exit-queue.mjs?v=3.8.0';
 import { mountFastExit } from './exit-queue-ui.mjs?v=3.8.0';
@@ -17,7 +17,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '3.9.0';
+const APP_VERSION = '3.9.1';
 const VISUAL_CLEANUP_CUTOFF = '2026-10-15T22:15:00.000Z';
 
 const S = {
