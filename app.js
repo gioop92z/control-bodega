@@ -1,11 +1,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
 import * as XLSX from 'https://esm.sh/xlsx@0.18.5';
-import { startScanner, stopScanner } from './scanner.js?v=3.9.1';
+import { startScanner, stopScanner } from './scanner.js?v=3.9.4';
 import { getMarbete, normalizeMarbete, assignProductLocation, registerMarbete, locationQuery } from './product-location.mjs?v=3.6.0';
 import { FastExitQueue } from './exit-queue.mjs?v=3.8.0';
 import { mountFastExit } from './exit-queue-ui.mjs?v=3.8.0';
-import { ReceiveQueue } from './receive-queue.mjs?v=3.9.2';
-import { mountFastReceive } from './receive-queue-ui.mjs?v=3.9.2';
+import { ReceiveQueue } from './receive-queue.mjs?v=3.9.4';
+import { mountFastReceive } from './receive-queue-ui.mjs?v=3.9.4';
 
 const sb = createClient(
   'https://dkqovohxkxlcccvagpij.supabase.co',
@@ -17,7 +17,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '3.9.2';
+const APP_VERSION = '3.9.4';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 const HISTORY_RESTART_CUTOFF = '2026-10-15T22:15:00.000Z';
 
@@ -344,7 +344,7 @@ function fastReceiveView() {
     receiveQueue = new ReceiveQueue({sb,deptId:S.deptId,userId:S.user.id,actor,storage:localStorage,uuid:()=>crypto.randomUUID()});
   }
   receiveQueue.resume();
-  shell('<section class="page-title"><button id="backHome" type="button" class="ghost">← Inicio</button><h1>Recibir mercancía</h1><p class="muted">Una ubicación, miles de lecturas, una confirmación. Sin perder el catálogo.</p></section><div id="fastReceiveRoot"></div>');
+  shell('<section class="page-title"><button id="backHome" type="button" class="ghost">← Inicio</button><h1>Recibir mercancía</h1><p class="muted">Escanea piezas y confirma el lote.</p></section><div id="fastReceiveRoot"></div>');
   $('backHome').onclick = () => {if(receiveBusy())return;S.view='home';render();};
   const deptId=S.deptId,current=receiveQueue;
   receiveCleanup=mountFastReceive($('fastReceiveRoot'),current,{
