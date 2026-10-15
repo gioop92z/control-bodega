@@ -28,6 +28,7 @@ export async function startScanner(cb,label='código',options={}){
   const target=document.getElementById('scannerViewport');
   const readers=['code_128_reader','ean_reader','ean_8_reader','upc_reader','upc_e_reader','code_39_reader','code_93_reader','codabar_reader','i2of5_reader','2of5_reader'];
   try{
+   if(options.preferZxing) throw Error('Prefer ZXing for printed location barcodes');
    await new Promise((ok,bad)=>Quagga.init({inputStream:{type:'LiveStream',target,constraints:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}},area:{top:'8%',right:'3%',left:'3%',bottom:'8%'}},locator:{patchSize:'medium',halfSample:false},numOfWorkers:Math.min(4,navigator.hardwareConcurrency||2),frequency:18,decoder:{readers,multiple:false},locate:true},e=>e?bad(e):ok()));
    if(!active||current!==session)return;
    Quagga.onDetected(d=>{const v=d?.codeResult?.code,es=(d?.codeResult?.decodedCodes||[]).filter(x=>typeof x.error==='number').map(x=>x.error),avg=es.length?es.reduce((a,b)=>a+b,0)/es.length:0;if(v&&avg<.5)accept(v)});
