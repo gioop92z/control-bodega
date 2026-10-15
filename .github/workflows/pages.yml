@@ -41,11 +41,14 @@ jobs:
           node --check exit-queue.mjs
           node --check exit-input.mjs
           node --check exit-queue-ui.mjs
+          node --check receive-queue.mjs
+          node --check receive-queue-ui.mjs
           node --test tests/*.test.mjs
           test -s index.html
           test -s styles.css
           test -s vantis-enterprise.css
           test -s manifest.json
+          test -s receive-queue.css
 
       - name: Validate Supabase API contract
         shell: bash
