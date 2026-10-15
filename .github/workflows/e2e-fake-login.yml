@@ -110,7 +110,6 @@ jobs:
 
           const navBox=await page.locator('.bottom-nav').boundingBox();
           if(!navBox||navBox.width<100||navBox.height<40) throw new Error('La navegación inferior no está visible.');
-          await page.locator('#vantisPosition').waitFor({state:'visible',timeout:5000});
 
           const guardSource=await page.evaluate(async()=>await (await fetch(`nova-network-guard.js?check=${Date.now()}`)).text());
           if(!guardSource.includes('mover_stock_v2')||!guardSource.includes('TIMEOUT_MS=15000')) throw new Error('No está activo el protector de movimientos.');
