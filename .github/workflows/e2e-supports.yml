@@ -1,4 +1,4 @@
-name: E2E apoyos por lote
+name: E2E salidas rápidas
 on:
   push:
     branches: ["main"]

@@ -1,4 +1,4 @@
-import { startScanner, stopScanner } from './scanner.js?v=3.7.0';
+import { startScanner, stopScanner } from './scanner.js?v=3.8.0';
 
 const API='https://dkqovohxkxlcccvagpij.supabase.co/rest/v1';
 const KEY='sb_publishable_iz06RtaObND0dWOpuX2vKg_wZVbrZCv';

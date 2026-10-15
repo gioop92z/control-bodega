@@ -1,9 +1,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
 import * as XLSX from 'https://esm.sh/xlsx@0.18.5';
-import { startScanner, stopScanner } from './scanner.js?v=3.7.0';
+import { startScanner, stopScanner } from './scanner.js?v=3.8.0';
 import { getMarbete, normalizeMarbete, assignProductLocation, registerMarbete, locationQuery } from './product-location.mjs?v=3.6.0';
-import { SupportBatch } from './support-batch.mjs?v=3.7.0';
-import { mountSupportBatch } from './support-batch-ui.mjs?v=3.7.0';
+import { FastExitQueue } from './exit-queue.mjs?v=3.8.0';
+import { mountFastExit } from './exit-queue-ui.mjs?v=3.8.0';
 
 const sb = createClient(
   'https://dkqovohxkxlcccvagpij.supabase.co',
@@ -15,7 +15,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '3.7.0';
+const APP_VERSION = '3.8.0';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 
 const S = {
@@ -43,11 +43,11 @@ let locationSaveNotice = null;
 let searchRequest = 0;
 let searchPending = false;
 let lastSearchCode = '';
-let supportBatch = null;
-let supportCleanup = null;
+let exitQueue = null;
+let exitCleanup = null;
 
-function supportBusy() {
-  if (supportBatch?.busy || supportBatch?.pending) { toast('Espera a que termine la captura o el guardado del lote.','error'); return true; }
+function exitBusy() {
+  if (exitQueue?.busy || exitQueue?.pending) { toast('Espera a que termine la consulta o el registro de la salida.','error'); return true; }
   return false;
 }
 
@@ -207,14 +207,14 @@ function header() {
 }
 
 function shell(body) {
-  supportCleanup?.(); supportCleanup = null;
+  exitCleanup?.(); exitCleanup = null;
   app.innerHTML = `<div class="app-shell">${header()}<main class="content view-enter">${body}</main>${nav()}</div>`;
   wireShell();
 }
 
 function wireShell() {
   document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => {
-    if (supportBusy()) return;
+    if (exitBusy()) return;
     resetSearchContext();
     S.view = b.dataset.view;
     S.product = null;
@@ -222,14 +222,14 @@ function wireShell() {
     render();
   });
   $('logout').onclick = async () => {
-    if (supportBusy()) return;
+    if (exitBusy()) return;
     resetSearchContext();
     cleanupLegacyAccess();
     await sb.auth.signOut();
     location.reload();
   };
   $('deptSelect')?.addEventListener('change', e => {
-    if (supportBusy()) { e.target.value=S.deptId; return; }
+    if (exitBusy()) { e.target.value=S.deptId; return; }
     resetSearchContext();
     S.deptId = e.target.value;
     saveState();
@@ -248,7 +248,6 @@ function render() {
   }
   if (S.view==='home') return homeView();
   if (S.view==='move') return moveView();
-  if (S.view==='supports') return supportsView();
   if (S.view==='search') return searchView();
   if (S.view==='inventory') return inventoryView();
   if (S.view==='count') return countView();
@@ -272,7 +271,6 @@ async function homeView() {
       <button class="action-card red" data-act="SALIDA"><b>−</b><strong>Sacar de bodega</strong><span>Registrar lo que sale</span></button>
       <button class="action-card" data-go="search"><b>⌕</b><strong>Buscar producto</strong><span>UPC, SKU o ubicación</span></button>
       <button class="action-card" data-go="count"><b>✓</b><strong>Inventario físico</strong><span>Contar y detectar diferencias</span></button>
-      <button class="action-card support-home" data-go="supports"><b>▤</b><strong>Apoyos por lote</strong><span>Pegar varios SKU, escanear en fila y registrar ventas por internet</span></button>
     </section>
     <section class="card"><div class="section-head"><h3>Hoy</h3><span class="tiny">Actualización en tiempo real</span></div><div id="summary" class="kpis"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div></section>
     ${S.admin ? `<section class="card"><h3>Estado de la operación</h3><div id="checklist"><div class="skeleton"></div></div></section><section class="quick-row"><button data-go="import" class="secondary">Importar Excel / CSV</button><button data-go="history" class="secondary">Ver historial</button></section>` : `<section class="tip-card"><b>Tip rápido</b><span>En cada entrada o salida escribe tu nombre en “Nota”. Así queda claro quién realizó el movimiento.</span></section>`}
@@ -298,11 +296,11 @@ async function homeView() {
 }
 
 function moveView() {
+  if (S.moveType==='SALIDA') return fastExitView();
   const sellerNote = !S.admin;
   shell(`
     <section class="page-title"><button id="backHome" class="ghost">← Inicio</button><h1>${S.moveType==='ENTRADA'?'Recibir mercancía':'Sacar de bodega'}</h1><p class="muted">Escanea, confirma y sigue con el siguiente producto.</p></section>
     <div id="moveSuccess"></div>
-    ${S.moveType==='SALIDA'?'<button id="openSupports" class="secondary" type="button">▤ Varios apoyos → Abrir lote</button>':''}
     <button id="scanMove" class="scan-btn">📷 Escanear UPC o SKU</button>
     <form id="manualMove" class="inline-form"><input id="manualCode" placeholder="O escribe UPC / SKU" autocomplete="off"><button class="secondary">Buscar</button></form>
     <section class="card">${S.product ? productMoveCard(sellerNote) : '<div class="empty small-empty"><div class="empty-icon">⌁</div><b>Listo para escanear</b><p>Después de guardar, se limpia automáticamente para el siguiente.</p></div>'}</section>
@@ -311,20 +309,19 @@ function moveView() {
   $('scanMove').onclick = () => openScanner(findForMove,'UPC o SKU');
   $('manualMove').onsubmit = e => { e.preventDefault(); findForMove($('manualCode').value).catch(x=>toast(humanError(x),'error')); };
   $('saveMove')?.addEventListener('click', saveMove);
-  $('openSupports')?.addEventListener('click', () => { stopScanner(); S.view='supports'; render(); });
 }
 
-function supportsView() {
+function fastExitView() {
   const badge = (sessionStorage.getItem('nova.employeeNumber') || '').trim();
   const actor = badge ? `${S.admin?'Jefe':'Empleado'} ${badge}` : '';
-  if (!supportBatch || supportBatch.deptId!==S.deptId || supportBatch.userId!==S.user.id || supportBatch.actor!==actor) {
-    supportBatch = new SupportBatch({sb,deptId:S.deptId,userId:S.user.id,actor,storage:localStorage,uuid:()=>crypto.randomUUID()});
+  if (!exitQueue || exitQueue.deptId!==S.deptId || exitQueue.userId!==S.user.id || exitQueue.actor!==actor) {
+    exitQueue = new FastExitQueue({sb,deptId:S.deptId,userId:S.user.id,actor,storage:localStorage,uuid:()=>crypto.randomUUID()});
   }
-  supportBatch.confirmation = null;
-  shell('<section class="page-title"><button id="backSupportsHome" type="button" class="ghost">← Inicio</button><h1>Apoyos por lote</h1></section><div id="supportBatchRoot"></div>');
-  $('backSupportsHome').onclick = () => { if(supportBusy())return; stopScanner(); S.view='home'; render(); };
-  const deptId=S.deptId, current=supportBatch;
-  supportCleanup = mountSupportBatch($('supportBatchRoot'),current,{startScanner,stopScanner,admin:S.admin,isCurrent:()=>S.view==='supports'&&S.deptId===deptId&&supportBatch===current});
+  exitQueue.resume();
+  shell('<section class="page-title"><button id="backHome" type="button" class="ghost">← Inicio</button><h1>Sacar de bodega</h1></section><div id="fastExitRoot"></div>');
+  $('backHome').onclick = () => { if(exitBusy())return; S.view='home'; render(); };
+  const deptId=S.deptId, current=exitQueue;
+  exitCleanup = mountFastExit($('fastExitRoot'),current,{startScanner,stopScanner,admin:S.admin,isCurrent:()=>S.view==='move'&&S.moveType==='SALIDA'&&S.deptId===deptId&&exitQueue===current});
 }
 
 function productMoveCard(sellerNote) {

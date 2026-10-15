@@ -1,4 +1,4 @@
-import { startScanner, stopScanner } from './scanner.js?v=3.7.0';
+import { startScanner, stopScanner } from './scanner.js?v=3.8.0';
 
 const EMP='nova.employeeNumber';
 const READY='vantis.session.ready';

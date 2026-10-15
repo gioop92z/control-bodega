@@ -38,7 +38,9 @@ jobs:
           node --check vantis-session-gate.js
           node --check product-location.mjs
           node --check support-batch.mjs
-          node --check support-batch-ui.mjs
+          node --check exit-queue.mjs
+          node --check exit-input.mjs
+          node --check exit-queue-ui.mjs
           node --test tests/*.test.mjs
           test -s index.html
           test -s styles.css

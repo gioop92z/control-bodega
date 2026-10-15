@@ -256,9 +256,10 @@ export class SupportBatch {
       this.message = this.state.rows.some(x => x.status === 'uncertain') ? 'Quedan salidas por verificar. Las confirmadas ya están registradas.' : 'Las salidas enviadas quedaron verificadas.';
     } finally { this.busy = false; this.changed(); }
   }
-  async submit({acknowledgeTotalOnly = false} = {}) {
+  async submit({acknowledgeTotalOnly = false, reason = 'APOYO INTERNET'} = {}) {
     if (this.busy || !this.confirmation) return;
     if (!this.online()) throw Error('Necesitas conexión para registrar el lote.');
+    if (!['APOYO INTERNET','VENTA NOCTURNA','VENTA','OTRA SALIDA'].includes(reason)) throw Error('Elige el motivo de la salida.');
     if (!clean(this.state.note) && !this.actor) throw Error('Identifica tu nombre o número de empleado.');
     if (this.confirmation.totalOnly && !acknowledgeTotalOnly) throw Error('Confirma las filas que descontarán únicamente la existencia total.');
     if (!this.locks?.request) throw Error('Este navegador no permite proteger el lote entre pestañas. Usa una versión actual de Chrome, Edge o Safari.');
@@ -272,7 +273,7 @@ export class SupportBatch {
           if (!this.online()) throw Error('Se interrumpió la conexión. Se conservó el avance del lote.');
           const loc = row.locations.find(x => x.marbete_codigo === row.location);
           const referenceOnly = !!loc && loc.cantidad == null;
-          row.operation = {payload:{p_token:null, p_id:this.uuid(), p_producto:row.product.id, p_tipo:'SALIDA', p_cantidad:row.quantity, p_marbete:referenceOnly ? null : row.location || null, p_nota:`APOYO INTERNET · Lote ${this.state.id} · ${this.actor}${this.state.note ? ' · ' + this.state.note : ''}${referenceOnly ? ' · Marbete de referencia: ' + row.location + ' (sin conteo por ubicación)' : ''}`}};
+          row.operation = {payload:{p_token:null, p_id:this.uuid(), p_producto:row.product.id, p_tipo:'SALIDA', p_cantidad:row.quantity, p_marbete:referenceOnly ? null : row.location || null, p_nota:`${reason} · Lote ${this.state.id} · ${this.actor}${this.state.note ? ' · ' + this.state.note : ''}${referenceOnly ? ' · Marbete de referencia: ' + row.location + ' (sin conteo por ubicación)' : ''}`}};
           row.status = 'sending';
           if (!this.persist()) { row.status = 'draft'; row.operation = null; throw Error(this.storageError || this.message); }
           this.onChange();
