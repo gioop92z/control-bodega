@@ -73,9 +73,13 @@ export async function startScanner(cb, label = 'código', options = {}) {
     last = code;
     if (!options.continuous) {
       stopScanner();
-      Promise.resolve().then(() => cb(code)).catch(error => {
+      try {
+        Promise.resolve(cb(code)).catch(error => {
+          console.warn('VANTIS scan handler:',error);
+        });
+      } catch(error) {
         console.warn('VANTIS scan handler:',error);
-      });
+      }
       return;
     }
     accepted++;
