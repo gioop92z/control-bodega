@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
 import * as XLSX from 'https://esm.sh/xlsx@0.18.5';
 import { startScanner, stopScanner } from './scanner.js';
+import { getMarbete, normalizeMarbete, assignProductLocation, registerMarbete, locationQuery } from './product-location.mjs?v=3.6.0';
 
 const sb = createClient(
   'https://dkqovohxkxlcccvagpij.supabase.co',
@@ -12,7 +13,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '3.4.0';
+const APP_VERSION = '3.6.0';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 
 const S = {
@@ -34,6 +35,20 @@ const S = {
   importRows: [],
   importMap: { sku:'', upc:'', descripcion:'', marca:'', talla:'', color:'', precio:'', stock:'', minimo:'' }
 };
+
+let locationAssignment = null;
+let locationSaveNotice = null;
+let searchRequest = 0;
+let searchPending = false;
+let lastSearchCode = '';
+
+function resetSearchContext() {
+  searchRequest++;
+  searchPending = false;
+  locationAssignment = null;
+  locationSaveNotice = null;
+  stopScanner();
+}
 
 function humanError(e) {
   const s = String(e?.message || e || 'Error');
@@ -189,19 +204,20 @@ function shell(body) {
 
 function wireShell() {
   document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => {
-    stopScanner();
+    resetSearchContext();
     S.view = b.dataset.view;
     S.product = null;
     S.searchResult = null;
     render();
   });
   $('logout').onclick = async () => {
-    stopScanner();
+    resetSearchContext();
     cleanupLegacyAccess();
     await sb.auth.signOut();
     location.reload();
   };
   $('deptSelect')?.addEventListener('change', e => {
+    resetSearchContext();
     S.deptId = e.target.value;
     saveState();
     S.product = null;
@@ -335,7 +351,7 @@ function pickByPriority(rows, field, values) {
   return [...rows].sort((a,b)=>(order.get(String(a?.[field])) ?? 999)-(order.get(String(b?.[field])) ?? 999))[0] || null;
 }
 
-async function findProduct(code) {
+async function findProduct(code, deptId=S.deptId) {
   const skuCandidates=lookupCodeVariants(code);
   const upcCandidates=upcLookupVariants(code);
   if (!skuCandidates.length) return null;
@@ -343,7 +359,7 @@ async function findProduct(code) {
   const cols='id,sku,upc,descripcion,marca,talla,color,precio,stock,stock_minimo,departamento_id,activo';
   const skuReq=sb.from('productos')
     .select(cols)
-    .eq('departamento_id',S.deptId)
+    .eq('departamento_id',deptId)
     .eq('activo',true)
     .in('sku',skuCandidates)
     .limit(Math.max(1,skuCandidates.length));
@@ -351,25 +367,23 @@ async function findProduct(code) {
   const upcReq=upcCandidates.length
     ? sb.from('productos')
         .select(cols)
-        .eq('departamento_id',S.deptId)
+        .eq('departamento_id',deptId)
         .eq('activo',true)
         .in('upc',upcCandidates)
         .limit(Math.max(1,upcCandidates.length))
     : Promise.resolve({data:[],error:null});
 
-  const [bySku,byUpc]=await Promise.all([skuReq,upcReq]);
-  if (bySku.error) throw bySku.error;
-  if (byUpc.error) throw byUpc.error;
+  const [bySku,byUpc]=await Promise.all([locationQuery(skuReq),upcCandidates.length?locationQuery(upcReq):Promise.resolve([])]);
 
-  return pickByPriority(bySku.data||[],'sku',skuCandidates)
-    || pickByPriority(byUpc.data||[],'upc',upcCandidates)
+  return pickByPriority(bySku||[],'sku',skuCandidates)
+    || pickByPriority(byUpc||[],'upc',upcCandidates)
     || null;
 }
 
-async function loadLocations(sku) {
-  const r = await sb.from('producto_marbetes').select('marbete_codigo,cantidad,marbetes(zona,descripcion,activo,departamento_id)').eq('sku',sku);
-  return (r.data||[])
-  .filter(x => x.marbetes?.activo !== false && x.marbetes?.departamento_id === S.deptId)
+async function loadLocations(sku, deptId=S.deptId) {
+  const rows = await locationQuery(sb.from('producto_marbetes').select('marbete_codigo,cantidad,marbetes(zona,descripcion,activo,departamento_id)').eq('sku',sku));
+  return (rows||[])
+  .filter(x => x.marbetes?.activo === true && x.marbetes?.departamento_id === deptId)
   .map(x => ({marbete_codigo:x.marbete_codigo,cantidad:x.cantidad,zona:x.marbetes?.zona||'',descripcion:x.marbetes?.descripcion||''}));
 }
 
@@ -418,41 +432,152 @@ async function saveMove() {
 }
 
 function searchView() {
-  shell(`<section class="page-title"><h1>Buscar</h1><p class="muted">Escanea UPC, SKU o un marbete.</p></section><button id="scanSearch" class="scan-btn">📷 Escanear código</button><form id="manualSearch" class="inline-form"><input id="searchCode" placeholder="UPC, SKU o marbete" autocomplete="off"><button class="secondary">Buscar</button></form><section class="card">${searchResultHtml()}</section>`);
+  shell(`<section class="page-title"><h1>Buscar</h1><p class="muted">Escanea UPC, SKU o un marbete.</p></section><button id="scanSearch" class="scan-btn">📷 Escanear código</button><form id="manualSearch" class="inline-form"><input id="searchCode" aria-label="UPC, SKU o marbete" placeholder="UPC, SKU o marbete" autocomplete="off" value="${esc(lastSearchCode)}"><button class="secondary">Buscar</button></form><section class="card" aria-busy="${searchPending}">${searchResultHtml()}</section>`);
   $('scanSearch').onclick = () => openScanner(doSearch,'UPC, SKU o marbete');
   $('manualSearch').onsubmit = e => { e.preventDefault(); doSearch($('searchCode').value).catch(x=>toast(humanError(x),'error')); };
+  $('giveProductLocation')?.addEventListener('click', openProductLocation);
 }
 
 function searchResultHtml() {
+  if (searchPending) return '<p class="muted" role="status">Consultando artículo y ubicaciones…</p>';
   if (!S.searchResult) return '<div class="empty small-empty"><div class="empty-icon">⌕</div><p>Escanea un código para ver stock y ubicación.</p></div>';
   if (S.searchType==='product') {
     const p=S.searchResult;
-    return `<div class="product-head"><div><div class="tiny">SKU ${esc(p.sku)}${p.upc?' · UPC '+esc(p.upc):''}</div><h2>${esc(p.descripcion)}</h2><p class="muted">${esc([p.marca,p.talla,p.color].filter(Boolean).join(' · '))}</p></div><div class="stock-big">${p.stock}<span>piezas</span></div></div>${locationList(S.locations)}`;
+    return `<div class="product-head"><div><div class="tiny">SKU ${esc(p.sku)}${p.upc?' · UPC '+esc(p.upc):''}</div><h2>${esc(p.descripcion)}</h2><p class="muted">${esc([p.marca,p.talla,p.color].filter(Boolean).join(' · '))}</p></div><div class="stock-big">${p.stock}<span>piezas</span></div></div>${locationList(S.locations)}${locationSaveNotice?.productId===p.id?`<div class="success" role="status">✓ ${locationSaveNotice.alreadyAssigned?'El artículo ya estaba asignado a':'Ubicación guardada:'} <b>${esc(locationSaveNotice.code)}</b>.</div>`:''}<div class="product-location-action"><button id="giveProductLocation" class="${S.locations.length?'secondary':'primary'}" type="button">⌖ ${S.locations.length?'Agregar otra ubicación':'Darle ubicación'}</button><p class="tiny">${S.locations.length?'Conserva las ubicaciones actuales.':'Escanea el marbete del cajón, mueble o rack.'}</p></div><div id="productLocationPanel" hidden></div>`;
   }
   const m=S.searchResult;
   return `<div><div class="tiny">Ubicación</div><h2>${esc(m.codigo)}</h2><p><span class="pill">${esc(m.zona)}</span> ${esc(m.descripcion||'')}</p><div>${(m.products||[]).map(p => `<div class="product-row"><div><b>${esc(p.descripcion)}</b><span>SKU ${esc(p.sku)}${p.upc?' · UPC '+esc(p.upc):''}</span></div><strong>${p.qty??'—'}</strong></div>`).join('')||'<p class="muted">No hay productos asignados.</p>'}</div></div>`;
 }
 
 async function doSearch(code) {
+  if (S.view!=='search') return;
   stopScanner();
   code=String(code||'').trim();
   if (!code) return;
-  const p=await findProduct(code);
-  if (p) {
-    S.searchType='product'; S.searchResult=p; S.locations=await loadLocations(p.sku); return render();
-  }
-  const mr=await sb.from('marbetes').select('codigo,zona,descripcion,created_at').eq('codigo',code).eq('activo',true).eq('departamento_id',S.deptId).gt('created_at',VISUAL_CLEANUP_CUTOFF).maybeSingle();
-  if (!mr.data) { S.searchResult=null; render(); return toast('Código no encontrado.','error'); }
-  const pm=await sb.from('producto_marbetes').select('sku,cantidad').eq('marbete_codigo',code);
-  const skus=(pm.data||[]).map(x=>x.sku);
-  let products=[];
-  if (skus.length) {
-    const pr=await sb.from('productos').select('sku,upc,descripcion').in('sku',skus);
-    products=(pr.data||[]).map(p=>({...p,qty:(pm.data||[]).find(x=>x.sku===p.sku)?.cantidad}));
-  }
-  S.searchType='marbete';
-  S.searchResult={...mr.data,products};
+  const request=++searchRequest, deptId=S.deptId;
+  const current=()=>request===searchRequest && S.deptId===deptId && S.view==='search';
+  locationAssignment=null; locationSaveNotice=null; lastSearchCode=code;
+  S.searchResult=null; S.locations=[]; searchPending=true;
   render();
+  try {
+    const p=await findProduct(code,deptId);
+    if (!current()) return;
+    if (p) {
+      const locs=await loadLocations(p.sku,deptId);
+      if (!current()) return;
+      S.searchType='product'; S.searchResult=p; S.locations=locs;
+      return;
+    }
+    const marbete=await locationQuery(sb.from('marbetes').select('codigo,zona,descripcion,created_at').eq('codigo',code).eq('activo',true).eq('departamento_id',deptId).gt('created_at',VISUAL_CLEANUP_CUTOFF).maybeSingle());
+    if (!current()) return;
+    if (!marbete) return toast('Código no encontrado.','error');
+    const assignments=await locationQuery(sb.from('producto_marbetes').select('sku,cantidad').eq('marbete_codigo',code));
+    const skus=(assignments||[]).map(x=>x.sku);
+    let products=[];
+    if (skus.length) {
+      const rows=await locationQuery(sb.from('productos').select('sku,upc,descripcion').eq('departamento_id',deptId).eq('activo',true).in('sku',skus));
+      products=(rows||[]).map(p=>({...p,qty:(assignments||[]).find(x=>x.sku===p.sku)?.cantidad}));
+    }
+    if (!current()) return;
+    S.searchType='marbete'; S.searchResult={...marbete,products};
+  } catch(error) { if (current()) toast(humanError(error),'error'); }
+  finally { if (current()) { searchPending=false; render(); } }
+}
+
+function assignmentCurrent(a) {
+  return locationAssignment===a && S.view==='search' && S.deptId===a.deptId && S.searchType==='product' && S.searchResult?.id===a.productId;
+}
+
+function assignmentOnline(a) {
+  if (!assignmentCurrent(a)) return false;
+  if (navigator.onLine!==false) return true;
+  a.error='Necesitas conexión para validar y guardar la ubicación.';
+  paintProductLocation(a);
+  return false;
+}
+
+function openProductLocation() {
+  if (locationAssignment && assignmentCurrent(locationAssignment)) return;
+  const p=S.searchResult;
+  if (S.view!=='search' || S.searchType!=='product' || !p) return;
+  const a={productId:p.id,sku:p.sku,upc:p.upc,deptId:S.deptId,department:deptName(),code:'',candidate:null,missing:false,phase:'',error:''};
+  locationAssignment=a;
+  paintProductLocation(a);
+  scanProductMarbete(a);
+}
+
+function paintProductLocation(a) {
+  if (!assignmentCurrent(a)) return;
+  const panel=$('productLocationPanel');
+  if (!panel) return;
+  panel.hidden=false;
+  $('giveProductLocation').hidden=true;
+  const busy=Boolean(a.phase), disabled=busy?'disabled':'';
+  panel.innerHTML=`<section class="product-location-panel" aria-labelledby="locationPanelTitle" aria-busy="${busy}"><h3 id="locationPanelTitle">Asignar ubicación</h3><p class="tiny">SKU ${esc(a.sku)} · ${esc(a.department)}</p><button id="scanProductMarbete" class="scan-btn" type="button" ${disabled}>▣ Escanear marbete</button><form id="manualProductMarbete" class="inline-form"><input id="productMarbeteCode" aria-label="Código del marbete" placeholder="O escribe el código del marbete" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="120" value="${esc(a.code)}" ${disabled}><button class="secondary" ${disabled}>Validar</button></form><div role="status" aria-live="polite">${busy?`<p class="muted">${a.phase==='saving'?'Guardando y comprobando ubicación…':a.phase==='registering'?'Registrando marbete…':'Validando marbete…'}</p>`:''}${a.error?`<div class="error">${esc(a.error)}</div>`:''}</div>${a.missing?(S.admin?`<div class="notice"><b>Marbete nuevo: ${esc(a.code)}</b><p>Confirma que este código está colocado en el mueble de ${esc(a.department)}.</p><label for="newProductMarbeteZone">Tipo de ubicación</label><select id="newProductMarbeteZone" ${disabled}><option value="BODEGA">BODEGA</option><option value="PISO">PISO</option></select><button id="registerProductMarbete" class="secondary" type="button" ${disabled}>Registrar este marbete</button></div>`:'<div class="notice">Pide al administrador que registre este marbete en Ajustes → Ubicaciones.</div>'):''}${a.candidate?`<div class="location-confirm"><span class="tiny">Ubicación verificada</span><strong>${esc(a.candidate.codigo)}</strong><span>${esc(a.candidate.zona)}${a.candidate.descripcion?' · '+esc(a.candidate.descripcion):''}</span><button id="confirmProductLocation" class="primary" type="button" ${disabled}>Guardar ubicación</button></div>`:''}<p class="tiny">Asigna la ubicación sin modificar el stock total ni las cantidades ya registradas.</p><button id="cancelProductLocation" class="ghost" type="button" ${a.phase==='saving'||a.phase==='registering'?'disabled':''}>Cancelar</button></section>`;
+  $('scanProductMarbete').onclick=()=>scanProductMarbete(a);
+  $('productMarbeteCode').oninput=e=>{
+    a.code=e.target.value;
+    if ($('confirmProductLocation')) $('confirmProductLocation').disabled=true;
+    if ($('registerProductMarbete')) $('registerProductMarbete').disabled=true;
+  };
+  $('manualProductMarbete').onsubmit=e=>{e.preventDefault();validateProductMarbete(a,$('productMarbeteCode').value)};
+  $('confirmProductLocation')?.addEventListener('click',()=>saveProductLocation(a));
+  $('registerProductMarbete')?.addEventListener('click',()=>registerProductLocationMarbete(a,$('newProductMarbeteZone').value));
+  $('cancelProductLocation').onclick=()=>{
+    if (a.phase==='saving'||a.phase==='registering') return;
+    stopScanner(); locationAssignment=null; panel.hidden=true;
+    $('giveProductLocation').hidden=false; $('giveProductLocation').focus();
+  };
+}
+
+async function scanProductMarbete(a) {
+  if (a.phase || !assignmentOnline(a)) return;
+  try { await startScanner(code=>{validateProductMarbete(a,code)},'marbete de ubicación'); }
+  catch { if (assignmentCurrent(a)) { a.error='No pude abrir la cámara. Permite el acceso o escribe el código del marbete.'; paintProductLocation(a); $('productMarbeteCode')?.focus(); } }
+}
+
+async function validateProductMarbete(a,raw) {
+  if (a.phase || !assignmentOnline(a)) return;
+  stopScanner();
+  a.phase='checking'; a.candidate=null; a.missing=false; a.error=''; a.code=String(raw??'').trim();
+  paintProductLocation(a);
+  try {
+    const code=normalizeMarbete(a.code);
+    if (code===a.sku || code===a.upc) throw Error('Escaneaste el código del artículo. Escanea el marbete del cajón, mueble o rack.');
+    const row=await getMarbete(sb,code,a.deptId);
+    if (assignmentCurrent(a)) a.candidate=row;
+  } catch(error) { if (assignmentCurrent(a)) { a.error=humanError(error); a.missing=error.code==='NOT_REGISTERED'; } }
+  finally { a.phase=''; paintProductLocation(a); }
+}
+
+async function registerProductLocationMarbete(a,zona) {
+  if (!S.admin || !a.missing || a.phase || !assignmentOnline(a)) return;
+  a.phase='registering'; a.error=''; paintProductLocation(a);
+  try {
+    const row=await registerMarbete(sb,{code:a.code,deptId:a.deptId,zona});
+    if (assignmentCurrent(a)) { a.candidate=row; a.missing=false; }
+  } catch(error) { if (assignmentCurrent(a)) a.error=humanError(error); }
+  finally { a.phase=''; paintProductLocation(a); }
+}
+
+async function saveProductLocation(a) {
+  if (a.phase || !a.candidate || !assignmentOnline(a)) return;
+  if (normalizeMarbete(a.code)!==a.candidate.codigo) return validateProductMarbete(a,a.code);
+  a.phase='saving'; a.error=''; paintProductLocation(a);
+  try {
+    const result=await assignProductLocation(sb,{productId:a.productId,sku:a.sku,deptId:a.deptId,marbeteCode:a.candidate.codigo});
+    if (!assignmentCurrent(a)) return;
+    let locs;
+    try { locs=await loadLocations(a.sku,a.deptId); }
+    catch { locs=[...S.locations.filter(x=>x.marbete_codigo!==result.marbete.codigo),{marbete_codigo:result.marbete.codigo,cantidad:result.assignment.cantidad,zona:result.marbete.zona,descripcion:result.marbete.descripcion}]; }
+    if (!assignmentCurrent(a)) return;
+    S.locations=locs;
+    locationSaveNotice={productId:a.productId,code:result.marbete.codigo,alreadyAssigned:result.alreadyAssigned};
+    locationAssignment=null;
+    render();
+    toast(`${result.alreadyAssigned?'Ubicación ya asignada':'Ubicación guardada'} · SKU ${a.sku}`);
+  } catch(error) { if (assignmentCurrent(a)) a.error=humanError(error); }
+  finally { a.phase=''; paintProductLocation(a); }
 }
 
 function inventoryView() {
