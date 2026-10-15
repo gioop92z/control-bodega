@@ -2,11 +2,6 @@
 .receive-step{display:flex;gap:4px;flex-direction:column;margin-bottom:12px}
 .receive-step>b{font-weight:800;font-size:15px}
 .receive-step small{color:var(--text-muted,#6b7280);font-size:12px;line-height:1.45}
-.receive-active{border:2px solid #15803d;border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:3px;background:rgba(22,163,74,.07)}
-.receive-active>span:first-child{font-weight:800;font-size:10px;letter-spacing:.1em;color:#15803d}
-.receive-active strong{font-weight:900;font-size:22px;overflow-wrap:anywhere}
-.receive-active small{font-weight:650;color:var(--muted,#64748b)}
-.receive-active>span:last-child{font-size:12px}
 .receive-status{min-height:30px;font-size:13px;font-weight:650;margin-top:11px}
 .receive-empty{padding:24px 12px;text-align:center;color:var(--text-muted,#6b7280)}
 .receive-empty small{display:block;font-size:12px;margin-top:6px}
@@ -29,3 +24,25 @@
 .receive-list{max-height:min(42vh,540px);overflow-y:auto}
 #receiveFinal:not([hidden]){margin-bottom:16px}
 @media(max-width:420px){.receive-count button{width:27px;height:29px}.receive-row{gap:6px}.receive-footer{bottom:calc(74px + env(safe-area-inset-bottom))}.receive-footer button{white-space:nowrap}}
+
+/* Compact optional marbete: never show a large 'free receiving' banner. */
+.receive-location {padding-top:13px!important;padding-bottom:13px!important}
+.receive-location .receive-step {margin-bottom:8px}
+.receive-location .receive-step>b {font-size:13px}
+.receive-location .inline-form {display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.receive-location .inline-form input {min-width:0;flex:1 1 135px;font-size:15px}
+.receive-location .inline-form button {padding:10px!important;white-space:nowrap}
+.receive-location-chip {display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:10px;padding:9px 11px;border:1px solid rgba(22,163,74,.28);border-radius:10px;font-size:12px}
+.receive-location-chip b {font-variant-numeric:tabular-nums;color:#15803d;overflow-wrap:anywhere}
+.receive-location-chip small {color:var(--muted,#64748b)}
+.receive-location-chip button {margin-left:auto;padding:5px 9px!important;font-size:12px}
+.receive-status:empty {display:none}
+.receive-capture .scanner.scanner-inline {height:330px;max-height:52vh;overflow:hidden}
+.receive-capture .scanner-inline .scanner-head {padding:8px 11px}
+.receive-capture .scanner-inline .scanner-note {font-size:11px}
+.receive-capture .scanner-inline .scanner-note button {padding:5px 8px!important;margin:4px!important;font-size:11px}
+.receive-capture .scanner-inline .guide {top:34%;height:27%;left:5%;right:5%}
+@media(max-width:420px){
+  .receive-location .inline-form input {flex-basis:110px}
+  .receive-capture .scanner.scanner-inline {height:300px;max-height:50vh}
+}
