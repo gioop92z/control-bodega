@@ -15,7 +15,7 @@ export class ReceiveQueue extends FastExitQueue {
     this.stale = false; this.storageError = ''; this.confirmation = null;
     this.state = this.read() || this.empty();
     for (const row of this.state.rows) if (row.status === 'sending') row.status = 'uncertain';
-    this.accepting = true; this.activeValidated = false; this.selecting = false;
+    this.accepting = true; this.activeValidated = !this.state.activeMarbete; this.selecting = false;
     this.schedule();
   }
 
@@ -24,8 +24,8 @@ export class ReceiveQueue extends FastExitQueue {
   }
 
   autoLocations() {
-    // Never infer a shelf from a prior assignment. The physical scanned
-    // marbete is mandatory and belongs to the individual captured row.
+    // Never infer a shelf. A location is optional; an explicit physical
+    // marbete still belongs to each captured row and is not reassigned.
   }
 
   coalesce() {
@@ -56,6 +56,16 @@ export class ReceiveQueue extends FastExitQueue {
     } finally { this.selecting = false; this.onChange(); }
   }
 
+  useWithoutLocation() {
+    if (this.busy || !this.accepting || this.confirmation || this.stale || this.storageError) throw Error('Espera a terminar esta recepción.');
+    this.state.activeMarbete = '';
+    this.state.locationLabel = '';
+    this.activeValidated = true;
+    this.message = 'Recepción sin ubicación. Puedes escanear mercancía no apta o pendiente de acomodo.';
+    if (!this.persist()) throw Error(this.storageError || this.message);
+    this.onChange();
+  }
+
   async validateActive() {
     if (!this.state.activeMarbete) return;
     this.activeValidated = false;
@@ -69,7 +79,7 @@ export class ReceiveQueue extends FastExitQueue {
   }
 
   capture(entries, fingerprint = '') {
-    if (!this.state.activeMarbete || !this.activeValidated || this.selecting) throw Error('Primero escanea el marbete del cajón o mueble.');
+    if ((this.state.activeMarbete && !this.activeValidated) || this.selecting) throw Error('Espera a que se valide el marbete o selecciona recibir sin ubicación.');
     if (!this.accepting || this.busy || this.confirmation || this.stale || this.storageError) throw Error(this.storageError || 'Termina o recupera la recepción antes de escanear más piezas.');
     entries = entries.map(entry => {
       const code = cleanSupportCode(entry.code), quantity = Number(entry.quantity);
@@ -82,7 +92,7 @@ export class ReceiveQueue extends FastExitQueue {
       this.newBatch(); this.state.activeMarbete = active; this.state.locationLabel = label;
       this.persist();
     }
-    const sameList = fingerprint && this.state.fingerprints.includes(this.state.activeMarbete + ':' + fingerprint);
+    const sameList = fingerprint && this.state.fingerprints.includes((this.state.activeMarbete || 'SIN-UBICACION') + ':' + fingerprint);
     if (sameList) throw Error('Esta lista ya fue agregada al marbete activo. No se duplicó.');
     const rows = structuredClone(this.state.rows);
     for (const entry of entries) {
@@ -99,7 +109,7 @@ export class ReceiveQueue extends FastExitQueue {
     }
     if (rows.length > MAX_BATCH_ROWS) throw Error('La fila admite hasta ' + MAX_BATCH_ROWS + ' grupos de SKU y ubicación. Finaliza esta recepción para continuar.');
     this.state.rows = rows;
-    if (fingerprint) this.state.fingerprints.push(this.state.activeMarbete + ':' + fingerprint);
+    if (fingerprint) this.state.fingerprints.push((this.state.activeMarbete || 'SIN-UBICACION') + ':' + fingerprint);
     this.lastCode = entries.at(-1).code; this.message = 'Capturado ' + this.lastCode;
     this.changed(); this.schedule();
     if (this.storageError || this.stale) throw Error(this.storageError || this.message);
@@ -130,14 +140,14 @@ export class ReceiveQueue extends FastExitQueue {
         await this.refresh();
         const draft = this.state.rows.filter(row => row.status === 'draft');
         if (!draft.length) throw Error('Escanea al menos una pieza.');
-        const codes = [...new Set(draft.map(row => row.location))];
+        const codes = [...new Set(draft.map(row => row.location).filter(Boolean))];
         await Promise.all(codes.map(code => getMarbete(this.sb, code, this.deptId)));
         let issues = 0;
         for (const row of draft) {
           const p = row.product;
           const problem = !validQty(row.quantity) ? 'Cantidad no válida.'
             : !p || !p.activo || p.departamento_id !== this.deptId ? row.lookupError || 'Producto no encontrado en este departamento.'
-            : !row.location ? 'Sin marbete de ubicación.' : '';
+             : '';
           row.saveError = problem;
           if (problem) issues++;
         }
@@ -159,7 +169,7 @@ export class ReceiveQueue extends FastExitQueue {
       .eq('id',p.p_id).eq('departamento_id',this.deptId).maybeSingle());
     const same = move?.id === p.p_id && move.tipo === 'ENTRADA' &&
       move.sku === row.product?.sku && Number(move.cantidad) === p.p_cantidad &&
-      move.marbete_codigo === p.p_marbete && move.departamento_id === this.deptId;
+      (move.marbete_codigo || null) === (p.p_marbete || null) && move.departamento_id === this.deptId;
     if (same) {
       row.status='done';row.saveError='';row.product.stock=move.stock_resultante ?? null;
       return true;
@@ -182,7 +192,7 @@ export class ReceiveQueue extends FastExitQueue {
         // Create only missing SKU+marbete assignments. A single grouped UPSERT
         // is far faster than opening one product-location screen per piece.
         // Ignore conflicts to NEVER overwrite a quantity counted elsewhere.
-        const missing = this.state.rows.filter(row => row.status === 'draft' &&
+        const missing = this.state.rows.filter(row => row.status === 'draft' && row.location &&
           !(row.locations || []).some(loc => loc.marbete_codigo === row.location));
         for (let offset=0; offset<missing.length; offset+=75) {
           const entries=missing.slice(offset,offset+75).map(row=>({
@@ -194,13 +204,14 @@ export class ReceiveQueue extends FastExitQueue {
         }
         for (const row of this.state.rows.filter(row => row.status === 'draft')) {
           if (!this.online()) throw Error('Se perdió la conexión. El avance quedó guardado.');
-          if (row.saveError || !row.product || !row.location) throw Error(row.saveError || 'Artículo incompleto.');
+          if (row.saveError || !row.product) throw Error(row.saveError || 'Artículo incompleto.');
           row.operation = {payload:{
             p_token:null,p_id:this.uuid(),p_producto:row.product.id,p_tipo:'ENTRADA',
-            p_cantidad:row.quantity,p_marbete:row.location,
+            p_cantidad:row.quantity,p_marbete:row.location || null,
             p_nota:'RECEPCIÓN FÍSICA · Lote ' + this.state.id +
               (this.actor ? ' · ' + this.actor : '') +
-              (this.state.note ? ' · ' + this.state.note : '')
+              (this.state.note ? ' · ' + this.state.note : '') +
+              (!row.location ? ' · SIN UBICACIÓN / PENDIENTE DE ACOMODO' : '')
           }};
           row.status='sending';
           if (!this.persist()) {row.status='draft';row.operation=null;throw Error(this.storageError || this.message);}
@@ -224,7 +235,7 @@ export class ReceiveQueue extends FastExitQueue {
             if (row.status!=='done') throw Error(row.saveError);
           }
         }
-        this.message='Recepción registrada. Cada grupo quedó asociado al marbete escaneado.';
+        this.message='Recepción registrada. Los grupos sin marbete conservaron ubicación pendiente.';
       });
     } finally {this.busy=false;this.changed();this.accepting=true;}
   }
