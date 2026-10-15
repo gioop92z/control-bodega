@@ -2,9 +2,6 @@
   const nativeFetch=window.fetch.bind(window);
   const MOVE_RPC='/rest/v1/rpc/mover_stock_v2';
   const TIMEOUT_MS=15000;
-  const RETRY_STATUS=new Set([408,503,504,520]);
-
-  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   const urlOf=input=>typeof input==='string'?input:(input?.url||'');
 
   async function timedFetch(input,init){
@@ -32,17 +29,13 @@
     if(!url.includes(MOVE_RPC)) return nativeFetch(input,init);
 
     try{
-      let response=await timedFetch(input,init);
-      if(RETRY_STATUS.has(response.status)){
-        console.warn(`Nova: movimiento recibió HTTP ${response.status}; reintentando una vez.`);
-        await sleep(650);
-        response=await timedFetch(input,init);
-      }
-      return response;
+      // A timeout or gateway error can arrive after the database committed.
+      // Stock mutations must be reconciled by movement ID, never blindly retried.
+      return await timedFetch(input,init);
     } catch(error){
       console.error('Nova: la solicitud de movimiento no pudo completarse.',error);
       return new Response(JSON.stringify({
-        message:'Nova no pudo confirmar el movimiento en 15 segundos. El botón fue liberado para evitar que la operación quede bloqueada. Revisa tu conexión y el stock antes de volver a intentar.'
+        message:'VANTIS no pudo confirmar el movimiento. Revisa el avance del lote o el historial antes de volver a capturar la mercancía.'
       }),{
         status:504,
         statusText:'Gateway Timeout',

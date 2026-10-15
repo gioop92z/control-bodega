@@ -1,0 +1,30 @@
+name: E2E apoyos por lote
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - '*.js'
+      - '*.mjs'
+      - '*.css'
+      - 'index.html'
+      - 'tests/**'
+      - '.github/workflows/e2e-supports.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: e2e-supports-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  batch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test queue, stock guards, scanner and recovery
+        run: node --test tests/*.test.mjs
+      - name: Install browser test dependencies
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Test desktop and mobile with isolated data
+        run: node tests/supports.e2e.mjs

@@ -1,6 +1,6 @@
 (()=>{
   const WRITE_SELECTORS=[
-    '#saveMove','#runImport','#saveLoc','#saveAssign','#confirmProductLocation','#registerProductMarbete','#saveEmp','#newCount',
+    '#saveMove','#supportConfirm','#supportRegisterMarbete','#runImport','#saveLoc','#saveAssign','#confirmProductLocation','#registerProductMarbete','#saveEmp','#newCount',
     '#addCount','#setCount','#pauseCount','#closeCount','[data-edit]',
     '[data-toggle-dept]','[data-emp-toggle]','#teamSave','#quickSave',
     '[data-team-toggle]','[data-team-pin]','[data-team-edit]'
@@ -57,7 +57,7 @@
     if(navigator.onLine)return;
     const form=e.target;
     if(!(form instanceof HTMLFormElement))return;
-    if(form.id==='newDept'||form.id==='loginForm'){
+    if(form.id==='newDept'||form.id==='loginForm'||form.id==='supportLocationForm'){
       e.preventDefault();
       e.stopImmediatePropagation();
       warnOffline();

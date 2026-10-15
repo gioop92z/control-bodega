@@ -1,4 +1,4 @@
-import { startScanner, stopScanner } from './scanner.js';
+import { startScanner, stopScanner } from './scanner.js?v=3.7.0';
 
 const NOVA_VERSION = '3.4.0';
 const EMPLOYEE_KEY = 'nova.employeeNumber';
