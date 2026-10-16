@@ -164,7 +164,7 @@ test('first scan automatically registers a brand-new physical ZAP marbete, then 
 
 test('unknown SKU barcodes cannot be created as accidental locations',async()=>{
   const h=harness();
-  await assert.rejects(h.queue.selectMarbete('1200768112'),/no es un marbete/i);
+  await assert.rejects(h.queue.selectMarbete('1200768112'),/marbete reconocible/i);
   assert.equal(h.db.marbetes.length,2);
   assert.equal(h.queue.state.activeMarbete,'');
   h.queue.capture(scan(SKU));
