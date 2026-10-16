@@ -509,7 +509,7 @@ async function doSearch(code) {
   stopScanner();
   code=String(code||'').trim();
   if (!code) return;
-  try {code=parseMarbeteScan(code);} catch { /* SKU and UPC stay unchanged. */ }
+  try {if (!/^\d{3}-\d{3,4}$/.test(code)) code=parseMarbeteScan(code);} catch { /* SKU and UPC stay unchanged. */ }
   const request=++searchRequest, deptId=S.deptId;
   const current=()=>request===searchRequest && S.deptId===deptId && S.view==='search';
   locationAssignment=null; locationSaveNotice=null; lastSearchCode=code;
@@ -598,11 +598,24 @@ async function validateProductMarbete(a,raw) {
   a.phase='checking'; a.candidate=null; a.missing=false; a.error=''; a.code=String(raw??'').trim();
   paintProductLocation(a);
   try {
-    const code=parseMarbeteScan(a.code);
-    a.code=code;
-    if (code===a.sku || code===a.upc) throw Error('Escaneaste el código del artículo. Escanea el marbete del cajón, mueble o rack.');
-    const row=await getMarbete(sb,code,a.deptId);
-    if (assignmentCurrent(a)) a.candidate=row;
+    const original=normalizeMarbete(a.code);
+    if (original===a.sku || original===a.upc) throw Error('Escaneaste el código del artículo. Escanea el marbete del cajón, mueble o rack.');
+    const parsed=parseMarbeteScan(original);
+    // Preserve pre-existing legacy IDs such as "459-001". For full ZAP
+    // codes and QR payloads, use the canonical "ZAP-459-001".
+    const legacy=/^\d{3}-\d{3,4}$/.test(original);
+    const preferred=legacy ? original : parsed;
+    let row;
+    try {
+      row=await getMarbete(sb,preferred,a.deptId);
+    } catch(error) {
+      if(error?.code!=='NOT_REGISTERED' || preferred===parsed) throw error;
+      row=await getMarbete(sb,parsed,a.deptId);
+    }
+    if (assignmentCurrent(a)) {
+      a.candidate=row;
+      a.code=row.codigo;
+    }
   } catch(error) { if (assignmentCurrent(a)) { a.error=humanError(error); a.missing=error.code==='NOT_REGISTERED'; } }
   finally { a.phase=''; paintProductLocation(a); }
 }
