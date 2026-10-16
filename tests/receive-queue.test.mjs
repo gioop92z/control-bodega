@@ -200,3 +200,18 @@ test('failed marbete write never claims to have registered it',async()=>{
   assert.equal(h.queue.state.activeMarbete,'');
   assert.equal(h.db.marbetes.length,2);
 });
+
+test('scanning QR URL auto-registers a new marbete once and can reuse it',async()=>{
+  const h=harness();
+  const code='ZAP-402-001';
+  const qr='https://inventory.example/ubicacion?marbete='+code;
+  const first=await h.queue.selectMarbete(qr);
+  assert.equal(first.codigo,code);
+  assert.equal(first.created,true);
+  h.queue.capture(scan(SKU));
+  assert.equal(h.queue.state.rows[0].location,code);
+  h.queue.useWithoutLocation();
+  const second=await h.queue.selectMarbete('{"marbete":"'+code+'"}');
+  assert.equal(second.created,false);
+  assert.equal(h.db.marbetes.filter(x=>x.codigo===code).length,1);
+});
