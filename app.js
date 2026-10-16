@@ -598,13 +598,16 @@ async function validateProductMarbete(a,raw) {
   a.phase='checking'; a.candidate=null; a.missing=false; a.error=''; a.code=String(raw??'').trim();
   paintProductLocation(a);
   try {
-    const original=normalizeMarbete(a.code);
+    const original=String(a.code??'').trim();
     if (original===a.sku || original===a.upc) throw Error('Escaneaste el código del artículo. Escanea el marbete del cajón, mueble o rack.');
     const parsed=parseMarbeteScan(original);
     // Preserve pre-existing legacy IDs such as "459-001". For full ZAP
     // codes and QR payloads, use the canonical "ZAP-459-001".
     const legacy=/^\d{3}-\d{3,4}$/.test(original);
     const preferred=legacy ? original : parsed;
+    // If this is a previously unknown QR, register its decoded marbete ID,
+    // never the raw URL/JSON payload.
+    a.code=preferred;
     let row;
     try {
       row=await getMarbete(sb,preferred,a.deptId);
