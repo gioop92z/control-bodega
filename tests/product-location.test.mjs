@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {assignProductLocation,getMarbete,normalizeMarbete,registerMarbete} from '../product-location.mjs';
+import {assignProductLocation,getMarbete,normalizeMarbete,registerMarbete,parseMarbeteScan} from '../product-location.mjs';
 import {locationDb} from './helpers/location-db.mjs';
 
 const target={productId:'p1',sku:'0012345678',deptId:'dept1',marbeteCode:'459-001'};
@@ -94,4 +94,22 @@ test('registration cannot overwrite a label from another department',async()=>{
 test('barcode cleanup preserves leading zeroes and rejects invalid input',()=>{
   assert.equal(normalizeMarbete(' \u200b00459-001\r\n'),'00459-001');
   for(const value of ['',null,'x'.repeat(121),'459\n001'])assert.throws(()=>normalizeMarbete(value));
+});
+
+test('QR payloads and printed marbete barcodes resolve to one canonical code',()=>{
+  const examples=[
+    ['ZAP-402-001','ZAP-402-001'],
+    ['zap-405-010','ZAP-405-010'],
+    ['402-001','ZAP-402-001'],
+    ['Sección 402 · Cajón 001 · Marbete: ZAP-402-001','ZAP-402-001'],
+    ['https://example.com/ubicacion?marbete=ZAP-459-100','ZAP-459-100'],
+    ['https://example.com/bodega/ZAP-402-001','ZAP-402-001'],
+    ['{"marbete":"ZAP-405-010"}','ZAP-405-010'],
+    ['{"codigo":"ZAP-402-001"}','ZAP-402-001']
+  ];
+  for(const [payload,code] of examples) assert.equal(parseMarbeteScan(payload),code);
+});
+test('invalid QR or ordinary SKU never creates an invented location',()=>{
+  const invalid=['','1200768112','https://example.com/hello','{"foo":"1200768112"}','<script>evil</script>'];
+  for(const candidate of invalid)assert.throws(()=>parseMarbeteScan(candidate),e=>e.code==='INVALID_CODE');
 });
