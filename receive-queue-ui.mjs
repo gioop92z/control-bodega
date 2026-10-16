@@ -11,7 +11,7 @@ export function mountFastReceive(root,queue,{startScanner,stopScanner,isCurrent=
     !queue.busy && !queue.stale && !queue.storageError && !queue.selecting && (!queue.state.activeMarbete || queue.activeValidated);
   const inFlight=()=>queue.busy || ui.phase==='preparing' || ui.phase==='confirm';
   let frame=null;
-  root.innerHTML='<section class="card receive-location"><div class="receive-step"><b>Marbete</b></div><form id="receiveMarbeteForm" class="inline-form"><input id="receiveMarbete" placeholder="Ej. ZAP-402-001" aria-label="Marbete del grupo" autocomplete="off" autocapitalize="off" spellcheck="false"><button id="receiveUseMarbete" class="secondary">Usar</button><button id="receiveScanMarbete" type="button" class="secondary">▣ Cámara</button></form><div id="receiveActive" role="status"></div></section>'
+  root.innerHTML='<section class="card receive-location"><div class="receive-step"><b>Marbete · QR o barras</b></div><form id="receiveMarbeteForm" class="inline-form"><input id="receiveMarbete" placeholder="Ej. ZAP-402-001" aria-label="Marbete del grupo" autocomplete="off" autocapitalize="off" spellcheck="false"><button id="receiveUseMarbete" class="secondary">Usar</button><button id="receiveScanMarbete" type="button" class="secondary">▣ Cámara</button></form><div id="receiveActive" role="status"></div></section>'
     +'<section class="card receive-capture"><div class="receive-step"><b>Escanear artículos</b><small>Cada lectura suma una pieza automáticamente.</small></div><form id="manualMove"><input id="receiveCode" aria-label="Escáner portátil, SKU o UPC" placeholder="Escanea aquí SKU o UPC" autocomplete="off" autocapitalize="off" spellcheck="false"><button id="receiveCameraButton" type="button" class="secondary">▣ Cámara</button></form><div id="receiveCamera"></div><div id="receiveStatus" class="receive-status" role="status" aria-live="polite"></div><div id="receiveError" class="error" hidden></div></section>'
     +'<section class="card receive-list"><div class="receive-step"><b>Piezas acumuladas</b><small id="receiveLines">0 líneas</small></div><div id="receiveRows"></div></section>'
     +'<div id="receiveRecovery" class="notice" hidden></div>'
@@ -108,7 +108,7 @@ export function mountFastReceive(root,queue,{startScanner,stopScanner,isCurrent=
   $('receiveMarbeteForm').onsubmit=event=>{event.preventDefault();setMarbete($('receiveMarbete').value);};
   $('receiveScanMarbete').onclick=()=>work(async()=>{
     stopScanner();
-    await startScanner(code=>{if(current())setMarbete(code);},'marbete de ubicación');
+    await startScanner(code=>{if(current())setMarbete(code);},'marbete de ubicación',{qrEnabled:true});
   });
   async function openCamera() {
     if(ui.camera){stopScanner();return;}
