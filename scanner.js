@@ -7,7 +7,7 @@ const formats = [
   BarcodeFormat.CODE_128, BarcodeFormat.CODE_39, BarcodeFormat.CODE_93,
   BarcodeFormat.EAN_13, BarcodeFormat.EAN_8,
   BarcodeFormat.UPC_A, BarcodeFormat.UPC_E, BarcodeFormat.ITF,
-  BarcodeFormat.CODABAR, BarcodeFormat.RSS_14
+  BarcodeFormat.CODABAR, BarcodeFormat.RSS_14, BarcodeFormat.QR_CODE
 ].filter(format => format !== undefined && format !== null);
 const hints = new Map([
   [DecodeHintType.POSSIBLE_FORMATS, formats],
@@ -99,13 +99,13 @@ export async function startScanner(cb, label = 'código', options = {}) {
   }
 
   (options.inlineTarget || document.body).insertAdjacentHTML('beforeend',
-    '<div class="scanner ' + (options.inlineTarget?'scanner-inline':'') + '" id="scanner">' +
+    '<div class="scanner ' + (options.inlineTarget?'scanner-inline':'') + (options.qrEnabled?' scanner-qr':'') + '" id="scanner">' +
       '<div class="scanner-head"><b>Escanear ' + label + '</b>' +
       '<button id="closeScan" class="btn-light" type="button" aria-label="Cerrar cámara">✕</button></div>' +
       '<div id="scannerViewport" style="position:relative;flex:1;overflow:hidden">' +
         '<video id="scanVideo" autoplay muted playsinline></video><div class="guide"></div></div>' +
       '<div class="scanner-note">' +
-        '<div id="scannerStatus" role="status" aria-live="polite">Enfoca el código de barras completo.</div>' +
+        '<div id="scannerStatus" role="status" aria-live="polite">Enfoca el QR o el código de barras completo.</div>' +
         (options.continuous ? '<button id="scanRepeat" type="button" class="btn-light" style="margin:10px 0" disabled>+1 del mismo código</button>' : '') +
         '<button id="scanSwitchEngine" type="button" class="btn-light" style="margin:8px">Otro lector</button>' +
       '</div></div>');
@@ -164,7 +164,7 @@ export async function startScanner(cb, label = 'código', options = {}) {
     Quagga.onProcessed?.(value=>{if (!value?.codeResult?.code) absent();});
     Quagga.start();
     controls = {stop:() => {try {Quagga.stop();}catch{}}};
-    status('Lector alternativo activo · centra el código.');
+    status('Lector alternativo solo para barras · para QR toca «Otro lector».');
   }
 
   let engine = 'ZXing';
@@ -189,7 +189,7 @@ export async function startScanner(cb, label = 'código', options = {}) {
         catch {stopScanner();throw error;}
       }
     } finally { switching = false; }
-    if (stillActive() && engine === 'ZXing' && !accepted) {
+    if (stillActive() && engine === 'ZXing' && !accepted && !options.qrEnabled) {
       switchTimer = setTimeout(() => {
         if (stillActive() && !accepted) {
           void switchEngine('Quagga').catch(()=>{status('No se pudo cambiar de lector.');});
