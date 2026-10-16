@@ -147,3 +147,19 @@ test('seller can assign a registered label but cannot register a new one in this
   await h.api.saveProductLocation(a);
   assert.equal(h.db.assignments.length,1);
 });
+
+test('a new QR location is registered by decoded label ID, not its URL',async()=>{
+  const h=harness();
+  await h.api.doSearch('0012345678');h.api.openProductLocation();
+  const a=h.api.assignment;
+  const qr='https://inventory.example/marbete?codigo=ZAP-402-001';
+  await h.api.validateProductMarbete(a,qr);
+  assert.equal(a.code,'ZAP-402-001');
+  assert.equal(a.missing,true);
+  assert.ok(h.nodes.get('registerProductMarbete'));
+  await h.api.registerProductLocationMarbete(a,'BODEGA');
+  assert.equal(a.candidate.codigo,'ZAP-402-001');
+  await h.api.saveProductLocation(a);
+  assert.equal(h.db.marbetes.filter(x=>x.codigo==='ZAP-402-001').length,1);
+  assert.equal(h.db.assignments[0].marbete_codigo,'ZAP-402-001');
+});
