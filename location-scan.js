@@ -1,4 +1,5 @@
-import { startScanner, stopScanner } from './scanner.js?v=3.9.4';
+import { startScanner, stopScanner } from './scanner.js?v=3.9.5';
+import { parseMarbeteScan } from './product-location.mjs?v=3.9.5';
 
 const API='https://dkqovohxkxlcccvagpij.supabase.co/rest/v1';
 const KEY='sb_publishable_iz06RtaObND0dWOpuX2vKg_wZVbrZCv';
@@ -53,8 +54,9 @@ async function createMarbete(code,zona){
 function askZone(code){const el=$('locationScanStatus');if(!el)return;el.className='notice';el.innerHTML=`<b>Marbete nuevo: ${esc(code)}</b><br><span>¿Dónde está físicamente?</span><div class="quick-row" style="margin-top:10px"><button type="button" id="zoneBodega" class="secondary">BODEGA</button><button type="button" id="zonePiso" class="secondary">PISO</button></div>`;$('zoneBodega').onclick=()=>createMarbete(code,'BODEGA');$('zonePiso').onclick=()=>createMarbete(code,'PISO')}
 async function handleMarbete(raw){
   stopScanner();
-  const code=String(raw||'').trim();
-  if(!code)return;
+  let code;
+  try { code=parseMarbeteScan(raw); }
+  catch(error) { setStatus(esc(error.message||'QR no válido.'),'error'); return; }
   setStatus(`Buscando marbete ${esc(code)}…`,'success');
   const r=await rest(`/marbetes?select=codigo,zona,descripcion,departamento_id,activo&codigo=eq.${eq(code)}&activo=eq.true&limit=1`);
   if(r.error){setStatus('No pude consultar el marbete. Intenta otra vez.','error');return}
@@ -70,7 +72,7 @@ function inject(){
   wrap.id='locationScanWrap';
   wrap.innerHTML=`<div style="margin-top:10px"><button type="button" id="scanLocation" class="scan-btn" style="margin:0">📍 Escanear marbete de ubicación</button><form id="manualLocation" class="inline-form" style="margin-top:8px"><input id="manualLocationCode" autocomplete="off" placeholder="O escribe el marbete"><button class="secondary">Usar</button></form><div id="locationScanStatus" style="margin-top:8px"></div><p class="tiny muted">Escanea el marbete de la caja, cajón, mueble o rack donde quedará la mercancía.</p></div>`;
   select.insertAdjacentElement('afterend',wrap);
-  $('scanLocation').onclick=()=>startScanner(handleMarbete,'marbete de ubicación').catch(()=>setStatus('No se pudo abrir la cámara. Revisa el permiso del navegador.','error'));
+  $('scanLocation').onclick=()=>startScanner(handleMarbete,'marbete QR o código de barras',{qrEnabled:true}).catch(()=>setStatus('No se pudo abrir la cámara. Revisa el permiso del navegador.','error'));
   $('manualLocation').onsubmit=e=>{e.preventDefault();handleMarbete($('manualLocationCode').value)};
 }
 new MutationObserver(inject).observe(document.documentElement,{childList:true,subtree:true});
