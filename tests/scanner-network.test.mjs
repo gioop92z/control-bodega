@@ -6,7 +6,7 @@ import vm from 'node:vm';
 function scannerHarness({zxingFails=false}={}) {
   const nodes=new Map(),callbacks={},calls=[];
   let zxingCallback=null,quaggaDetected=null,quaggaProcessed=null;
-  let zxingStops=0,quaggaStops=0,clock=0,engine='';
+  let zxingStops=0,quaggaStops=0,clock=0,engine='',lastHints=null, scheduled=0;
   const element=id=>({
     id,disabled:false,textContent:'',onclick:null,
     addEventListener(name,callback){callbacks[id+':'+name]=callback;},
@@ -25,7 +25,7 @@ function scannerHarness({zxingFails=false}={}) {
     start(){},stop(){quaggaStops++;},CameraAccess:{getActiveTrack(){return null;}}
   };
   class BrowserMultiFormatReader {
-    constructor(hints,options) {this.hints=hints;this.options=options;}
+    constructor(hints,options) {this.hints=hints;this.options=options;lastHints=hints;}
     async decodeFromConstraints(constraints,id,cb){
       if(zxingFails) throw Error('ZXing unavailable');
       engine='zxing';zxingCallback=cb;
@@ -34,7 +34,7 @@ function scannerHarness({zxingFails=false}={}) {
   }
   const enums={
     CODE_128:1,CODE_39:2,CODE_93:3,EAN_13:4,EAN_8:5,
-    UPC_A:6,UPC_E:7,ITF:8,CODABAR:9,RSS_14:10
+    UPC_A:6,UPC_E:7,ITF:8,CODABAR:9,RSS_14:10,QR_CODE:11
   };
   const hintEnums={POSSIBLE_FORMATS:1,TRY_HARDER:2,ALSO_INVERTED:3};
   const source=readFileSync(new URL('../scanner.js',import.meta.url),'utf8')
@@ -43,7 +43,7 @@ function scannerHarness({zxingFails=false}={}) {
     document,Quagga,BrowserMultiFormatReader,BarcodeFormat:enums,
     DecodeHintType:hintEnums,navigator:{hardwareConcurrency:2},
     Date:{now:()=>clock},Promise,console,
-    setTimeout:()=>1,clearTimeout:()=>{}
+    setTimeout:()=>{scheduled++;return 1;},clearTimeout:()=>{}
   };
   vm.runInNewContext(source+'\nglobalThis.api={startScanner,stopScanner};',sandbox);
   const scan=code=>{
@@ -57,6 +57,8 @@ function scannerHarness({zxingFails=false}={}) {
     repeat:()=>callbacks['scanRepeat:click']?.(),
     get stops(){return zxingStops+quaggaStops;},
     get engine(){return engine;},
+    get scheduled(){return scheduled;},
+    get formats(){return lastHints?.get(1)||[];},
     switchReader:()=>nodes.get('scanSwitchEngine')?.onclick?.()
   };
 }
@@ -109,4 +111,24 @@ test('movement gateway errors and lost responses are never automatically retried
     const response=await window.fetch('https://example.supabase.co/rest/v1/rpc/mover_stock_v2',{method:'POST',body:'{}'});
     assert.equal(calls,1);assert.equal(response.status,mode==='gateway'?503:504);
   }
+});
+
+test('QR-enabled marbete camera accepts a printed QR alongside Code128 labels',async()=>{
+  const h=scannerHarness();
+  const scanned=[];
+  await h.startScanner(value=>scanned.push(value),'marbete de ubicación',{qrEnabled:true});
+  assert.equal(h.engine,'zxing');
+  assert.ok(h.formats.includes(11),'QR_CODE enabled');
+  assert.ok(h.formats.includes(1),'CODE_128 preserved');
+  assert.equal(h.scheduled,0,'QR mode must not auto-fall back to a non-QR decoder');
+  h.scan('ZAP-402-001');
+  assert.deepEqual(scanned,['ZAP-402-001']);
+  assert.equal(h.stops,1);
+});
+test('QR-enabled scan preserves location URL contents exactly for the parser',async()=>{
+  const h=scannerHarness();
+  const scanned=[];
+  await h.startScanner(value=>scanned.push(value),'ubicación',{qrEnabled:true});
+  h.scan('https://example.org/ubicacion?marbete=ZAP-405-010');
+  assert.deepEqual(scanned,['https://example.org/ubicacion?marbete=ZAP-405-010']);
 });
