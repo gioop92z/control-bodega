@@ -54,7 +54,7 @@ export function parseMarbeteScan(value) {
   if (embedded) return 'ZAP-' + embedded[1] + '-' + embedded[2];
   // Backwards compatibility for non-ZAP locations using a direct,
   // unambiguous barcode. Do not register untrusted prose or a URL.
-  if (!/^https?:\/\//i.test(raw) && /^[A-Z0-9_-]{3,120}$/.test(text)) return text;
+  if (!/^https?:\/\//i.test(raw) && /^(?=.*[-_])[A-Z0-9_-]{3,120}$/.test(text)) return text;
   throw new LocationError('INVALID_CODE', 'El QR no contiene un marbete reconocible.');
 }
 
