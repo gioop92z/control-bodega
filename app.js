@@ -1,11 +1,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
 import * as XLSX from 'https://esm.sh/xlsx@0.18.5';
-import { startScanner, stopScanner } from './scanner.js?v=3.9.4';
-import { getMarbete, normalizeMarbete, assignProductLocation, registerMarbete, locationQuery } from './product-location.mjs?v=3.6.0';
+import { startScanner, stopScanner } from './scanner.js?v=3.9.5';
+import { getMarbete, normalizeMarbete, parseMarbeteScan, assignProductLocation, registerMarbete, locationQuery } from './product-location.mjs?v=3.9.5';
 import { FastExitQueue } from './exit-queue.mjs?v=3.8.0';
 import { mountFastExit } from './exit-queue-ui.mjs?v=3.8.0';
-import { ReceiveQueue } from './receive-queue.mjs?v=3.9.4';
-import { mountFastReceive } from './receive-queue-ui.mjs?v=3.9.4';
+import { ReceiveQueue } from './receive-queue.mjs?v=3.9.5';
+import { mountFastReceive } from './receive-queue-ui.mjs?v=3.9.5';
 
 const sb = createClient(
   'https://dkqovohxkxlcccvagpij.supabase.co',
@@ -17,7 +17,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '3.9.4';
+const APP_VERSION = '3.9.5';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 const HISTORY_RESTART_CUTOFF = '2026-10-15T22:15:00.000Z';
 
@@ -509,6 +509,7 @@ async function doSearch(code) {
   stopScanner();
   code=String(code||'').trim();
   if (!code) return;
+  try {code=parseMarbeteScan(code);} catch { /* SKU and UPC stay unchanged. */ }
   const request=++searchRequest, deptId=S.deptId;
   const current=()=>request===searchRequest && S.deptId===deptId && S.view==='search';
   locationAssignment=null; locationSaveNotice=null; lastSearchCode=code;
@@ -587,7 +588,7 @@ function paintProductLocation(a) {
 
 async function scanProductMarbete(a) {
   if (a.phase || !assignmentOnline(a)) return;
-  try { await startScanner(code=>{validateProductMarbete(a,code)},'marbete de ubicación'); }
+  try { await startScanner(code=>{validateProductMarbete(a,code)},'marbete QR o código de barras',{qrEnabled:true}); }
   catch { if (assignmentCurrent(a)) { a.error='No pude abrir la cámara. Permite el acceso o escribe el código del marbete.'; paintProductLocation(a); $('productMarbeteCode')?.focus(); } }
 }
 
@@ -597,7 +598,8 @@ async function validateProductMarbete(a,raw) {
   a.phase='checking'; a.candidate=null; a.missing=false; a.error=''; a.code=String(raw??'').trim();
   paintProductLocation(a);
   try {
-    const code=normalizeMarbete(a.code);
+    const code=parseMarbeteScan(a.code);
+    a.code=code;
     if (code===a.sku || code===a.upc) throw Error('Escaneaste el código del artículo. Escanea el marbete del cajón, mueble o rack.');
     const row=await getMarbete(sb,code,a.deptId);
     if (assignmentCurrent(a)) a.candidate=row;
@@ -980,7 +982,7 @@ async function loadAdminTab(tab) {
 }
 
 function openScanner(cb,label) {
-  startScanner(async code=>{try{await cb(code)}catch(e){toast(humanError(e),'error')}},label).catch(()=>toast('No se pudo abrir la cámara. Revisa el permiso del navegador.','error'));
+  startScanner(async code=>{try{await cb(code)}catch(e){toast(humanError(e),'error')}},label,{qrEnabled:/marbete/i.test(label)}).catch(()=>toast('No se pudo abrir la cámara. Revisa el permiso del navegador.','error'));
 }
 
 function toast(text,type='success') {
