@@ -46,3 +46,12 @@
   .receive-location .inline-form input {flex-basis:110px}
   .receive-capture .scanner.scanner-inline {height:300px;max-height:50vh}
 }
+
+/* QR marbetes have a square targeting guide, but all video is decoded. */
+.scanner.scanner-qr .guide {
+  left:50%;right:auto;top:50%;width:min(72vw,310px);height:min(72vw,310px);
+  transform:translate(-50%,-50%);animation:none;
+}
+.scanner.scanner-qr.scanner-inline .guide {
+  width:min(50vw,205px);height:min(50vw,205px);top:50%;
+}
