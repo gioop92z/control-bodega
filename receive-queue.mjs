@@ -1,6 +1,6 @@
 import {FastExitQueue} from './exit-queue.mjs?v=3.8.0';
 import {lookupSupportCodes, cleanSupportCode, MAX_BATCH_ROWS} from './support-batch.mjs?v=3.8.0';
-import {getMarbete, registerMarbete, normalizeMarbete, locationQuery} from './product-location.mjs?v=3.6.0';
+import {getMarbete, registerMarbete, parseMarbeteScan, locationQuery} from './product-location.mjs?v=3.9.5';
 
 const validQty = value => Number.isSafeInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 1000000;
 const safeMessage = error => String(error?.message || error || 'Error desconocido');
@@ -50,7 +50,7 @@ export class ReceiveQueue extends FastExitQueue {
     };
     this.selecting = true; this.activeValidated = false; this.onChange();
     try {
-      const code = normalizeMarbete(raw).toUpperCase();
+      const code = parseMarbeteScan(raw);
       let marbete, created = false;
       try {
         marbete = await getMarbete(this.sb, code, this.deptId);
