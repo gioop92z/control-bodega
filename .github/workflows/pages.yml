@@ -24,6 +24,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install pinned test dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
       - name: Validate app JavaScript
         run: |
           node --check app.js
@@ -43,12 +51,17 @@ jobs:
           node --check exit-queue-ui.mjs
           node --check receive-queue.mjs
           node --check receive-queue-ui.mjs
+          node --check continuous-receive.mjs
+          node --check continuous-receive-ui.mjs
+          node --check receiving-input.mjs
           node --test tests/*.test.mjs
+          npm run test:database
           test -s index.html
           test -s styles.css
           test -s vantis-enterprise.css
           test -s manifest.json
           test -s receive-queue.css
+          test -s continuous-receive.css
 
       - name: Validate Supabase API contract
         shell: bash
@@ -110,10 +123,15 @@ jobs:
         with:
           enablement: true
 
+      - name: Stage tracked site files
+        run: |
+          mkdir -p "${{ runner.temp }}/vantis-pages"
+          git archive HEAD | tar -x -C "${{ runner.temp }}/vantis-pages"
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: ${{ runner.temp }}/vantis-pages
 
       - name: Deploy to GitHub Pages
         id: deployment
