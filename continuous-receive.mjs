@@ -42,7 +42,11 @@ export class SupabaseReceiptApi {
       this.mode='modern'; return result;
     } catch(error) {
       if(!missing(error))throw error;
-      const result=await this.legacy.capabilities();
+      // If the compatibility preflight cannot inspect this department,
+      // preserve the original "server missing" fallback to batch receiving.
+      let result;
+      try { result=await this.legacy.capabilities(); }
+      catch { throw error; }
       this.mode='legacy'; return result;
     }
   }
