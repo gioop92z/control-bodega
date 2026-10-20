@@ -25,7 +25,7 @@
       b=document.createElement('div');
       b.id='offlineBanner';
       b.setAttribute('role','status');
-      b.textContent='Sin conexión · puedes consultar lo que ya está en pantalla, pero no se guardarán cambios.';
+      b.textContent=document.querySelector('.continuous-receive')?'Sin conexión · las lecturas se protegen en este navegador y siguen pendientes hasta sincronizar.':'Sin conexión · puedes consultar lo que ya está en pantalla, pero no se guardarán cambios.';
       document.body.appendChild(b);
     }
   }

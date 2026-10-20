@@ -86,7 +86,7 @@ export async function startScanner(cb, label = 'código', options = {}) {
     clearTimeout(switchTimer);switchTimer = null;
     const repeatButton = document.getElementById('scanRepeat');
     if (repeatButton) repeatButton.disabled = false;
-    status('✓ ' + accepted + ' lectura(s) · ' + code);
+    status((options.acknowledgedOnly ? 'Lectura detectada · ' : '✓ ' + accepted + ' lectura(s) · ') + code);
     try {
       Promise.resolve(cb(code)).then(message => {
         if (message) status(message);
@@ -106,7 +106,7 @@ export async function startScanner(cb, label = 'código', options = {}) {
         '<video id="scanVideo" autoplay muted playsinline></video><div class="guide"></div></div>' +
       '<div class="scanner-note">' +
         '<div id="scannerStatus" role="status" aria-live="polite">Enfoca el QR o el código de barras completo.</div>' +
-        (options.continuous ? '<button id="scanRepeat" type="button" class="btn-light" style="margin:10px 0" disabled>+1 del mismo código</button>' : '') +
+        (options.continuous && options.allowRepeat !== false ? '<button id="scanRepeat" type="button" class="btn-light" style="margin:10px 0" disabled>+1 del mismo código</button>' : '') +
         '<button id="scanSwitchEngine" type="button" class="btn-light" style="margin:8px">Otro lector</button>' +
       '</div></div>');
   document.getElementById('closeScan').onclick = stopScanner;

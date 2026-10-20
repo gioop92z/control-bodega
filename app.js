@@ -1,11 +1,13 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
 import * as XLSX from 'https://esm.sh/xlsx@0.18.5';
-import { startScanner, stopScanner } from './scanner.js?v=3.9.5';
+import { startScanner, stopScanner } from './scanner.js?v=3.10.0';
 import { getMarbete, normalizeMarbete, parseMarbeteScan, assignProductLocation, registerMarbete, locationQuery } from './product-location.mjs?v=3.9.5';
 import { FastExitQueue } from './exit-queue.mjs?v=3.8.0';
 import { mountFastExit } from './exit-queue-ui.mjs?v=3.8.0';
 import { ReceiveQueue } from './receive-queue.mjs?v=3.9.5';
 import { mountFastReceive } from './receive-queue-ui.mjs?v=3.9.5';
+import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?v=3.10.0';
+import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=3.10.0';
 
 const sb = createClient(
   'https://dkqovohxkxlcccvagpij.supabase.co',
@@ -17,7 +19,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '3.9.5';
+const APP_VERSION = '3.10.0';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 const HISTORY_RESTART_CUTOFF = '2026-10-15T22:15:00.000Z';
 
@@ -50,8 +52,11 @@ let exitQueue = null;
 let exitCleanup = null;
 let receiveQueue = null;
 let receiveCleanup = null;
+let continuousQueue = null;
+let continuousCleanup = null;
 
 function receiveBusy() {
+  if(continuousQueue && !continuousQueue.disposed && (continuousQueue.busy || continuousQueue.pending || continuousQueue.state.pendingSwitch)) { toast('La recepción conserva lecturas pendientes. Revisa su estado antes de salir.','error'); return true; }
   if(receiveQueue?.busy || receiveQueue?.pending || receiveQueue?.selecting) { toast('Espera a que termine la recepción o la lectura pendiente.','error'); return true; }
   return false;
 }
@@ -219,6 +224,7 @@ function header() {
 function shell(body) {
   exitCleanup?.(); exitCleanup = null;
   receiveCleanup?.(); receiveCleanup = null;
+  continuousCleanup?.(); continuousCleanup = null;
   app.innerHTML = `<div class="app-shell">${header()}<main class="content view-enter">${body}</main>${nav()}</div>`;
   wireShell();
 }
@@ -233,7 +239,7 @@ function wireShell() {
     render();
   });
   $('logout').onclick = async () => {
-    if (exitBusy()) return;
+    if (exitBusy() || receiveBusy()) return;
     resetSearchContext();
     cleanupLegacyAccess();
     await sb.auth.signOut();
@@ -338,13 +344,29 @@ function fastExitView() {
 
 
 function fastReceiveView() {
+  shell('<section class="page-title"><button id="backHome" type="button" class="ghost">← Inicio</button></section><div id="continuousReceiveRoot"></div>');
+  const badge=(sessionStorage.getItem('nova.employeeNumber')||'').trim();
+  const actor=badge?(S.admin?'Jefe ':'Empleado ')+badge:'';
+  const deptId=S.deptId;
+  const current=new ContinuousReceive({api:new SupabaseReceiptApi(sb,deptId),storage:localStorage,userId:S.user.id,deptId,actor});
+  continuousQueue=current;
+  $('backHome').onclick=()=>{if(receiveBusy())return;S.view='home';render();};
+  continuousCleanup=mountContinuousReceive($('continuousReceiveRoot'),current,{
+    startScanner,stopScanner,isCurrent:()=>S.view==='move'&&S.moveType==='ENTRADA'&&S.deptId===deptId&&continuousQueue===current,
+    onLegacy:()=>{if(receiveBusy())return;legacyReceiveView();},
+    onUnavailable:()=>legacyReceiveView('Recepción continua pendiente de activar en el servidor. Tu recepción por lote sigue disponible.')
+  });
+}
+
+function legacyReceiveView(notice='') {
   const badge = (sessionStorage.getItem('nova.employeeNumber') || '').trim();
   const actor = badge ? (S.admin?'Jefe ':'Empleado ') + badge : '';
   if (!receiveQueue || receiveQueue.deptId!==S.deptId || receiveQueue.userId!==S.user.id || receiveQueue.actor!==actor) {
     receiveQueue = new ReceiveQueue({sb,deptId:S.deptId,userId:S.user.id,actor,storage:localStorage,uuid:()=>crypto.randomUUID()});
   }
   receiveQueue.resume();
-  shell('<section class="page-title"><button id="backHome" type="button" class="ghost">← Inicio</button><h1>Recibir mercancía</h1><p class="muted">Escanea piezas y confirma el lote.</p></section><div id="fastReceiveRoot"></div>');
+  shell('<section class="page-title"><button id="backHome" type="button" class="ghost">← Inicio</button><h1>Recibir mercancía</h1><p class="muted">Escanea piezas y confirma el lote.</p></section>'+(notice?'<div class="notice">'+esc(notice)+' <button id="tryContinuous" type="button" class="ghost">Comprobar activación</button></div>':'')+'<div id="fastReceiveRoot"></div>');
+  $('tryContinuous')?.addEventListener('click',fastReceiveView);
   $('backHome').onclick = () => {if(receiveBusy())return;S.view='home';render();};
   const deptId=S.deptId,current=receiveQueue;
   receiveCleanup=mountFastReceive($('fastReceiveRoot'),current,{

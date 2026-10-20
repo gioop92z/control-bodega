@@ -1,0 +1,45 @@
+name: Recepción continua · pruebas aisladas
+on:
+  push:
+    branches: [main, 'codex/recepcion-continua-*']
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: receiving-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: vantis_test
+          POSTGRES_PASSWORD: isolated_test_only
+          POSTGRES_DB: vantis_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U vantis_test -d vantis_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm test
+      - name: Probar SQL real, concurrencia e idempotencia con datos ficticios
+        run: npm run test:database
+        env:
+          VANTIS_TEST_DATABASE_URL: postgresql://vantis_test:isolated_test_only@127.0.0.1:5432/vantis_test
+      - run: npx playwright install --with-deps chromium
+      - name: Probar aplicación completa en escritorio y móvil
+        run: npm run test:browser
+      - name: Conservar capturas y evidencia
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: receiving-qa
+          path: /tmp/vantis-receiving-qa/
