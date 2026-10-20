@@ -111,3 +111,32 @@ test('conflicting movement identifiers and automated undo fail closed',async()=>
   await assert.rejects(()=>api.receive({...payload,p_reversa:payload.p_id},opts),/incompatible/);
   assert.equal(db.writes,0);
 });
+
+test('continuous queue records a stream of independent legacy receipts without confirmation',async t=>{
+  const {ContinuousReceive}=await import('../continuous-receive.mjs');
+  const {durableMemory,receiptLocks}=await import('./helpers/receiving-db.mjs');
+  const {sb,db}=server();
+  const api=new SupabaseReceiptApi(sb,'dept1');
+  // Only the catalog lookup is substituted; actual compatibility activation,
+  // assignment and movement transport run through the isolated fake database.
+  api.lookup=async codes=>new Map(codes.map(code=>[code,{product:db.products[0]}]));
+  const queue=new ContinuousReceive({api,storage:durableMemory(),locks:receiptLocks(),
+    userId:'user1',deptId:'dept1',actor:'Empleado 123',
+    makeId:()=>crypto.randomUUID()});
+  t.after(()=>queue.dispose());
+  await queue.start();
+  assert.equal(queue.compatibility,true);
+  queue.scan('402-001');
+  for(let attempts=0;attempts<1000&&!queue.state.active;attempts++)await new Promise(resolve=>setTimeout(resolve,1));
+  assert.equal(queue.state.active?.code,'ZAP-402-001');
+  for(let i=0;i<100;i++)queue.scan('SKU-001');
+  await queue.flush();
+  assert.equal(queue.report().totalPieces,100);
+  assert.equal(queue.report().pending,0);
+  assert.equal(db.products[0].stock,110);
+  assert.equal(db.assignments[0].cantidad,100);
+  assert.equal(db.movements.length,100);
+  assert.equal(new Set(db.movements.map(x=>x.id)).size,100);
+  assert.ok(queue.rows.every(x=>x.writeMode==='legacy'&&x.status==='confirmed'));
+  assert.throws(()=>queue.undoLast(),/migración segura/);
+});
