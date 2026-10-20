@@ -1,5 +1,6 @@
 import {parseMarbeteScan, locationQuery} from './product-location.mjs?v=3.9.5';
 import {cleanSupportCode, lookupSupportCodes} from './support-batch.mjs?v=3.8.0';
+import {LegacyReceiptApi} from './legacy-receipt-api.mjs?v=3.10.1';
 
 const message = error => String(error?.message || error || 'No se pudo guardar.');
 const permanent = error => /^(22|23|P0001)/.test(String(error?.code || ''));
@@ -34,11 +35,27 @@ export class ReceiptJournal {
 }
 
 export class SupabaseReceiptApi {
-  constructor(sb, deptId) { this.sb = sb; this.deptId = deptId; }
-  async capabilities() { return locationQuery(this.sb.rpc('vantis_recepcion_estado_v1', {})); }
-  async activate(code) { return locationQuery(this.sb.rpc('vantis_activar_marbete_v1', {p_departamento:this.deptId, p_codigo:code})); }
+  constructor(sb, deptId) { this.sb = sb; this.deptId = deptId; this.legacy = new LegacyReceiptApi(sb,deptId); this.mode='modern'; }
+  async capabilities() {
+    try {
+      const result=await locationQuery(this.sb.rpc('vantis_recepcion_estado_v1', {}));
+      this.mode='modern'; return result;
+    } catch(error) {
+      if(!missing(error))throw error;
+      // If the compatibility preflight cannot inspect this department,
+      // preserve the original "server missing" fallback to batch receiving.
+      let result;
+      try { result=await this.legacy.capabilities(); }
+      catch { throw error; }
+      this.mode='legacy'; return result;
+    }
+  }
+  async activate(code) { return this.mode==='legacy'
+    ? this.legacy.activate(code)
+    : locationQuery(this.sb.rpc('vantis_activar_marbete_v1', {p_departamento:this.deptId, p_codigo:code})); }
   lookup(codes) { return lookupSupportCodes(this.sb, codes, this.deptId); }
   async receive(payload) { return locationQuery(this.sb.rpc('vantis_recibir_pieza_v1', payload)); }
+  legacyReceive(payload,options) { return this.legacy.receive(payload,options); }
 }
 
 export class ContinuousReceive {
@@ -48,7 +65,7 @@ export class ContinuousReceive {
     Object.assign(this, {api, storage, userId, deptId, actor, locks, online, makeId, onChange, onConfirmed, onFailure, now});
     this.journal = new ReceiptJournal(storage, [userId,deptId,encodeURIComponent(actor)].join('/'));
     this.cache = new Map(); this.timer = null; this.job = null; this.owned = false; this.disposed = false;
-    this.storageError = ''; this.error = ''; this.backend = 'checking'; this.selecting = false;
+    this.storageError = ''; this.error = ''; this.backend = 'checking'; this.selecting = false; this.compatibility = false;
     this.release = null; this.nextSequence = 0;
     try {
       this.state = this.journal.readSession() || this.empty();
@@ -111,10 +128,14 @@ export class ContinuousReceive {
     try {
       if (!this.online()) throw Error('Sin conexión.');
       const result = await this.api.capabilities();
-      if (result?.version !== 1 || result?.atomic !== true || result?.idempotent !== true) {
-        this.backend = 'invalid'; throw Error('El servidor no confirma el contrato de recepción segura.');
+      const compatible = result?.version===1 && result?.mode==='legacy' &&
+        result?.atomic===false && result?.idempotent===false && result?.guarded===true;
+      const modern = result?.version===1 && result?.atomic===true && result?.idempotent===true;
+      if (!modern && !compatible) {
+        this.backend = 'invalid'; throw Error('El servidor no confirma un contrato de recepción permitido.');
       }
-      this.backend = 'ready'; this.error = ''; this.state.backendVersion = 1; this.saveSession();
+      this.compatibility = compatible;
+      this.backend = 'ready'; this.error = ''; this.state.backendVersion = compatible?-1:1; this.saveSession();
       if (this.state.candidate) await this.activateCandidate();
       else if (this.state.active) {
         // Revalidate restored labels before sending any new or recovered row.
@@ -126,7 +147,7 @@ export class ContinuousReceive {
     } catch (error) {
       if (missing(error)) { this.backend = 'missing'; this.error = 'La recepción continua requiere activar la migración del servidor. La recepción por lote sigue disponible.'; }
       else if (String(error?.code) === '42501' || /JWT|PGRST30/.test(String(error?.code))) { this.backend = 'denied'; this.error = 'El servidor no autoriza esta sesión. Vuelve a iniciar sesión.'; }
-      else { if (this.backend !== 'invalid') this.backend = this.state.backendVersion === 1 ? 'offline' : 'checking'; this.error = message(error); this.schedule(4000); }
+      else { if (this.backend !== 'invalid') this.backend = [1,-1].includes(this.state.backendVersion) ? 'offline' : 'checking'; this.error = message(error); this.schedule(4000); }
     }
     this.changed();
   }
@@ -237,11 +258,19 @@ export class ContinuousReceive {
       p_id:row.id,p_sesion:this.state.id,p_departamento:this.deptId,p_producto:row.product.id,
       p_marbete:row.location,p_operador:this.actor,p_leida_en:row.capturedAt,p_reversa:row.reverses || null
     };
+    // Persist transport choice before sending. If the migration is installed
+    // mid-session, old uncertain writes must only be RECONCILED, never sent
+    // through the new RPC as fresh inventory.
+    row.writeMode ||= this.compatibility ? 'legacy' : 'modern';
     row.status = 'sending'; row.attempts++;
     if (!this.saveRow(row)) return;
     this.changed();
     try {
-      const reply = await this.api.receive(structuredClone(row.payload));
+      const reply = row.writeMode==='legacy'
+        ? await this.api.legacyReceive(structuredClone(row.payload),{
+            allowWrite:row.attempts===1,sku:row.product.sku,userId:this.userId
+          })
+        : await this.api.receive(structuredClone(row.payload));
       if (reply?.id !== row.id || reply.session_id !== this.state.id || reply.user_id !== this.userId ||
         reply.product_id !== row.product.id || reply.sku !== row.product.sku || reply.marbete_codigo !== row.location ||
         reply.kind !== row.kind || reply.quantity !== 1 || !Number.isFinite(Date.parse(reply.stored_at)) || reply.stock_resultante == null || !Number.isSafeInteger(Number(reply.stock_resultante))) {
@@ -264,6 +293,7 @@ export class ContinuousReceive {
     this.changed();
   }
   undoLast() {
+    if (this.compatibility) throw Error('El deshacer automático necesita la migración segura. Revisa el movimiento en el historial.');
     if (!this.canScan) throw Error('Reanuda la recepción antes de deshacer.');
     const reversed = new Set(this.rows.filter(row => row.kind === 'undo' && row.status !== 'failed').map(row => row.reverses));
     const original = [...this.rows].reverse().find(row => row.kind === 'receive' && row.status === 'confirmed' && !reversed.has(row.id));

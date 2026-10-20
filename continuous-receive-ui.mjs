@@ -53,19 +53,22 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     $('crLocationLabel').textContent=pending?'MARBETE POR VALIDAR':'MARBETE ACTIVO';
     $('crLocation').textContent=active?short(active.code):'—';
     $('crInstruction').textContent=active?'ESCANEA LA SIGUIENTE PIEZA':'ESCANEA UN MARBETE PARA COMENZAR';
-    $('crLocationState').textContent=pending?'Las lecturas quedarán pendientes hasta validar esta ubicación.':active?'Cada lectura registra una unidad en esta ubicación.':'';
+    $('crLocationState').textContent=queue.compatibility
+      ? 'Modo compatible: guardado automático con verificación del historial. Una lectura incierta nunca se reenvía sin comprobación.'
+      : pending?'Las lecturas quedarán pendientes hasta validar esta ubicación.':active?'Cada lectura registra una unidad en esta ubicación.':'';
     $('crVisitCount').textContent=num(report.visitPieces);$('crTotalCount').textContent=num(report.totalPieces);
     $('crScan').disabled=!ready();
     $('crDevice').textContent=camera?'Cámara activa · QR y barras':opening?'Abriendo cámara…':lastSignal?'Lector portátil · última señal '+lastSignal:'Captura preparada para lector portátil';
     $('crCameraButton').textContent=camera?'Cerrar cámara':'Cámara';$('crCameraButton').disabled=opening||(!ready()&&!camera);
-    $('crSync').textContent=(queue.backend==='checking'?'Comprobando servidor · ':!queue.online()||queue.backend==='offline'?'Sin conexión · ':'')+num(report.confirmed)+' confirmados · '+num(report.pending)+' pendientes'+(report.failed?' · '+num(report.failed)+' fallidos':'');
+    $('crSync').textContent=(queue.compatibility?'COMPATIBLE · ':queue.backend==='checking'?'Comprobando servidor · ':!queue.online()||queue.backend==='offline'?'Sin conexión · ':'')+num(report.confirmed)+' confirmados · '+num(report.pending)+' pendientes'+(report.failed?' · '+num(report.failed)+' fallidos':'');
     $('crSync').className=report.pending?'cr-pending-text':'cr-confirmed-text';
     $('crError').hidden=!(queue.error||queue.storageError);$('crError').textContent=queue.storageError||queue.error;
     $('crNotice').textContent=notice;
     const last=queue.rows.at(-1);
     if(last)$('crLast').innerHTML='<span>ÚLTIMA LECTURA '+(last.kind==='undo'?'· COMPENSACIÓN':'')+'</span><strong>'+esc(last.product?.descripcion||last.code)+'</strong><small>SKU '+esc(last.product?.sku||last.code)+' · '+esc(short(last.location))+'</small>'+stamp(last)+(last.error?'<small>'+esc(last.error)+'</small>':'');
     $('crRows').innerHTML=queue.rows.length?[...queue.rows].reverse().slice(0,8).map(row=>'<article class="cr-row"><div><b>'+esc(row.product?.descripcion||row.code)+'</b><small>'+esc(row.product?.sku||row.code)+' · '+esc(short(row.location))+(row.kind==='undo'?' · Deshacer':'')+'</small>'+(row.error?'<small class="txt-red">'+esc(row.error)+'</small>':'')+'</div><div><strong>'+(row.kind==='undo'?'−1':'+1')+'</strong>'+stamp(row)+'</div></article>').join(''):'<p class="muted">Aquí aparecerán las piezas escaneadas.</p>';
-    $('crUndo').disabled=!ready()||!queue.rows.some(row=>row.kind==='receive'&&row.status==='confirmed'&&!queue.rows.some(other=>other.reverses===row.id&&other.status!=='failed'));
+    $('crUndo').disabled=queue.compatibility||!ready()||!queue.rows.some(row=>row.kind==='receive'&&row.status==='confirmed'&&!queue.rows.some(other=>other.reverses===row.id&&other.status!=='failed'));
+    $('crUndo').title=queue.compatibility?'Deshacer automático disponible al activar la migración segura.':'Deshacer la última entrada confirmada';
     $('crRetry').disabled=!queue.owned||queue.busy||Boolean(queue.storageError);
     $('crRetryFailed').hidden=!report.failed;$('crRetryFailed').disabled=!queue.owned||queue.busy;
     $('crFinish').disabled=!queue.owned||Boolean(queue.state.pendingSwitch);
