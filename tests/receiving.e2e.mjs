@@ -88,6 +88,9 @@ try {
   await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='6');
   await page.keyboard.type('402-002');await page.keyboard.press('Enter');await page.locator('#crSwitch').waitFor({state:'visible'});
   assert.equal(await page.locator('#crLocation').innerText(),'402-001');
+  await page.keyboard.type('0012345678');await page.keyboard.press('Enter');
+  assert.equal(await page.locator('#crSwitch').isVisible(),true,'a scanner terminator must not confirm the focused dialog');
+  assert.equal(await page.locator('#crLocation').innerText(),'402-001');
   await page.locator('#crCancelSwitch').click();await page.keyboard.type('0012345678');await page.keyboard.press('Enter');
   await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='7');
   await page.keyboard.type('402-002');await page.keyboard.press('Enter');await page.locator('#crConfirmSwitch').click();

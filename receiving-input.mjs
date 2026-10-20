@@ -3,7 +3,7 @@
 // represent two physical pieces. CR/LF, repeated keys and idle timers cannot
 // emit the same frame twice.
 export function wireReceivingInput({input,active,onCode,onError,onActivity=()=>{}}) {
-  let timer = null, lastAt = 0, rapid = false, size = 0;
+  let timer = null, lastAt = 0, rapid = false, size = 0, blockedFrame = false;
   const editable = node => node?.closest?.('input,textarea,select,[contenteditable="true"]');
   const clear = () => {clearTimeout(timer);timer=null;lastAt=0;rapid=false;size=0;};
   const focus = () => {
@@ -28,6 +28,15 @@ export function wireReceivingInput({input,active,onCode,onError,onActivity=()=>{
   function key(event) {
     if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.repeat) {if (event.target===input) event.preventDefault();return;}
+    // A scanner's Enter must NEVER click the focused confirmation button
+    // after a barcode was read while the marbete dialog paused capture.
+    if(!active()&&!editable(event.target)){
+      if(event.key.length===1){blockedFrame=true;event.preventDefault();return;}
+      if(blockedFrame&&(event.key==='Enter'||event.key==='Tab')){
+        blockedFrame=false;event.preventDefault();event.stopImmediatePropagation();
+        onError(Error('Escaneo en pausa: confirma o cancela el cambio de marbete y vuelve a leer la pieza.'));return;
+      }
+    }
     if (event.key==='Enter' || event.key==='Tab' && !event.shiftKey && input.value) {
       if (event.target===input || !editable(event.target)) {
         if (input.value) {event.preventDefault();event.stopImmediatePropagation();flush();}
