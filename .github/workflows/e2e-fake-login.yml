@@ -1,24 +1,8 @@
 name: E2E VANTIS seller identity
 on:
+  # This legacy workflow signs into the live app with repository-derived
+  # credentials. Keep it manual; push/PR validation uses isolated fixtures.
   workflow_dispatch:
-  push:
-    branches: ["main"]
-    paths:
-      - 'app.js'
-      - 'index.html'
-      - 'styles.css'
-      - 'nova.css'
-      - 'nova-enhancements.js'
-      - 'nova-network-guard.js'
-      - 'nova-tutorial-slides.css'
-      - 'nova-tutorial-slides.js'
-      - 'vantis-enterprise.css'
-      - 'vantis-enterprise.js'
-      - 'scanner.js'
-      - 'product-location.mjs'
-      - 'product-location.css'
-      - 'vantis-session-gate.js'
-      - '.github/workflows/e2e-fake-login.yml'
 permissions:
   contents: read
 concurrency:

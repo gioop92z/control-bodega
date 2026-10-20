@@ -55,6 +55,8 @@ node tests/supports.e2e.mjs
 
 `test:database` ejecuta la migración real en PGlite. La CI `receiving.yml` usa además PostgreSQL 17 desechable con 12 conexiones para validar bloqueos y concurrencia reales. Su cadena de conexión pertenece únicamente al servicio de pruebas; no contiene credenciales productivas.
 
+La prueba antigua `e2e-fake-login.yml`, que entra a la aplicación real con credenciales incluidas en el repositorio, queda disponible sólo por ejecución manual. Esta publicación usa pruebas de navegador aisladas, sin iniciar esa sesión real de forma indirecta desde el despliegue.
+
 Cobertura: 100, 500 y 1,000 lecturas; múltiples empleados; reintentos simultáneos del mismo UUID; ubicación nueva, heredada, ajena o inactiva; códigos de producto; pérdida de respuesta; recarga; diario lleno; deshacer; contrato de servidor incompatible; operación por teclado, Enter, Tab y sin terminador; cámara continua y QR; cambio/cancelación de marbete; resumen, CSV y retorno a la recepción anterior sin migración. Los decodificadores tienen pruebas independientes. Falta comprobar físicamente el modelo concreto de escáner y la cámara del teléfono del operador.
 
 ## Recuperación de versión
