@@ -7,7 +7,7 @@ const short = code => String(code || '').replace(/^ZAP-/, '');
 const labels = {queued:'Pendiente de sincronización',sending:'Guardando…',uncertain:'Por confirmar · reintento seguro',confirmed:'Confirmado en servidor',failed:'No registrado'};
 
 export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCurrent=()=>true,onLegacy=()=>{},onUnavailable=()=>{},onEvidence=()=>{},onEvidenceConfirmed=()=>{}}) {
-  let destroyed=false,frame=null,camera=false,opening=false,audio=null,lastSignal='',notice='',feedbackTimer=null,toastTimer=null,wake=null;
+  let destroyed=false,frame=null,camera=false,opening=false,resumeAfterSwitch=false,audio=null,lastSignal='',notice='',feedbackTimer=null,toastTimer=null,wake=null;
   const $=id=>root.querySelector('#'+id);
   const current=()=>!destroyed && root.isConnected && isCurrent();
   const ready=()=>current() && queue.canScan;
@@ -101,19 +101,39 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     catch(error){fail(error);}
   };
   $('crKeyboard').onclick=()=>{const field=$('crScan');if(!ready())return;field.inputMode='text';field.blur();field.focus({preventScroll:true});};
-  $('crConfirmSwitch').onclick=()=>{queue.confirmSwitch(true);render();input.focus();};
-  $('crCancelSwitch').onclick=()=>{queue.confirmSwitch(false);render();input.focus();};
-  $('crCameraButton').onclick=async()=>{
-    unlockSound();if(camera){stopScanner();return;}
-    opening=true;render();
+  function resolveSwitch(accept) {
+    const reopen=resumeAfterSwitch;resumeAfterSwitch=false;
+    queue.confirmSwitch(accept);render();
+    if(reopen)void openCamera();else input.focus();
+  }
+  $('crConfirmSwitch').onclick=()=>resolveSwitch(true);
+  $('crCancelSwitch').onclick=()=>resolveSwitch(false);
+  async function openCamera() {
+    if(opening||camera||!ready())return;
+    unlockSound();opening=true;render();
     try {
-      await startScanner((code,frame)=>{if(!ready())throw Error('Lectura en pausa. Confirma el cambio o reanuda la recepción.');return scan(code,frame);},'marbete o mercancía',{
-        continuous:true,qrEnabled:true,captureEvidence:true,acknowledgedOnly:true,allowRepeat:false,inlineTarget:$('crCamera'),
-        onClose:()=>{camera=false;opening=false;render();input.focus();}
+      await startScanner((code,photo)=>{
+        if(!ready())throw Error('Lectura en pausa. Confirma el cambio o reanuda la recepción.');
+        const message=scan(code,photo);
+        if(queue.state.pendingSwitch){
+          // The confirmation dialog is underneath the full-screen reader.
+          // Close the camera only for this explicit, required confirmation.
+          resumeAfterSwitch=true;
+          queueMicrotask(()=>stopScanner());
+        }
+        return message;
+      },'marbete o mercancía',{
+        continuous:true,qrEnabled:true,captureEvidence:true,acknowledgedOnly:true,allowRepeat:false,
+        onClose:()=>{camera=false;opening=false;render();if(!resumeAfterSwitch)input.focus();}
       });
       camera=true;
-    } catch {fail(Error('No se pudo abrir la cámara. Revisa el permiso o utiliza el lector portátil.'));}
-    finally {opening=false;render();}
+    } catch(error) {
+      fail(Error('No se pudo abrir la cámara. Revisa los permisos o utiliza el lector portátil.'));
+    } finally {opening=false;render();}
+  }
+  $('crCameraButton').onclick=()=>{
+    if(camera){resumeAfterSwitch=false;stopScanner();}
+    else void openCamera();
   };
   $('crUndo').onclick=()=>{try{queue.undoLast();notice='Compensación pendiente de confirmación.';render();input.focus();}catch(error){fail(error);}};
   $('crRetry').onclick=()=>{notice='';void queue.reconnect().catch(fail);};

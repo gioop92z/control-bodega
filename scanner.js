@@ -3,6 +3,7 @@ import {BarcodeFormat,DecodeHintType} from 'https://esm.sh/@zxing/library@0.21.3
 import Quagga from 'https://esm.sh/@ericblade/quagga2@1.12.1';
 
 let controls = null, active = false, last = '', session = 0, onClose = null, switchTimer = null;
+let feedbackTimer = null, scanAudio = null;
 const formats = [
   BarcodeFormat.CODE_128, BarcodeFormat.CODE_39, BarcodeFormat.CODE_93,
   BarcodeFormat.EAN_13, BarcodeFormat.EAN_8,
@@ -27,6 +28,9 @@ export function stopScanner() {
   const close = onClose;
   onClose = null;
   haltReader();
+  clearTimeout(feedbackTimer); feedbackTimer = null;
+  try { scanAudio?.close?.(); } catch {} scanAudio = null;
+  document.body?.classList?.remove('vantis-scanner-open');
   active = false;
   last = '';
   document.getElementById('scanner')?.remove();
@@ -40,6 +44,13 @@ export async function startScanner(cb, label = 'código', options = {}) {
   onClose = options.onClose || null;
   const current = ++session;
   let candidate = '', hits = 0, accepted = 0, lastVisibleAt = Date.now(), switching = false;
+  // Initialized directly from the user's camera tap; never opens a second microphone.
+  try {
+    if (typeof window !== 'undefined') {
+      const Audio = window.AudioContext || window.webkitAudioContext;
+      if (Audio) { scanAudio = new Audio(); void scanAudio.resume?.(); }
+    }
+  } catch { scanAudio = null; }
 
   function stillActive() {
     return active && current === session && !!document.getElementById('scanner');
@@ -48,6 +59,44 @@ export async function startScanner(cb, label = 'código', options = {}) {
     if (!stillActive()) return;
     const node = document.getElementById('scannerStatus');
     if (node) node.textContent = message;
+  }
+  function flash(code) {
+    const overlay = document.getElementById('scanner');
+    if (!overlay) return;
+    clearTimeout(feedbackTimer);
+    overlay.classList?.remove('scanner-failed');
+    overlay.classList?.add('scanner-detected');
+    const receipt = document.getElementById('scannerReceipt');
+    const value = document.getElementById('scannerReceiptCode');
+    const counter = document.getElementById('scannerCount');
+    if (value) value.textContent = code;
+    if (counter) counter.textContent = (accepted + 1) + ' LECTURA' + (accepted ? 'S' : '');
+    if (receipt) receipt.hidden = false;
+    try { navigator.vibrate?.(22); } catch {}
+    try {
+      if (scanAudio?.state === 'running') {
+        const tone=scanAudio.createOscillator(),gain=scanAudio.createGain();
+        tone.type='sine'; tone.frequency.value=1050;
+        gain.gain.value=.035; tone.connect(gain); gain.connect(scanAudio.destination);
+        tone.start(); gain.gain.exponentialRampToValueAtTime(.001,scanAudio.currentTime+.09);
+        tone.stop(scanAudio.currentTime+.1);
+      }
+    } catch {}
+    feedbackTimer=setTimeout(()=>{
+      if(!stillActive())return;
+      overlay.classList?.remove('scanner-detected');
+      if(receipt)receipt.hidden=true;
+    },820);
+  }
+  function signalError(message) {
+    status(message);
+    const overlay=document.getElementById('scanner');
+    overlay?.classList?.remove('scanner-detected');
+    overlay?.classList?.add('scanner-failed');
+    const receipt=document.getElementById('scannerReceipt');
+    if(receipt)receipt.hidden=true;
+    clearTimeout(feedbackTimer);
+    feedbackTimer=setTimeout(()=>overlay?.classList?.remove('scanner-failed'),850);
   }
   function absent() {
     if (options.continuous && Date.now() - lastVisibleAt >= 850) {
@@ -89,6 +138,7 @@ export async function startScanner(cb, label = 'código', options = {}) {
       if (++hits < 2) return;
     }
     last = code;
+    flash(code);
     const frame = options.captureEvidence ? snapshot() : null;
     if (!options.continuous) {
       stopScanner();
@@ -110,25 +160,35 @@ export async function startScanner(cb, label = 'código', options = {}) {
       Promise.resolve(cb(code,frame)).then(message => {
         if (message) status(message);
       }).catch(error => {
-        status(error?.message || 'No se pudo agregar el código.');
+        signalError(error?.message || 'No se pudo agregar el código.');
       });
     } catch (error) {
-      status(error?.message || 'No se pudo agregar el código.');
+      signalError(error?.message || 'No se pudo agregar el código.');
     }
   }
 
-  (options.inlineTarget || document.body).insertAdjacentHTML('beforeend',
-    '<div class="scanner ' + (options.inlineTarget?'scanner-inline':'') + (options.qrEnabled?' scanner-qr':'') + '" id="scanner">' +
-      '<div class="scanner-head"><b>Escanear ' + label + '</b>' +
-      '<button id="closeScan" class="btn-light" type="button" aria-label="Cerrar cámara">✕</button></div>' +
-      '<div id="scannerViewport" style="position:relative;flex:1;overflow:hidden">' +
-        '<video id="scanVideo" autoplay muted playsinline></video><div class="guide"></div></div>' +
+  // Always mount at <body>, not inside a transformed/scrollable inventory modal.
+  // iOS Safari otherwise clips position:fixed to a tiny camera preview.
+  document.body.insertAdjacentHTML('beforeend',
+    '<div class="scanner scanner-pro' + (options.qrEnabled?' scanner-qr':'') + '" id="scanner" role="dialog" aria-modal="true" aria-label="Lector VANTIS">' +
+      '<div class="scanner-head"><div class="scanner-heading"><span class="scanner-label">VANTIS <i>·</i> LECTOR INTELIGENTE</span><b>Escanear ' + String(label).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])) + '</b></div>' +
+      '<button id="closeScan" class="scanner-close" type="button" aria-label="Cerrar cámara">✕</button></div>' +
+      '<div id="scannerViewport" class="scanner-viewport">' +
+        '<video id="scanVideo" autoplay muted playsinline aria-label="Vista en vivo de la cámara"></video>' +
+        '<div class="scanner-shade" aria-hidden="true"></div>' +
+        '<div class="scanner-live"><span></span> CÁMARA ACTIVA</div>' +
+        '<div class="scanner-target" aria-hidden="true"><span class="scanner-corner tl"></span><span class="scanner-corner tr"></span><span class="scanner-corner bl"></span><span class="scanner-corner br"></span><span class="scanner-laser"></span></div>' +
+        '<div class="scanner-hint">Alinea el código dentro de la guía</div>' +
+        '<div id="scannerReceipt" class="scanner-receipt" hidden><span class="scanner-tick">✓</span><span><b>CÓDIGO DETECTADO</b><strong id="scannerReceiptCode"></strong><small id="scannerCount">1 LECTURA</small></span></div>' +
+      '</div>' +
       '<div class="scanner-note">' +
-        '<div id="scannerStatus" role="status" aria-live="polite">Enfoca el QR o el código de barras completo.</div>' +
-        (options.captureEvidence?'<small class="scanner-evidence-note">Al registrar mercancía con esta cámara se conserva un fotograma del código como evidencia interna, sin confirmaciones adicionales.</small>':'') +
-        (options.continuous && options.allowRepeat !== false ? '<button id="scanRepeat" type="button" class="btn-light" style="margin:10px 0" disabled>+1 del mismo código</button>' : '') +
-        '<button id="scanSwitchEngine" type="button" class="btn-light" style="margin:8px">Otro lector</button>' +
+        '<div id="scannerStatus" role="status" aria-live="polite">Buscando QR o código de barras…</div>' +
+        (options.captureEvidence?'<small class="scanner-evidence-note">El registro con cámara conserva un fotograma del código como evidencia interna.</small>':'') +
+        '<div class="scanner-actions">' +
+        (options.continuous && options.allowRepeat !== false ? '<button id="scanRepeat" type="button" class="scanner-action" disabled>+1 mismo SKU</button>' : '') +
+        '<button id="scanSwitchEngine" type="button" class="scanner-action">Cambiar lector</button></div>' +
       '</div></div>');
+  document.body.classList?.add('vantis-scanner-open');
   document.getElementById('closeScan').onclick = stopScanner;
   document.getElementById('scanRepeat')?.addEventListener('click',() => accept(last,true));
 
@@ -137,7 +197,7 @@ export async function startScanner(cb, label = 'código', options = {}) {
     // reliably than a Quagga-only camera, which often shows a picture
     // without ever issuing onDetected.
     const reader = new BrowserMultiFormatReader(hints,{
-      delayBetweenScanAttempts: 75,delayBetweenScanSuccess: 200
+      delayBetweenScanAttempts: 55,delayBetweenScanSuccess: 125
     });
     const readerControls = await reader.decodeFromConstraints({
       audio:false,
@@ -153,7 +213,7 @@ export async function startScanner(cb, label = 'código', options = {}) {
     });
     if (!stillActive()) { readerControls.stop(); return; }
     controls = readerControls;
-    status('Lector activo · centra el código de barras.');
+    status('Lector listo · QR y barras · lectura automática');
   }
 
   async function startQuagga() {
@@ -184,7 +244,7 @@ export async function startScanner(cb, label = 'código', options = {}) {
     Quagga.onProcessed?.(value=>{if (!value?.codeResult?.code) absent();});
     Quagga.start();
     controls = {stop:() => {try {Quagga.stop();}catch{}}};
-    status('Lector alternativo solo para barras · para QR toca «Otro lector».');
+    status('Lector alternativo · códigos de barras. Para QR usa «Cambiar lector».');
   }
 
   let engine = 'ZXing';

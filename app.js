@@ -1,14 +1,14 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
 import { vantisBackendConfig } from './vantis-backend-config.mjs?v=4.0.2';
 import * as XLSX from 'https://esm.sh/xlsx@0.18.5';
-import { startScanner, stopScanner } from './scanner.js?v=4.0.3';
+import { startScanner, stopScanner } from './scanner.js?v=4.0.5';
 import { getMarbete, normalizeMarbete, parseMarbeteScan, assignProductLocation, registerMarbete, locationQuery } from './product-location.mjs?v=3.9.5';
 import { FastExitQueue } from './exit-queue.mjs?v=3.8.0';
 import { mountFastExit } from './exit-queue-ui.mjs?v=3.8.0';
 import { ReceiveQueue } from './receive-queue.mjs?v=3.9.5';
 import { mountFastReceive } from './receive-queue-ui.mjs?v=3.9.5';
 import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?v=3.10.4';
-import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=4.0.3';
+import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=4.0.5';
 import { mountOperations } from './operations-v4.mjs?v=4.0.1';
 import { ScanEvidence, listSkuEvidence, listLocalSkuEvidence } from './scan-evidence.mjs?v=4.0.4';
 

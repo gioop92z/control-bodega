@@ -1,0 +1,102 @@
+/* VANTIS 4.0.5 — Full screen barcode/QR reader. Lives directly in <body>.
+   Keep outside transformed sheets so Safari does not clip camera to the card. */
+body.vantis-scanner-open{overflow:hidden!important;overscroll-behavior:none}
+#scanner.scanner-pro{
+  position:fixed!important;inset:0!important;width:100%!important;height:100dvh!important;
+  min-height:100svh!important;max-width:none!important;max-height:none!important;
+  margin:0!important;padding:0!important;display:flex!important;flex-direction:column!important;
+  z-index:2147483000!important;overflow:hidden!important;isolation:isolate;
+  color:#fff;background:#08111a;box-shadow:none!important;border:0!important;border-radius:0!important;
+  animation:scannerIn .15s ease-out;
+}
+.scanner-pro *{box-sizing:border-box}
+.scanner-pro .scanner-head{
+  flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:calc(14px + env(safe-area-inset-top,0px)) 20px 16px!important;
+  background:linear-gradient(110deg,#15101e,#240e20 75%,#371127);color:#fff;
+}
+.scanner-pro .scanner-heading{min-width:0;display:flex;flex-direction:column;gap:4px}
+.scanner-pro .scanner-heading>b{font-size:clamp(18px,4.5vw,23px);font-weight:800;line-height:1.15;white-space:normal}
+.scanner-pro .scanner-label{font-size:10px;letter-spacing:.17em;font-weight:800;color:#f7a7d0}
+.scanner-pro .scanner-label i{font-style:normal;color:#fff}
+.scanner-pro .scanner-close{flex-shrink:0;width:46px;height:46px;border:1px solid #ffffff70!important;
+ border-radius:14px;background:#ffffff17!important;color:#fff!important;font-size:23px;font-weight:650;line-height:1}
+.scanner-pro .scanner-close:focus-visible,.scanner-pro .scanner-action:focus-visible{outline:3px solid #f79fcc;outline-offset:3px}
+.scanner-pro .scanner-viewport{
+  position:relative!important;flex:1 1 auto!important;min-height:0!important;width:100%;
+  overflow:hidden!important;background:#040a0c
+}
+.scanner-pro .scanner-viewport video,.scanner-pro .scanner-viewport canvas{
+  position:absolute!important;inset:0!important;width:100%!important;height:100%!important;
+  object-fit:cover!important;border-radius:0!important;max-height:none!important
+}
+.scanner-pro .scanner-shade{position:absolute;inset:0;pointer-events:none;
+ background:linear-gradient(180deg,#01060e70,transparent 22%,transparent 70%,#01060e9d)}
+.scanner-pro .scanner-live{
+  position:absolute;top:16px;left:50%;transform:translateX(-50%);z-index:2;
+  display:flex;align-items:center;gap:8px;white-space:nowrap;
+  background:#08141bba;border:1px solid #ffffff5a;border-radius:100px;
+  padding:8px 13px;font:800 11px/1.2 system-ui,sans-serif;letter-spacing:.12em;
+  box-shadow:0 5px 20px #0004
+}
+.scanner-pro .scanner-live span{width:8px;height:8px;display:block;border-radius:50%;background:#4eea96;
+ box-shadow:0 0 10px #4eea96;animation:scannerDot 1.4s ease-in-out infinite}
+.scanner-pro .scanner-target{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;
+  width:min(88vw,510px);height:min(37dvh,290px);min-height:180px;
+  border:1px solid #ffffff55;border-radius:20px;z-index:3;
+  box-shadow:0 0 0 100vmax #0005,0 0 30px #33cce528 inset;
+  transition:border-color .12s,box-shadow .12s
+}
+.scanner-pro .scanner-corner{position:absolute;width:44px;height:44px;border-color:#bdf9ff;border-style:solid;
+ border-width:0;filter:drop-shadow(0 0 7px #33cae888);transition:border-color .1s}
+.scanner-pro .scanner-corner.tl{top:-3px;left:-3px;border-top-width:5px;border-left-width:5px;border-radius:17px 0 0 0}
+.scanner-pro .scanner-corner.tr{top:-3px;right:-3px;border-top-width:5px;border-right-width:5px;border-radius:0 17px 0 0}
+.scanner-pro .scanner-corner.bl{bottom:-3px;left:-3px;border-bottom-width:5px;border-left-width:5px;border-radius:0 0 0 17px}
+.scanner-pro .scanner-corner.br{bottom:-3px;right:-3px;border-bottom-width:5px;border-right-width:5px;border-radius:0 0 17px 0}
+.scanner-pro .scanner-laser{
+  position:absolute;left:5%;right:5%;top:12%;height:2px;border-radius:100px;
+  background:linear-gradient(90deg,transparent,#5ae6f9 14%,#fff 50%,#5ae6f9 86%,transparent);
+  box-shadow:0 0 13px 3px #4adcee99;animation:scannerSweep 1.65s ease-in-out infinite alternate
+}
+.scanner-pro .scanner-hint{
+  position:absolute;top:calc(50% + min(18.5dvh,145px) + 20px);left:12px;right:12px;
+  color:#fff;text-align:center;font-size:13px;font-weight:720;text-shadow:0 2px 8px #000;z-index:2
+}
+.scanner-pro.scanner-detected .scanner-target{border-color:#56fb92!important;
+ box-shadow:0 0 0 100vmax #03201545,0 0 55px #21ed6f8c inset,0 0 30px #23ff8299}
+.scanner-pro.scanner-detected .scanner-corner{border-color:#3cff81;filter:drop-shadow(0 0 11px #1afc74)}
+.scanner-pro.scanner-detected .scanner-laser{animation-play-state:paused;background:#4dff9d;box-shadow:0 0 17px 6px #10ff83}
+.scanner-pro.scanner-failed .scanner-target{border-color:#ff7272}
+.scanner-pro.scanner-failed .scanner-corner{border-color:#ff7272}
+.scanner-pro .scanner-receipt{
+  position:absolute;z-index:6;bottom:25px;left:50%;transform:translateX(-50%);
+  width:min(90%,450px);padding:14px 17px;border-radius:19px;
+  background:#103d2ff2;border:2px solid #59ffc0;color:#fff;
+  box-shadow:0 14px 35px #0007,0 0 27px #27ff8b55;
+  display:flex;align-items:center;gap:13px;animation:scannerReceipt .12s ease-out
+}
+.scanner-pro .scanner-receipt[hidden]{display:none!important}
+.scanner-pro .scanner-tick{display:grid;place-items:center;flex:0 0 auto;
+ width:46px;height:46px;background:#59f2a2;border-radius:50%;color:#093e23;font-size:30px;font-weight:900}
+.scanner-pro .scanner-receipt span:last-child{min-width:0}
+.scanner-pro .scanner-receipt b{display:block;font-size:11px;letter-spacing:.1em}
+.scanner-pro .scanner-receipt strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+ font-size:clamp(18px,5vw,24px);font-weight:850;margin:4px 0}
+.scanner-pro .scanner-receipt small{display:block;color:#b9ffe0;font-size:10px;letter-spacing:.11em}
+.scanner-pro .scanner-note{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:8px;
+ padding:15px 18px calc(14px + env(safe-area-inset-bottom,0px));background:#0a1520!important;
+ color:#e7f3f8;text-align:center!important;font-size:13px!important;line-height:1.35;max-height:31dvh;overflow-y:auto}
+.scanner-pro #scannerStatus{min-height:19px;font-size:14px;font-weight:750;color:#d3f6ff}
+.scanner-pro .scanner-evidence-note{color:#b8c8cf;font-size:10px;line-height:1.35;max-width:420px}
+.scanner-pro .scanner-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;width:100%}
+.scanner-pro .scanner-action{border:1px solid #647584!important;background:#1a2e3c!important;color:#fff!important;
+ padding:9px 14px!important;border-radius:13px!important;font-size:12px;font-weight:750;min-height:40px}
+.scanner-pro .scanner-action:disabled{opacity:.4}
+@keyframes scannerSweep{from{top:8%}to{top:90%}}
+@keyframes scannerDot{50%{opacity:.44}}
+@keyframes scannerReceipt{from{opacity:.6;transform:translate(-50%,9px)}to{opacity:1;transform:translate(-50%,0)}}
+@media(max-height:650px){.scanner-pro .scanner-target{height:32dvh;min-height:150px}
+ .scanner-pro .scanner-note{padding-top:8px;padding-bottom:calc(8px + env(safe-area-inset-bottom,0px))}
+ .scanner-pro .scanner-evidence-note{display:none}}
+@media(prefers-reduced-motion:reduce){.scanner-pro .scanner-laser,.scanner-pro .scanner-live span{animation:none}}
