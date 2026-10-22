@@ -8,6 +8,7 @@ import { ReceiveQueue } from './receive-queue.mjs?v=3.9.5';
 import { mountFastReceive } from './receive-queue-ui.mjs?v=3.9.5';
 import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?v=3.10.4';
 import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=3.10.5';
+import { mountOperations } from './operations-v4.mjs?v=4.0.0';
 
 const sb = createClient(
   'https://dkqovohxkxlcccvagpij.supabase.co',
@@ -19,7 +20,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '3.10.5';
+const APP_VERSION = '4.0.0';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 const HISTORY_RESTART_CUTOFF = '2026-10-15T22:15:00.000Z';
 
@@ -55,6 +56,7 @@ let receiveCleanup = null;
 let continuousQueue = null;
 let continuousCleanup = null;
 let floatingReceiveElement=null,floatingReceiveFocus=null,floatingReceiveKeydown=null;
+let operationsCleanup=null;
 
 function receiveBusy() {
   if(continuousQueue && !continuousQueue.disposed && (continuousQueue.busy || continuousQueue.pending || continuousQueue.state.pendingSwitch)) { toast('La recepción conserva lecturas pendientes. Revisa su estado antes de salir.','error'); return true; }
@@ -223,6 +225,7 @@ function header() {
 }
 
 function shell(body) {
+  operationsCleanup?.(); operationsCleanup=null;
   exitCleanup?.(); exitCleanup = null;
   receiveCleanup?.(); receiveCleanup = null;
   continuousCleanup?.(); continuousCleanup = null;
@@ -265,6 +268,7 @@ function render() {
     return;
   }
   if (S.view==='home') return homeView();
+  if (S.view==='operations') return operationsView();
   if (S.view==='move') return moveView();
   if (S.view==='search') return searchView();
   if (S.view==='inventory') return inventoryView();
@@ -289,6 +293,7 @@ async function homeView() {
       <button class="action-card red" data-act="SALIDA"><b>−</b><strong>Sacar de bodega</strong><span>Registrar lo que sale</span></button>
       <button class="action-card" data-go="search"><b>⌕</b><strong>Buscar producto</strong><span>UPC, SKU o ubicación</span></button>
       <button class="action-card" data-go="count"><b>✓</b><strong>Inventario físico</strong><span>Contar y detectar diferencias</span></button>
+      <button class="action-card" data-go="operations"><b>◈</b><strong>Centro operativo</strong><span>Localizar, preparar, trasladar y supervisar</span></button>
     </section>
     <button id="quickReceive" class="vr-floating-launch" type="button" aria-label="Abrir escaneo de mercancía"><span class="vr-launch-glyph" aria-hidden="true">▦</span><span>Escanear</span></button>
     <section class="card"><div class="section-head"><h3>Hoy</h3><span class="tiny">Actualización en tiempo real</span></div><div id="summary" class="kpis"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div></section>
@@ -313,6 +318,22 @@ async function homeView() {
       ['Accesos simplificados',true]
     ].map(([t,ok]) => `<div class="check ${ok?'done':''}"><span>${ok?'✓':'○'}</span>${t}</div>`).join('');
   }
+}
+
+function operationsView() {
+  shell('<div id="operationsRoot"></div>');
+  const department=S.deptId;
+  operationsCleanup=mountOperations($('operationsRoot'),{
+    sb,deptId:department,admin:S.admin,actor:sessionStorage.getItem('nova.employeeNumber')||S.displayName,
+    onBack:()=>{if(S.view!=='operations')return;S.view='home';render();},
+    onExit:lines=>{
+      if(S.view!=='operations'||S.deptId!==department||exitBusy()||receiveBusy())throw Error('La operación actual no permite preparar otra salida.');
+      S.moveType='SALIDA';S.view='move';fastExitView();
+      if(!exitQueue)throw Error('No se pudo iniciar la salida.');
+      exitQueue.capture(lines);
+      return true;
+    }
+  });
 }
 
 function moveView() {
