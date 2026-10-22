@@ -178,3 +178,10 @@ test('new Liverpool palette and lighter overlay CSS are deployed',()=>{
  assert.match(html,/vantis-visual-4-0-6\.css/);
  assert.match(css,/\.vr-float-backdrop\{[^}]*backdrop-filter:none/s);
 });
+
+test('routine scans do not statically import Excel',()=>{
+ const app=readFileSync(new URL('../app.js',import.meta.url),'utf8');
+ assert.doesNotMatch(app,/^import \* as XLSX/m);
+ assert.match(app,/function getSpreadsheet\(\)/);
+ assert.match(app,/id="connectionState"/);
+});
