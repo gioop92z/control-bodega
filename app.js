@@ -730,59 +730,57 @@ async function saveProductLocation(a) {
   finally { a.phase=''; paintProductLocation(a); }
 }
 
+let inventoryPage=0, inventoryLastPage=false, inventoryEpoch=0, inventoryRows=[];
+const INVENTORY_PAGE_SIZE=100;
 function inventoryView() {
-  shell(`<section class="page-title"><h1>Inventario</h1><p class="muted">Busca y consulta existencias en ${esc(deptName())}.</p></section><div class="card"><div class="inline-form"><input id="invQ" placeholder="SKU, UPC, descripción, marca…"><select id="stockFilter" class="compact"><option value="all">Todos</option><option value="positive">Con stock</option><option value="zero">Agotados</option><option value="low">Stock bajo</option></select></div><div id="invList"><div class="skeleton"></div></div></div>`);
-  let t;
-  const run=()=>{clearTimeout(t);t=setTimeout(loadInventory,160)};
-  $('invQ').oninput=run;
-  $('stockFilter').onchange=run;
-  loadInventory();
+  inventoryPage=0;inventoryLastPage=false;inventoryRows=[];inventoryEpoch++;
+  shell('<section class="page-title"><h1>Inventario</h1><p class="muted">Consulta paginada para catálogos grandes · '+esc(deptName())+'</p></section><div class="card"><div class="inline-form"><input id="invQ" placeholder="SKU, UPC, descripción, marca…"><select id="stockFilter" class="compact"><option value="all">Todos</option><option value="positive">Con stock</option><option value="zero">Agotados</option><option value="low">Stock bajo</option></select></div><div id="invList"></div><button id="invLoadMore" class="secondary" type="button" hidden>Cargar más productos</button><p id="invRangeInfo" class="tiny"></p></div>');
+  let timer;
+  const restart=()=>{clearTimeout(timer);timer=setTimeout(()=>{inventoryPage=0;inventoryRows=[];inventoryLastPage=false;void loadInventory();},170);};
+  $('invQ').oninput=restart;$('stockFilter').onchange=restart;
+  $('invLoadMore').onclick=()=>void loadInventory(true);
+  void loadInventory();
 }
-
 function inventoryPassesFilter(p,f) {
-  if (f==='positive') return Number(p.stock)>0;
-  if (f==='zero') return Number(p.stock)<=0;
-  if (f==='low') return Number(p.stock)>0 && Number(p.stock)<=Number(p.stock_minimo||0);
+  if(f==='positive')return Number(p.stock)>0;
+  if(f==='zero')return Number(p.stock)<=0;
+  if(f==='low')return Number(p.stock)>0&&Number(p.stock)<=Number(p.stock_minimo||0);
   return true;
 }
-
-function renderInventoryRows(rows) {
-  if (!$('invList')) return;
-  $('invList').innerHTML=rows.map(p=>`<div class="product-row"><div><b>${esc(p.descripcion)}</b><span>SKU ${esc(p.sku)}${p.upc?' · UPC '+esc(p.upc):''}</span><span>${esc([p.marca,p.talla,p.color].filter(Boolean).join(' · '))}</span></div><div class="right"><strong>${p.stock}</strong>${S.admin?`<button class="mini" data-edit="${p.id}">Editar</button>`:''}</div></div>`).join('')||'<p class="muted">Sin resultados.</p>';
+function renderInventoryRows(rows){
+  if(!$('invList'))return;
+  $('invList').innerHTML=rows.map(p=>'<div class="product-row"><div><b>'+esc(p.descripcion)+'</b><span>SKU '+esc(p.sku)+(p.upc?' · UPC '+esc(p.upc):'')+'</span><span>'+esc([p.marca,p.talla,p.color].filter(Boolean).join(' · '))+'</span></div><div class="right"><strong>'+p.stock+'</strong>'+(S.admin?'<button class="mini" data-edit="'+esc(p.id)+'">Editar</button>':'')+'</div></div>').join('')||'<p class="muted">Sin resultados en estas páginas.</p>';
   document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editProduct(b.dataset.edit,rows.find(x=>x.id===b.dataset.edit)));
 }
-
-async function loadInventory() {
-  const q=$('invQ')?.value.trim()||'', f=$('stockFilter')?.value||'all';
-
-  if (q && /^[A-Za-z0-9._\-\s]{5,40}$/.test(q)) {
-    try {
-      const exact=await findProduct(q);
-      if (exact) {
-        renderInventoryRows(inventoryPassesFilter(exact,f)?[exact]:[]);
-        return;
-      }
-    } catch(e) {
-      if ($('invList')) $('invList').innerHTML=`<div class="error">${esc(humanError(e))}</div>`;
-      return;
+async function loadInventory(append=false){
+  const input=$('invQ'),filter=$('stockFilter');if(!input||!filter)return;
+  const q=input.value.trim(),f=filter.value, page=append?inventoryPage:0,request=++inventoryEpoch,dept=S.deptId;
+  const active=()=>S.view==='inventory'&&S.deptId===dept&&request===inventoryEpoch;
+  const more=$('invLoadMore'),info=$('invRangeInfo');
+  more.disabled=true;info.textContent='Consultando catálogo…';
+  try{
+    if(!append&&q&&/^[A-Za-z0-9._\\-\\s]{5,40}$/.test(q)){
+      const exact=await findProduct(q,dept);
+      if(!active())return;
+      if(exact){inventoryRows=inventoryPassesFilter(exact,f)?[exact]:[];inventoryLastPage=true;inventoryPage=1;renderInventoryRows(inventoryRows);more.hidden=true;info.textContent='Resultado exacto.';return;}
     }
-  }
-
-  let req=sb.from('productos').select('id,sku,upc,descripcion,marca,talla,color,precio,stock,stock_minimo').eq('activo',true).eq('departamento_id',S.deptId).gt('created_at',VISUAL_CLEANUP_CUTOFF).order('descripcion').limit(100);
-  if (q) {
-    const x=q.replace(/[,%]/g,' ');
-    req=req.or(`sku.ilike.%${x}%,upc.ilike.%${x}%,descripcion.ilike.%${x}%,marca.ilike.%${x}%,talla.ilike.%${x}%,color.ilike.%${x}%`);
-  }
-  if (f==='positive') req=req.gt('stock',0);
-  if (f==='zero') req=req.lte('stock',0);
-  const r=await req;
-  if (r.error) {
-    if ($('invList')) $('invList').innerHTML=`<div class="error">${esc(humanError(r.error))}</div>`;
-    return;
-  }
-  let rows=r.data||[];
-  if (f==='low') rows=rows.filter(p=>inventoryPassesFilter(p,'low'));
-  renderInventoryRows(rows);
+    let req=sb.from('productos').select('id,sku,upc,descripcion,marca,talla,color,precio,stock,stock_minimo')
+      .eq('activo',true).eq('departamento_id',dept)
+      .gt('created_at',VISUAL_CLEANUP_CUTOFF).order('descripcion').order('sku')
+      .range(page*INVENTORY_PAGE_SIZE,(page+1)*INVENTORY_PAGE_SIZE-1);
+    if(q){const x=q.replace(/[(),%*]/g,' ').trim();if(x)req=req.or('sku.ilike.%'+x+'%,upc.ilike.%'+x+'%,descripcion.ilike.%'+x+'%,marca.ilike.%'+x+'%,talla.ilike.%'+x+'%,color.ilike.%'+x+'%');}
+    if(f==='positive')req=req.gt('stock',0);
+    if(f==='zero')req=req.lte('stock',0);
+    const res=await req;if(!active())return;
+    if(res.error)throw res.error;
+    const chunk=res.data||[];
+    inventoryRows=append?inventoryRows.concat(chunk.filter(p=>inventoryPassesFilter(p,f))):chunk.filter(p=>inventoryPassesFilter(p,f));
+    inventoryPage=page+1;inventoryLastPage=chunk.length<INVENTORY_PAGE_SIZE;
+    renderInventoryRows(inventoryRows);
+    more.hidden=inventoryLastPage;
+    info.textContent=inventoryRows.length.toLocaleString('es-MX')+' artículos visibles'+(inventoryLastPage?' · Fin de resultados':' · Hay más páginas')+(f==='low'?' · Revisa todas las páginas para encontrar los de stock bajo':'');
+  }catch(error){if(active())info.textContent='Error al cargar catálogo: '+humanError(error);}
+  finally{if(active())more.disabled=false;}
 }
 
 async function editProduct(id,p) {
