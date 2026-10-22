@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
+import { vantisBackendConfig } from './vantis-backend-config.mjs?v=4.0.2';
 import * as XLSX from 'https://esm.sh/xlsx@0.18.5';
 import { startScanner, stopScanner } from './scanner.js?v=3.10.0';
 import { getMarbete, normalizeMarbete, parseMarbeteScan, assignProductLocation, registerMarbete, locationQuery } from './product-location.mjs?v=3.9.5';
@@ -11,8 +12,8 @@ import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=3.10.5';
 import { mountOperations } from './operations-v4.mjs?v=4.0.1';
 
 const sb = createClient(
-  'https://dkqovohxkxlcccvagpij.supabase.co',
-  'sb_publishable_iz06RtaObND0dWOpuX2vKg_wZVbrZCv',
+  vantisBackendConfig.url,
+  vantisBackendConfig.key,
   { auth: { persistSession: true, autoRefreshToken: true } }
 );
 
