@@ -160,6 +160,14 @@ try {
   await page.keyboard.type('UNKNOWN');await page.keyboard.press('Enter');
   await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='1,611');
   assert.equal(await page.evaluate(()=>window.__receiptFixture.products.find(x=>x.sku==='UNKNOWN')?.stock),1);
+  // Mobile/manual regression: the input always accepts typing and submits via its form.
+  assert.equal(await page.locator('#crScan').getAttribute('inputmode'),'text');
+  await page.locator('#crKeyboard').click();
+  assert.equal(await page.locator('#crScan').evaluate(el=>document.activeElement===el),true);
+  await page.locator('#crScan').fill('MANUAL-123');
+  await page.locator('#crScanForm').evaluate(form=>form.requestSubmit());
+  await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='1,612');
+  assert.equal(await page.evaluate(()=>window.__receiptFixture.products.find(x=>x.sku==='MANUAL-123')?.stock),1);
   // Source can deploy before the additive server migration without breaking
   // the previous receiving operation or pretending continuous saving works.
   await page.evaluate(()=>{localStorage.clear();localStorage.setItem('__missingBackend','1');});
