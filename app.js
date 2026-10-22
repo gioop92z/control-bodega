@@ -759,7 +759,7 @@ async function loadInventory(append=false){
   const more=$('invLoadMore'),info=$('invRangeInfo');
   more.disabled=true;info.textContent='Consultando catálogo…';
   try{
-    if(!append&&q&&/^[A-Za-z0-9._\\-\\s]{5,40}$/.test(q)){
+    if(!append&&q&&/^[A-Za-z0-9._ -]{5,40}$/.test(q)){
       const exact=await findProduct(q,dept);
       if(!active())return;
       if(exact){inventoryRows=inventoryPassesFilter(exact,f)?[exact]:[];inventoryLastPage=true;inventoryPage=1;renderInventoryRows(inventoryRows);more.hidden=true;info.textContent='Resultado exacto.';return;}
