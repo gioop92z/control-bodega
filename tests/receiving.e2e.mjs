@@ -28,6 +28,15 @@ const bootstrap=`
       if(name==='vantis_recepcion_estado_v1')fn=()=>receiptApi.capabilities();
       else if(name==='vantis_activar_marbete_v1')fn=()=>receiptApi.activate(payload.p_codigo);
       else if(name==='vantis_recibir_pieza_v1')fn=()=>receiptApi.receive(payload);
+      else if(name==='crear_producto_codigo')fn=async()=>{
+        const code=payload.p_codigo;
+        let product=db.products.find(x=>x.sku===code);
+        if(!product){
+          product={id:'provisional-'+code,sku:code,upc:null,descripcion:'SIN DESCRIPCIÓN · '+code,stock:0,activo:true,departamento_id:'dept1'};
+          db.products.push(product);
+        }
+        return product;
+      };
       else throw Error('Unexpected RPC: '+name);
       return {abortSignal(){return this;},then(resolve,reject){return Promise.resolve().then(fn).then(data=>({data,error:null}),error=>({data:null,error})).then(result=>{persist();return resolve(result);},reject);}};
     }
@@ -75,7 +84,7 @@ try {
   await page.route('https://*.supabase.co/**',route=>{if(route.request().method()!=='GET')blockedWrites++;return route.abort();});
   await page.goto(`http://127.0.0.1:${server.address().port}/`,{waitUntil:'networkidle'});
   await page.locator('[data-act="ENTRADA"]').click();await page.locator('#crScan:not(:disabled)').waitFor();
-  assert.match(await page.locator('#crInstruction').innerText(),/ESCANEA UN MARBETE/);
+  assert.match(await page.locator('#crInstruction').innerText(),/SKU O MARBETE/);
   // True keyboard events: no click or field focus between frames.
   await page.keyboard.type('402-001');await page.keyboard.press('Enter');
   await page.waitForFunction(()=>document.getElementById('crLocationLabel').textContent==='MARBETE ACTIVO'&&document.getElementById('crLocation').textContent==='402-001');
@@ -148,8 +157,9 @@ try {
   assert.equal(await page.locator('#crTotalCount').innerText(),'1,609');
   await page.locator('#crRetry').click();await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='1,610');
   assert.equal(await page.evaluate(()=>window.__receiptFixture.products[0].stock),1620);
-  await page.keyboard.type('UNKNOWN');await page.keyboard.press('Enter');await page.waitForFunction(()=>document.getElementById('crSync').textContent.includes('1 fallidos'));
-  assert.equal(await page.locator('#crTotalCount').innerText(),'1,610');
+  await page.keyboard.type('UNKNOWN');await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='1,611');
+  assert.equal(await page.evaluate(()=>window.__receiptFixture.products.find(x=>x.sku==='UNKNOWN')?.stock),1);
   // Source can deploy before the additive server migration without breaking
   // the previous receiving operation or pretending continuous saving works.
   await page.evaluate(()=>{localStorage.clear();localStorage.setItem('__missingBackend','1');});
