@@ -1,6 +1,8 @@
 import {parseMarbeteScan, locationQuery} from './product-location.mjs?v=3.9.5';
 import {cleanSupportCode, lookupSupportCodes} from './support-batch.mjs?v=3.8.0';
 import {LegacyReceiptApi} from './legacy-receipt-api.mjs?v=3.10.1';
+import {InventoryJournalMirror} from './vantis-offline-idb-v5.mjs';
+import {scanMetric,startMetric,serverMetric} from './vantis-telemetry-v5.mjs';
 
 const message = error => String(error?.message || error || 'No se pudo guardar.');
 const permanent = error => /^(22|23|P0001)/.test(String(error?.code || ''));
@@ -75,6 +77,8 @@ export class ContinuousReceive {
     onChange = () => {}, onConfirmed = () => {}, onFailure = () => {}, now = () => Date.now()}) {
     Object.assign(this, {api, storage, userId, deptId, actor, locks, online, makeId, onChange, onConfirmed, onFailure, now});
     this.journal = new ReceiptJournal(storage, [userId,deptId,encodeURIComponent(actor)].join('/'));
+    this.mirror=new InventoryJournalMirror(this.journal.base);
+    this.restoredFromBackup=false;
     this.cache = new Map(); this.timer = null; this.job = null; this.owned = false; this.disposed = false;
     this.storageError = ''; this.error = ''; this.backend = 'checking'; this.selecting = false; this.compatibility = false;
     this.release = null; this.nextSequence = 0;
@@ -98,11 +102,11 @@ export class ContinuousReceive {
       startedAt:new Date(this.now()).toISOString(),endedAt:null,active:null,candidate:null,pendingSwitch:null,backendVersion:0};
   }
   saveSession() {
-    try { this.journal.saveSession(this.state); return true; }
+    try { this.journal.saveSession(this.state); this.mirror.queue('active','',this.state); return true; }
     catch { this.storageError = 'Almacenamiento local lleno o no disponible. No escanees más hasta recuperar espacio.'; this.onChange(); return false; }
   }
   saveRow(row) {
-    try { this.journal.saveRow(this.state.id,row); return true; }
+    try { this.journal.saveRow(this.state.id,row); this.mirror.queue('row',this.state.id+'/'+row.id,row); return true; }
     catch { this.storageError = 'No pude proteger esta lectura en el navegador. Detén el escaneo y conserva la pantalla.'; this.onChange(); return false; }
   }
   changed() { this.onChange(); }
@@ -126,10 +130,26 @@ export class ContinuousReceive {
     // a newer session. Construction never writes another tab's metadata.
     try {
       const saved=this.journal.readSession();
-      if(saved){
-        this.state=saved;this.rows=this.journal.readRows(saved.id);
-        for(const row of this.rows){if(row.status==='sending')row.status='uncertain';this.nextSequence=Math.max(this.nextSequence,row.sequence);}
+      if(saved){this.state=saved;this.rows=this.journal.readRows(saved.id);}
+      else {
+        // Restore only when the synchronous session pointer is absent; never
+        // combine two divergent journals or invent confirmations.
+        let backup=null;
+        try{backup=await this.mirror.read('active','');}
+        catch(e){this.mirror.error=String(e?.message||e);}
+        if(backup?.version===1&&backup.userId===this.userId&&backup.deptId===this.deptId&&
+           backup.actor===this.actor&&backup.id&&!backup.endedAt){
+          const rows=await this.mirror.readRows(backup.id);
+          this.state=backup;this.rows=rows;this.nextSequence=0;
+          for(const row of rows){
+            if(!row.id||row.sessionId!==backup.id||!Number.isSafeInteger(row.sequence))
+              throw Error('El respaldo local requiere revisión.');
+            this.journal.saveRow(backup.id,row);
+          }
+          this.restoredFromBackup=true;
+        }
       }
+      for(const row of this.rows){if(row.status==='sending')row.status='uncertain';this.nextSequence=Math.max(this.nextSequence,row.sequence);}
       if(!this.saveSession())return;
     }catch(error){this.storageError='No se pudo recuperar la sesión local: '+message(error);this.changed();return;}
     await this.connect();
@@ -183,7 +203,7 @@ export class ContinuousReceive {
       code:productCode,quantity:1,location:location?.code||null,visitId:location?.visitId||null,unlocatedApproved:false,
       capturedAt:new Date(this.now()).toISOString(),status:'queued',attempts:0,error:'',product:null,payload:null};
     if (!this.saveRow(row)) { this.nextSequence--; throw Error(this.storageError); }
-    this.rows.push(row); this.changed(); this.schedule(25); return {type:'piece',id};
+    this.rows.push(row); scanMetric(); this.changed(); this.schedule(25); return {type:'piece',id};
   }
   setCandidate(code) {
     const candidate={code,visitId:this.makeId()};
@@ -319,6 +339,7 @@ export class ContinuousReceive {
     row.status = 'sending'; row.attempts++;
     if (!this.saveRow(row)) return;
     this.changed();
+    const started=startMetric();
     try {
       const reply = row.writeMode==='legacy'
         ? await this.api.legacyReceive(structuredClone(row.payload),{
@@ -330,9 +351,11 @@ export class ContinuousReceive {
         reply.kind !== row.kind || reply.quantity !== 1 || !Number.isFinite(Date.parse(reply.stored_at)) || reply.stock_resultante == null || !Number.isSafeInteger(Number(reply.stock_resultante))) {
         this.backend = 'invalid'; throw Error('Respuesta de almacenamiento incompleta. Esta lectura queda por verificar.');
       }
+      serverMetric(started,true);
       row.status = 'confirmed'; row.receipt = reply; row.error = ''; delete row.retryAt;
       this.saveRow(row); this.onConfirmed(row);
     } catch (error) {
+      serverMetric(started,false);
       row.error = message(error);
       if (permanent(error)) { row.status = 'failed'; this.onFailure(row); }
       else {
@@ -405,7 +428,7 @@ export class ContinuousReceive {
     this.disposed = true; clearTimeout(this.timer); this.timer = null;
     // Keep the lease until all requests that may have committed have been
     // journaled. A reopened tab cannot replay an in-flight row concurrently.
-    try { await this.job; } finally { this.release?.(); await this.lease; this.onChange=()=>{}; }
+    try { await this.job; } finally { await this.mirror.dispose(); this.release?.(); await this.lease; this.onChange=()=>{}; }
   }
 }
 
