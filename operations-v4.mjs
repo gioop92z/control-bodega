@@ -51,18 +51,20 @@ export function mountOperations(root,{sb,deptId,admin=false,actor='',onBack=()=>
     if(!admin){tab='locate';render();return;}
     $('opBody').innerHTML='<div class="op-loading">Consultando las cifras confirmadas del servidor…</div>';
     try{
-      const [summary,products,locations,recent,counts]=await Promise.all([
+      const [summary,products,locations,recent,counts,empty,provisional]=await Promise.all([
         sb.rpc('resumen_departamento',{p_departamento:deptId}),
         sb.from('productos').select('id',{count:'exact',head:true}).eq('departamento_id',deptId).eq('activo',true),
         sb.from('marbetes').select('codigo',{count:'exact',head:true}).eq('departamento_id',deptId).eq('activo',true),
         sb.from('movimientos').select('tipo,sku,cantidad,impacto,created_at,marbete_codigo').eq('departamento_id',deptId).order('created_at',{ascending:false}).limit(15),
-        sb.from('conteos').select('id,nombre,estado').eq('departamento_id',deptId).order('created_at',{ascending:false}).limit(12)
+        sb.from('conteos').select('id,nombre,estado').eq('departamento_id',deptId).order('created_at',{ascending:false}).limit(12),
+        sb.from('productos').select('id',{count:'exact',head:true}).eq('departamento_id',deptId).eq('activo',true).lte('stock',0),
+        sb.from('productos').select('id',{count:'exact',head:true}).eq('departamento_id',deptId).eq('activo',true).ilike('descripcion','SIN DESCRIPCIÓN%')
       ]);
       if(!current(id))return;
       const numbers=failQuery(summary)||{},movements=failQuery(recent)||[],physical=failQuery(counts)||[];
-      failQuery(products);failQuery(locations);
+      failQuery(products);failQuery(locations);failQuery(empty);failQuery(provisional);
       const cell=(name,val)=>'<div class="op-kpi"><span>'+name+'</span><strong>'+integer(val)+'</strong></div>';
-      $('opBody').innerHTML='<div class="op-kpis">'+cell('Artículos en catálogo',products.count??0)+cell('Ubicaciones activas',locations.count??0)+cell('Unidades en inventario',numbers.unidades??0)+cell('Movimientos',numbers.movimientos??0)+'</div><div class="op-two"><section class="op-panel"><h2>Últimos movimientos</h2>'+ (movements.length?movements.map(m=>'<article class="op-line"><b>'+esc(m.tipo)+' · '+esc(m.sku)+'</b><span>'+esc(m.marbete_codigo||'Sin ubicación')+' · '+esc(new Date(m.created_at).toLocaleString('es-MX'))+'</span><strong>'+integer(m.impacto??m.cantidad)+'</strong></article>').join(''):'<p>No hay movimientos registrados.</p>')+'</section><section class="op-panel"><h2>Conteos recientes</h2>'+(physical.length?physical.map(c=>'<article class="op-line"><b>'+esc(c.nombre)+'</b><span>'+esc(c.estado)+'</span></article>').join(''):'<p>No hay conteos recientes.</p>')+'</section></div><p class="op-fine">Datos consultados del servidor: '+esc(new Date().toLocaleString('es-MX'))+'. Movimientos y conteos muestran los más recientes, no el historial completo.</p><button id="opRefresh" type="button" class="secondary">Actualizar cifras</button>';
+      $('opBody').innerHTML='<div class="op-kpis">'+cell('Artículos en catálogo',products.count??0)+cell('Ubicaciones activas',locations.count??0)+cell('Unidades en inventario',numbers.unidades??0)+cell('Movimientos',numbers.movimientos??0)+'</div><div class="op-notice"><b>Alertas:</b> '+integer(empty.count??0)+' referencias sin existencias · '+integer(provisional.count??0)+' SKU provisionales · '+integer(physical.filter(c=>c.estado!=='CERRADO').length)+' conteos recientes abiertos.</div><div class="op-two"><section class="op-panel"><h2>Últimos movimientos</h2>'+ (movements.length?movements.map(m=>'<article class="op-line"><b>'+esc(m.tipo)+' · '+esc(m.sku)+'</b><span>'+esc(m.marbete_codigo||'Sin ubicación')+' · '+esc(new Date(m.created_at).toLocaleString('es-MX'))+'</span><strong>'+integer(m.impacto??m.cantidad)+'</strong></article>').join(''):'<p>No hay movimientos registrados.</p>')+'</section><section class="op-panel"><h2>Conteos recientes</h2>'+(physical.length?physical.map(c=>'<article class="op-line"><b>'+esc(c.nombre)+'</b><span>'+esc(c.estado)+'</span></article>').join(''):'<p>No hay conteos recientes.</p>')+'</section></div><p class="op-fine">Datos consultados del servidor: '+esc(new Date().toLocaleString('es-MX'))+'. Movimientos y conteos muestran los más recientes, no el historial completo.</p><button id="opRefresh" type="button" class="secondary">Actualizar cifras</button>';
       $('opRefresh').onclick=()=>void control(++epoch);
     }catch(error){if(current(id))$('opBody').innerHTML='<div class="op-error">No fue posible consultar el centro de control: '+esc(errorText(error))+'</div><button id="opRefresh" class="secondary">Reintentar</button>', $('opRefresh').onclick=()=>void control(++epoch);}
   }
