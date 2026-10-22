@@ -13,3 +13,8 @@ body:has(.cr-standalone .continuous-receive) .page-title:before{display:none}
 .cr-counters{grid-template-columns:repeat(2,minmax(0,1fr))}.cr-counters>div{min-width:0}.cr-stage input{min-width:0;flex:1}.cr-stage form .ghost{flex:0 0 45px}.cr-stage h1{white-space:normal;overflow-wrap:anywhere}
 .cr-heading .ghost,.cr-section-title .ghost{white-space:normal!important}.cr-row>div:first-child{min-width:0;overflow-wrap:anywhere}
 @media(max-width:560px){body:has(.cr-standalone .continuous-receive) .content{padding:12px 12px 24px!important}.cr-location{font-size:clamp(46px,15vw,61px)}.cr-counters strong{font-size:clamp(34px,10vw,58px)}.cr-heading{align-items:flex-start}.cr-heading>div{flex:1;min-width:140px}.cr-heading .ghost{max-width:112px}.cr-stage h1{font-size:21px!important}}
+
+.cr-pending-location{margin:16px 0 10px;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;background:#ffeff8df;color:#672b4b;border:1px solid #ecc3d9;border-radius:16px}
+.cr-pending-location[hidden]{display:none!important}.cr-pending-location b{display:block;font-size:15px}.cr-pending-location small{display:block;font-size:12px;margin-top:5px;line-height:1.4}
+.cr-pending-location button{font-weight:800;min-height:45px}
+@media(max-width:600px){.cr-pending-location button{width:100%}}
