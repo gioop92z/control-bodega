@@ -62,7 +62,7 @@ export class SupabaseReceiptApi {
     try {await locationQuery(this.sb.rpc('crear_producto_codigo',{p_token:null,p_departamento:this.deptId,p_codigo:code}));}
     catch(error){failure=error;}
     const after=await this.lookup([code]),product=after.get(code)?.product;
-    if(product?.id&&product.activo&&product.departamento_id===this.deptId)return product;
+    if(product?.id&&product.sku===code&&product.activo&&product.departamento_id===this.deptId)return product;
     throw Error('SKU '+code+' pendiente de alta: '+(failure?.message||'el servidor no confirmó la creación.'));
   }
   async receive(payload) { return locationQuery(this.sb.rpc('vantis_recibir_pieza_v1', payload)); }
@@ -255,7 +255,14 @@ export class ContinuousReceive {
     if (!this.owned || this.disposed || this.storageError || this.backend !== 'ready' || !this.online()) return;
     this.job = this.process(); this.changed();
     try { await this.job; }
-    finally {this.job=null;this.changed();const actionable=this.rows.some(r=>['queued','uncertain'].includes(r.status)&&(r.location||r.unlocatedApproved)&&(!r.retryAt||r.retryAt<=this.now()));if(actionable&&!this.disposed)this.schedule(this.backend==='ready'?1000:4000);}
+    finally {
+      this.job=null;this.changed();
+      const actionable=this.rows.filter(r=>['queued','uncertain'].includes(r.status)&&(r.location||r.unlocatedApproved));
+      if(actionable.length&&!this.disposed){
+        const retry=Math.min(...actionable.map(r=>Math.max(0,(r.retryAt||0)-this.now())));
+        this.schedule(Math.max(1000,Math.min(30000,retry||1000)));
+      }
+    }
   }
   async process() {
     if (this.state.candidate) { await this.activateCandidate(); if (this.state.candidate) return; }
@@ -278,7 +285,7 @@ export class ContinuousReceive {
         for(const row of unresolved){
           const product=this.cache.get(row.code);
           if(product?.activo&&product.departamento_id===this.deptId){
-            row.product=product;row.error='';this.saveRow(row);
+            row.product=product;row.error='';delete row.retryAt;this.saveRow(row);
           }else{
             row.error=issues.get(row.code)||'SKU pendiente de confirmar en el catálogo.';
             row.retryAt=this.now()+15000;
@@ -365,6 +372,8 @@ export class ContinuousReceive {
   }
   finish() {
     if (this.state.pendingSwitch) throw Error('Confirma o cancela el cambio de marbete.');
+    if (this.rows.some(row=>row.kind==='receive'&&!row.location&&!row.unlocatedApproved&&row.status==='queued'))
+      throw Error('Hay piezas sin ubicación. Escanea su marbete o elige registrar sin ubicación antes de finalizar.');
     this.state.endedAt = new Date(this.now()).toISOString(); this.saveSession(); this.changed();
     return this.report(); // Never dispatch inventory from finalization.
   }

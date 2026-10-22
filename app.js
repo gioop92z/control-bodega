@@ -835,7 +835,7 @@ async function closeCount() {
 
 function importView() {
   if (!S.admin) { S.view='home'; return render(); }
-  shell(`<section class="page-title"><button id="backHome" class="ghost">← Inicio</button><h1>Importar inventario</h1><p class="muted">Excel o CSV. Tú decides si solo actualiza catálogo o también ajusta existencias.</p></section><section class="card"><div class="quick-row"><label class="file-btn">Seleccionar Excel / CSV<input id="importFile" type="file" accept=".xlsx,.xls,.csv,text/csv"></label><button id="template" class="secondary">Descargar plantilla</button></div><div id="importBody"><p class="muted">Columnas sugeridas: SKU, UPC, Descripción, Marca, Talla, Color, Precio, Stock, Mínimo.</p></div></section>`);
+  shell(`<section class="page-title"><button id="backHome" class="ghost">← Inicio</button><h1>Importar inventario</h1><p class="muted">El catálogo mensual completa automáticamente los SKU provisionales que coincidan exactamente y conserva su stock. Un ajuste físico es una operación distinta.</p></section><section class="card"><div class="quick-row"><label class="file-btn">Seleccionar Excel / CSV<input id="importFile" type="file" accept=".xlsx,.xls,.csv,text/csv"></label><button id="template" class="secondary">Descargar plantilla</button></div><div id="importBody"><p class="muted">Columnas sugeridas: SKU, UPC, Descripción, Marca, Talla, Color, Precio, Stock, Mínimo.</p></div></section>`);
   $('backHome').onclick=()=>{S.view='home';render()};
   $('importFile').onchange=readImportFile;
   $('template').onclick=downloadTemplate;
@@ -884,7 +884,7 @@ function autoMap() {
 
 function renderImportMapping() {
   const fields=[['sku','SKU *'],['upc','UPC'],['descripcion','Descripción'],['marca','Marca'],['talla','Talla'],['color','Color'],['precio','Precio'],['stock','Stock'],['minimo','Mínimo']];
-  $('importBody').innerHTML=`<h3>1. Revisa las columnas</h3><div class="map-grid">${fields.map(([k,l])=>`<label>${l}<select data-map="${k}"><option value="">— No importar —</option>${S.importHeaders.map((h,i)=>`<option value="${i}" ${S.importMap[k]===String(i)?'selected':''}>${esc(h||'Columna '+(i+1))}</option>`).join('')}</select></label>`).join('')}</div><h3>2. Vista previa</h3><div class="table-scroll"><table><thead><tr>${S.importHeaders.slice(0,8).map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${S.importRows.slice(0,10).map(r=>`<tr>${r.slice(0,8).map(v=>`<td>${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div><h3>3. ¿Qué quieres hacer?</h3><div class="import-options"><label><input type="radio" name="imode" value="catalog" checked> <b>Actualizar catálogo</b><span>No cambia stock existente.</span></label><label><input type="radio" name="imode" value="physical"> <b>Catálogo + inventario físico</b><span>Ajusta el stock al valor del archivo y deja cada diferencia en historial.</span></label></div><button id="runImport" class="primary">Importar ${S.importRows.length.toLocaleString('es-MX')} filas</button><div id="importProgress"></div>`;
+  $('importBody').innerHTML=`<h3>1. Revisa las columnas</h3><div class="map-grid">${fields.map(([k,l])=>`<label>${l}<select data-map="${k}"><option value="">— No importar —</option>${S.importHeaders.map((h,i)=>`<option value="${i}" ${S.importMap[k]===String(i)?'selected':''}>${esc(h||'Columna '+(i+1))}</option>`).join('')}</select></label>`).join('')}</div><h3>2. Vista previa</h3><div class="table-scroll"><table><thead><tr>${S.importHeaders.slice(0,8).map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${S.importRows.slice(0,10).map(r=>`<tr>${r.slice(0,8).map(v=>`<td>${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div><h3>3. ¿Qué quieres hacer?</h3><div class="import-options"><label><input type="radio" name="imode" value="catalog" checked> <b>Actualizar catálogo</b><span>Completa SKU nuevos por coincidencia exacta. Conserva existencias escaneadas.</span></label><label><input type="radio" name="imode" value="physical"> <b>Catálogo + inventario físico</b><span>Ajusta el stock al valor del archivo y deja cada diferencia en historial.</span></label></div><button id="runImport" class="primary">Importar ${S.importRows.length.toLocaleString('es-MX')} filas</button><div id="importProgress"></div>`;
   document.querySelectorAll('[data-map]').forEach(s=>s.onchange=()=>S.importMap[s.dataset.map]=s.value);
   $('runImport').onclick=runImport;
 }
@@ -953,6 +953,7 @@ async function runImport() {
   if (!items.length) return toast('No encontré SKUs para importar.','error');
   if (mode==='physical'&&S.importMap.stock==='') return toast('Selecciona la columna Stock.','error');
   if (prepared.conflicts.length) return toast(`Hay códigos ambiguos en el archivo. Corrige: ${prepared.conflicts.slice(0,3).join(' · ')}`,'error');
+  if(mode==='physical'&&!confirm('Un inventario físico sustituye cantidades existentes por las del archivo, incluso en SKU que empezaron sin catálogo. ¿Continuar con el ajuste físico?'))return;
 
   const b=$('runImport'); b.disabled=true;
   let done=0, summary={};
@@ -972,7 +973,7 @@ async function runImport() {
     }
     const dup=prepared.duplicateSkuRows?` · Filas SKU consolidadas: ${prepared.duplicateSkuRows}`:'';
     if ($('importProgress')) $('importProgress').innerHTML+=`<div class="success">Importación terminada. Nuevos: ${summary.nuevos||0} · Actualizados: ${summary.actualizados||0}${mode==='physical'?` · Ajustados: ${summary.ajustados||0}`:''}${dup}</div>`;
-    toast('Importación terminada.');
+    toast(mode==='catalog'?'Catálogo enlazado por SKU; existencias conservadas.':'Importación física terminada.');
   } catch(e) {
     if ($('importProgress')) $('importProgress').innerHTML+=`<div class="error">Se detuvo en ${done.toLocaleString('es-MX')} de ${items.length.toLocaleString('es-MX')}: ${esc(humanError(e))}</div>`;
     toast(humanError(e),'error');

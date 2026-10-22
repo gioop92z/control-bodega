@@ -63,7 +63,7 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     $('crLocation').textContent=active?short(active.code):'—';
     $('crInstruction').textContent=active?'ESCANEA LA SIGUIENTE PIEZA':'ESCANEA SKU O MARBETE PARA COMENZAR';
     $('crLocationState').textContent=queue.compatibility
-      ? 'Modo compatible: guardado automático con verificación del historial. Una lectura incierta nunca se reenvía sin comprobación.'
+      ? 'Cada lectura confirma una pieza en el historial. Si la red falla, queda protegida para revisión.'
       : pending?'Las lecturas quedarán pendientes hasta validar esta ubicación.':active?'Cada lectura registra una unidad en esta ubicación.':'Empieza por el SKU o el cajón. Si el SKU va primero, se conserva hasta asignarle ubicación o registrarlo sin marbete.';
     $('crVisitCount').textContent=num(report.visitPieces);$('crTotalCount').textContent=num(report.totalPieces);
     $('crPendingLocation').hidden=!report.awaitingLocation||Boolean(active);
@@ -72,7 +72,8 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     $('crScan').disabled=!ready();
     $('crDevice').textContent=camera?'Cámara activa · QR y barras':opening?'Abriendo cámara…':lastSignal?'Lector portátil · última señal '+lastSignal:'Captura preparada para lector portátil';
     $('crCameraButton').textContent=camera?'Cerrar cámara':'Cámara';$('crCameraButton').disabled=opening||(!ready()&&!camera);
-    $('crSync').textContent=(queue.compatibility?'COMPATIBLE · ':queue.backend==='checking'?'Comprobando servidor · ':!queue.online()||queue.backend==='offline'?'Sin conexión · ':'')+num(report.confirmed)+' confirmados · '+num(report.pending)+' pendientes'+(report.failed?' · '+num(report.failed)+' fallidos':'');
+    const unknown=queue.rows.filter(row=>row.kind==='receive'&&row.status==='queued'&&/pendiente de alta|pendiente de confirmar|SKU pendiente/i.test(row.error||'')).length;
+    $('crSync').textContent=(queue.backend==='checking'?'Comprobando servidor · ':!queue.online()||queue.backend==='offline'?'Sin conexión · ':'')+num(report.confirmed)+' confirmados · '+num(report.pending)+' pendientes'+(unknown?' · '+num(unknown)+' SKUs por catalogar':'')+(report.failed?' · '+num(report.failed)+' fallidos':'');
     $('crSync').className=report.pending?'cr-pending-text':'cr-confirmed-text';
     $('crError').hidden=!(queue.error||queue.storageError);$('crError').textContent=queue.storageError||queue.error;
     $('crNotice').textContent=notice;

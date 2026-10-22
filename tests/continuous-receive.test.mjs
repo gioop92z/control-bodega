@@ -69,6 +69,29 @@ test('SKU first can be explicitly registered as general stock without location',
   assert.equal(h.db.movements.length,2);
   assert.equal(h.db.movements[0].marbete_codigo,null);
 });
+test('same unknown SKU receives every physical piece and maintains a single provisional identity',async t=>{
+  const h=await setup(t);await location(h.queue);
+  for(let i=0;i<7;i++)h.queue.scan('NUEVO-MENSUAL-32');
+  await h.queue.flush();
+  const products=h.db.products.filter(row=>row.sku==='NUEVO-MENSUAL-32');
+  assert.equal(products.length,1);
+  assert.equal(products[0].stock,7);
+  assert.equal(h.queue.report().totalPieces,7);
+  // The monthly catalog enriches this same SKU, not an additional product/stock.
+  const initialId=products[0].id;
+  products[0].descripcion='Zapato infantil nuevo';
+  products[0].precio=199;
+  assert.equal(h.db.products.find(row=>row.id===initialId).stock,7);
+  assert.equal(h.db.products.filter(row=>row.sku==='NUEVO-MENSUAL-32').length,1);
+});
+test('SKU-first unlocated reads cannot be hidden by finalizing the session',async t=>{
+  const h=await setup(t);h.queue.scan('SIN-UBICACION-2026');
+  assert.equal(h.queue.report().awaitingLocation,1);
+  assert.throws(()=>h.queue.finish(),/sin ubicación/i);
+  h.queue.approveWithoutLocation();await h.queue.flush();
+  assert.equal(h.queue.report().totalPieces,1);
+  assert.doesNotThrow(()=>h.queue.finish());
+});
 test('unknown SKU is retained if the server does not allow catalog creation',async t=>{
   const h=await setup(t);await location(h.queue);
   h.db.failCreate=true;h.queue.scan('UNKNOWN-PENDING');await h.queue.flush();
