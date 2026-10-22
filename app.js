@@ -6,8 +6,8 @@ import { FastExitQueue } from './exit-queue.mjs?v=3.8.0';
 import { mountFastExit } from './exit-queue-ui.mjs?v=3.8.0';
 import { ReceiveQueue } from './receive-queue.mjs?v=3.9.5';
 import { mountFastReceive } from './receive-queue-ui.mjs?v=3.9.5';
-import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?v=3.10.1';
-import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=3.10.2';
+import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?v=3.10.3';
+import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=3.10.3';
 
 const sb = createClient(
   'https://dkqovohxkxlcccvagpij.supabase.co',
@@ -19,7 +19,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '3.10.2';
+const APP_VERSION = '3.10.3';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 const HISTORY_RESTART_CUTOFF = '2026-10-15T22:15:00.000Z';
 
