@@ -33,6 +33,7 @@ function harness(overrides={}) {
   const scanner={calls:0,callback:null,error:null};
   const sandbox={
     ...locationFunctions,createClient:()=>sb,console,AbortController,crypto,
+    vantisBackendConfig:{url:'https://example.invalid',key:'test-publishable-key'},
     navigator:{onLine:true,vibrate(){}},localStorage:{getItem(){return null},setItem(){},removeItem(){}},
     document:{getElementById:id=>nodes.get(id)||null,querySelectorAll:()=>[],createElement:()=>new Element(),body:new Element()},
     window:{},startScanner:async callback=>{scanner.calls++;if(scanner.error)throw scanner.error;scanner.callback=callback},stopScanner:()=>{scanner.callback=null},
