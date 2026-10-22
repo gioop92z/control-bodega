@@ -1,0 +1,53 @@
+/* VANTIS 5.0 · Diagnóstico, conteo supervisado e incidencias */
+.v5-panel{--pink:#dc087b;--indigo:#57325d;--green:#147e52;--amber:#a96d0a;--red:#ae3243;color:#2c2133}
+.v5-panel .v5-header{border-left:4px solid var(--pink);padding-left:15px;margin-bottom:20px}
+.v5-header small{display:block;font-size:11px;letter-spacing:.14em;font-weight:800;color:var(--pink)}
+.v5-header h2{font-size:clamp(20px,3vw,28px);margin:5px 0;color:#351f38}
+.v5-header p{margin:0;color:#6e5e72;line-height:1.5;font-size:13px}
+.v5-panel .op-kpis{grid-template-columns:repeat(3,minmax(0,1fr));gap:11px;margin:18px 0}
+.v5-panel .op-kpi{border:1px solid #e6d9e4;background:#fff8fd;border-top:3px solid #c50a73}
+.v5-panel .op-kpi strong{font-size:clamp(18px,2.7vw,27px);font-variant-numeric:tabular-nums;white-space:normal;overflow-wrap:anywhere}
+.v5-bars{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0}
+.v5-bars>div{display:grid;gap:5px;background:#faf5f9;border:1px solid #eddfeb;border-radius:14px;padding:14px}
+.v5-bars span{font-size:11px;color:#705e71;font-weight:700}
+.v5-bars strong{font-size:13px;overflow-wrap:anywhere}
+.v5-bars [data-tone=ok]{color:#147e52}.v5-bars [data-tone=warn]{color:#ad6409}
+.v5-form{background:#fcf7fa;border:1px solid #f0dce9;border-radius:16px;padding:15px;margin:12px 0 20px}
+.v5-form label{font-weight:720;color:#543954}
+.v5-form input,.v5-form textarea,.v5-form select{background:white!important;min-height:45px!important;border:1px solid #e0cddd!important;color:#291a2a!important}
+.v5-form button{background:#c80774!important;color:white!important}
+.v5-cycle{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+ width:100%;text-align:left;border:1px solid #e5d4e1!important;background:white!important;
+ padding:13px 16px!important;border-radius:12px!important;margin-bottom:8px!important;color:#38283b!important}
+.v5-cycle:hover{border-color:#d40779!important;background:#fff8fd!important}
+.v5-cycle b{min-width:120px}.v5-cycle small{font-size:12px;color:#705d6a}
+.v5-state{display:inline-block;background:#f1e8f0;color:#723c69;border:1px solid #e4cbdc;border-radius:100px;padding:6px 10px;font-size:11px;font-weight:850;letter-spacing:.03em}
+.v5-cycle:has(.v5-state) .v5-state{max-width:140px}
+.v5-detail{border:1px solid #d9cade;background:#fffbfd;border-radius:17px;padding:16px;margin:20px 0}
+.v5-detail>h3{font-size:18px;margin:3px 0}.v5-detail>p{color:#755f70;font-size:12px}
+.v5-badges{display:flex;gap:7px;flex-wrap:wrap;margin:13px 0}
+.v5-badges span{border:1px solid #ead5e3;background:#fbebf5;border-radius:9px;padding:7px 10px;font-weight:800;font-size:11px}
+.v5-detail .op-form{display:flex;flex-wrap:wrap;gap:9px;margin:15px 0}
+.v5-detail .op-form input{flex:1 1 135px;min-width:0;min-height:48px;background:white!important;color:#211827!important}
+.v5-detail button{margin:5px 4px 5px 0;min-height:42px}
+.v5-table{max-height:45vh;overflow:auto;border:1px solid #e6dbe3;border-radius:12px;background:#fff}
+.v5-line{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:11px 12px;border-bottom:1px solid #f1e8ee;font-size:12px}
+.v5-line b{font-size:13px;min-width:90px}.v5-line span{flex:1;color:#655563}
+.v5-line strong{font-size:11px;background:#f5f0f4;border-radius:7px;padding:5px 7px}
+.v5-line .v5-ok{background:#e5f9ee;color:#147d4b}.v5-line .v5-alert{background:#fff1df;color:#9b5d00}
+.v5-hint{background:#fffae9;color:#805309;border:1px solid #ecd7a4;padding:12px;border-radius:12px;font-size:12px;line-height:1.5}
+.v5-incident{display:flex;justify-content:space-between;gap:12px;border:1px solid #e8dce6;border-left:4px solid #dc087b;
+ border-radius:13px;padding:14px;background:white;margin:9px 0}
+.v5-incident b{color:#41243f;font-size:13px}.v5-incident p{font-size:13px;margin:7px 0;color:#544956;white-space:pre-wrap}
+.v5-incident small{font-size:11px;color:#706670;line-height:1.5}
+.v5-incident-side{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;max-width:40%}
+.v5-incident-side button{min-height:37px}
+.v5-notice{border:1px solid #d9d6ed;background:#f4f5ff;border-radius:11px;padding:12px;margin:12px 0;font-size:12px;font-weight:750}
+.v5-notice[hidden]{display:none!important}.v5-notice[data-tone=success]{background:#e8fbf0;border-color:#bbe5cd;color:#166e42}
+.v5-notice[data-tone=error]{background:#fff0f1;border-color:#efc6cd;color:#91293a}
+.v5-empty{font-size:13px;color:#786e79}
+@media(max-width:640px){.v5-panel .op-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .v5-bars{grid-template-columns:1fr}
+ .v5-incident{flex-direction:column}.v5-incident-side{max-width:none;justify-content:flex-start}
+ .v5-cycle{align-items:flex-start;flex-direction:column;gap:6px}
+}
