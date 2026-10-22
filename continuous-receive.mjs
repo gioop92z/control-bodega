@@ -178,7 +178,7 @@ export class ContinuousReceive {
     }
     const location = this.state.candidate || this.state.active;
     const productCode = cleanSupportCode(code), id = eventId || this.makeId();
-    if (this.rows.some(row => row.id === id)) return {type:'duplicate-event',id};
+    if (eventId && this.rows.some(row => row.id === id)) return {type:'duplicate-event',id};
     const row = {id,sessionId:this.state.id,sequence:++this.nextSequence,kind:'receive',
       code:productCode,quantity:1,location:location?.code||null,visitId:location?.visitId||null,unlocatedApproved:false,
       capturedAt:new Date(this.now()).toISOString(),status:'queued',attempts:0,error:'',product:null,payload:null};
@@ -385,7 +385,7 @@ export class ContinuousReceive {
   }
   report() {
     const locations = new Map(), active = this.state.candidate || this.state.active;
-    let confirmed = 0, failed = 0, net = 0, visit = 0, awaitingLocation=0;
+    let confirmed = 0, failed = 0, pendingCount = 0, net = 0, visit = 0, awaitingLocation=0;
     for (const row of this.rows) {
       if(row.kind==='receive'&&!row.location&&!row.unlocatedApproved&&row.status!=='confirmed')awaitingLocation++;
       const value = locations.get(row.location) || {marbete:row.location,pieces:0,confirmed:0,pending:0,failed:0};
@@ -394,12 +394,12 @@ export class ContinuousReceive {
         net += delta; confirmed++; value.pieces += delta; value.confirmed++;
         if (row.visitId === active?.visitId) visit += delta;
       } else if (row.status === 'failed') { failed++; value.failed++; }
-      else value.pending++;
+      else {value.pending++;pendingCount++;}
       locations.set(row.location,value);
     }
     return {sessionId:this.state.id,userId:this.userId,actor:this.actor,deptId:this.deptId,startedAt:this.state.startedAt,
       endedAt:this.state.endedAt,totalPieces:net,visitPieces:visit,locations:[...locations.values()],
-      confirmed,pending:this.pending,awaitingLocation,failed,rows:this.rows};
+      confirmed,pending:pendingCount,awaitingLocation,failed,rows:this.rows};
   }
   async dispose() {
     this.disposed = true; clearTimeout(this.timer); this.timer = null;

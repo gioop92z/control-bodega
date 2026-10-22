@@ -42,7 +42,9 @@ function scannerHarness({zxingFails=false}={}) {
   };
   const hintEnums={POSSIBLE_FORMATS:1,TRY_HARDER:2,ALSO_INVERTED:3};
   const source=readFileSync(new URL('../scanner.js',import.meta.url),'utf8')
-    .replace(/^import .*;\s*$/gm,'').replace(/export /g,'');
+    .replace(/^import .*;\s*$/gm,'')
+    .replace("import('https://esm.sh/@ericblade/quagga2@1.12.1')","Promise.resolve({default:Quagga})")
+    .replace(/export /g,'');
   const sandbox={
     document,Quagga,BrowserMultiFormatReader,BarcodeFormat:enums,
     DecodeHintType:hintEnums,navigator:{hardwareConcurrency:2},
@@ -160,4 +162,26 @@ test('scanner CSS is loaded and supports full viewport plus green detection',()=
   assert.match(css,/#scanner\.scanner-pro\{/);
   assert.match(css,/height:100dvh!important/);
   assert.match(css,/\.scanner-pro\.scanner-detected \.scanner-target/);
+});
+
+test('Quagga is loaded lazily; primary camera remains responsive',async()=>{
+  const source=readFileSync(new URL('../scanner.js',import.meta.url),'utf8');
+  assert.doesNotMatch(source,/^import Quagga/m);
+  assert.match(source,/async function getQuagga/);
+  const camera=scannerHarness();await camera.startScanner(()=>{},'SKU',{continuous:true});
+  assert.equal(camera.engine,'zxing');
+  camera.stopScanner();
+});
+test('new Liverpool palette and lighter overlay CSS are deployed',()=>{
+ const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../vantis-visual-4-0-6.css',import.meta.url),'utf8');
+ assert.match(html,/vantis-visual-4-0-6\.css/);
+ assert.match(css,/\.vr-float-backdrop\{[^}]*backdrop-filter:none/s);
+});
+
+test('routine scans do not statically import Excel',()=>{
+ const app=readFileSync(new URL('../app.js',import.meta.url),'utf8');
+ assert.doesNotMatch(app,/^import \* as XLSX/m);
+ assert.match(app,/function getSpreadsheet\(\)/);
+ assert.match(app,/id="connectionState"/);
 });
