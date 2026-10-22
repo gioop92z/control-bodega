@@ -10,7 +10,7 @@ import { mountFastReceive } from './receive-queue-ui.mjs?v=3.9.5';
 import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?v=3.10.4';
 import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=4.0.3';
 import { mountOperations } from './operations-v4.mjs?v=4.0.1';
-import { ScanEvidence, listSkuEvidence } from './scan-evidence.mjs?v=4.0.3';
+import { ScanEvidence, listSkuEvidence, listLocalSkuEvidence } from './scan-evidence.mjs?v=4.0.4';
 
 const sb = createClient(
   vantisBackendConfig.url,
@@ -84,12 +84,18 @@ function exitBusy() {
   return false;
 }
 
+function clearEvidenceImages(){
+  for(const photo of S.evidencePhotos||[]){
+    if(photo.local&&photo.url?.startsWith('blob:'))URL.revokeObjectURL(photo.url);
+  }
+  S.evidencePhotos=[];
+}
 function resetSearchContext() {
   searchRequest++;
   searchPending = false;
   locationAssignment = null;
   locationSaveNotice = null;
-  S.evidencePhotos=[];S.evidenceStatus='idle';
+  clearEvidenceImages();S.evidenceStatus='idle';
   stopScanner();
 }
 
@@ -591,17 +597,17 @@ function searchView() {
 
 function searchEvidenceHtml() {
   if(S.evidenceStatus==='loading')return '<section class="vantis-evidence"><h3>Registro visual</h3><p class="muted">Cargando imágenes privadas de las recepciones…</p></section>';
-  if(S.evidenceStatus==='error')return '<section class="vantis-evidence"><h3>Registro visual</h3><p class="muted">Las imágenes aún no están disponibles en esta instancia.</p></section>';
+  if(S.evidenceStatus==='error')return '<section class="vantis-evidence"><h3>Registro visual</h3><p class="muted">Las fotografías todavía no están disponibles desde esta instancia. Las nuevas capturas de cámara se intentarán sincronizar.</p></section>';
   const photos=S.evidencePhotos||[];
   if(!photos.length)return '<section class="vantis-evidence"><h3>Registro visual</h3><p class="muted">Todavía no hay fotografías de escaneo para este SKU. Las lecturas hechas con lector portátil no generan foto.</p></section>';
   return '<section class="vantis-evidence"><h3>Registro visual <small>'+photos.length+' últimas capturas</small></h3>'+
-    '<p class="muted">Fotogramas automáticos de lecturas confirmadas. Muestran lo que enfocaba la cámara al escanear; no necesariamente el artículo completo.</p>'+
+    '<p class="muted">Fotogramas de lecturas confirmadas; muestran lo que enfocaba la cámara, no necesariamente el producto completo.'+(photos.some(p=>p.local)?' Algunas fotos permanecen únicamente en este dispositivo, pendientes de sincronización.':'')+'</p>'+
     '<div class="vantis-evidence-grid">'+photos.map(photo=>{
       const when=new Date(photo.capturada_en).toLocaleString('es-MX',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
       return '<figure class="vantis-evidence-item">'+(photo.url?
         '<a href="'+esc(photo.url)+'" target="_blank" rel="noopener noreferrer" aria-label="Abrir evidencia del '+esc(when)+'"><img loading="lazy" src="'+esc(photo.url)+'" alt="Imagen del código escaneado para '+esc(S.searchResult?.sku||'SKU')+'"></a>'
         :'<div class="vantis-evidence-missing">Imagen no disponible</div>')+
-        '<figcaption>'+esc(when)+' <span>· '+esc(photo.codigo_leido)+'</span></figcaption></figure>';
+        '<figcaption>'+esc(when)+' <span>· '+esc(photo.codigo_leido)+(photo.local?' · Local':'')+'</span></figcaption></figure>';
     }).join('')+'</div></section>';
 }
 
@@ -625,7 +631,7 @@ async function doSearch(code) {
   const request=++searchRequest, deptId=S.deptId;
   const current=()=>request===searchRequest && S.deptId===deptId && S.view==='search';
   locationAssignment=null; locationSaveNotice=null; lastSearchCode=code;
-  S.searchResult=null; S.locations=[]; S.evidencePhotos=[]; S.evidenceStatus='idle'; searchPending=true;
+  clearEvidenceImages();S.searchResult=null; S.locations=[]; S.evidenceStatus='idle'; searchPending=true;
   render();
   try {
     const p=await findProduct(code,deptId);
@@ -635,10 +641,24 @@ async function doSearch(code) {
       if (!current()) return;
       S.searchType='product'; S.searchResult=p; S.locations=locs; S.evidenceStatus='loading';
       // La búsqueda de stock es independiente de la descarga de imágenes.
-      void listSkuEvidence(sb,deptId,p.sku).then(photos=>{
-        if(current()){S.evidencePhotos=photos;S.evidenceStatus='ready';render();}
-      }).catch(error=>{
-        if(current()){console.warn('VANTIS · registro visual:',error?.message||error);S.evidenceStatus='error';render();}
+      void Promise.allSettled([
+        listSkuEvidence(sb,deptId,p.sku),
+        listLocalSkuEvidence(deptId,S.user.id,p.sku)
+      ]).then(([remote,local])=>{
+        if(!current()){
+          if(local.status==='fulfilled')local.value.forEach(item=>URL.revokeObjectURL(item.url));
+          return;
+        }
+        const cloud=remote.status==='fulfilled'?remote.value:[];
+        const localRows=local.status==='fulfilled'?local.value:[];
+        const cloudIds=new Set(cloud.map(item=>item.evento_id));
+        clearEvidenceImages();
+        S.evidencePhotos=[...cloud,...localRows.filter(item=>{
+          if(cloudIds.has(item.evento_id)){URL.revokeObjectURL(item.url);return false;}
+          return true;
+        })].sort((a,b)=>String(b.capturada_en).localeCompare(String(a.capturada_en))).slice(0,8);
+        S.evidenceStatus=cloud.length||localRows.length||remote.status==='fulfilled'?'ready':'error';
+        render();
       });
       return;
     }
