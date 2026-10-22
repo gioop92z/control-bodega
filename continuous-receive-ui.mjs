@@ -15,7 +15,7 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     <div class="cr-heading"><div><span class="cr-brand">VANTIS <i>|</i> ESCANEO ACTIVO</span><span class="cr-department">${esc(queue.actor)}</span></div><button id="crFinish" type="button" class="ghost">Finalizar recepción</button></div>
     <section class="cr-stage"><span id="crLocationLabel" class="cr-kicker">MARBETE ACTIVO</span><strong id="crLocation" class="cr-location">—</strong><h1 id="crInstruction">ESCANEA UN SKU O UN MARBETE</h1><p id="crLocationState"></p>
       <div class="cr-counters"><div><strong id="crVisitCount">0</strong><span>PIEZAS EN ESTE MARBETE</span></div><div><strong id="crTotalCount">0</strong><span>TOTAL CONFIRMADO EN SESIÓN</span></div></div>
-      <form id="crScanForm" autocomplete="off"><label class="sr-only" for="crScan">Lectura del escáner portátil, marbete, SKU o UPC</label><input id="crScan" inputmode="none" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Escanea marbete, SKU o UPC" aria-describedby="crSync"><button id="crKeyboard" class="ghost" type="button" aria-label="Escribir un código">⌨</button></form>
+      <form id="crScanForm" autocomplete="off"><label class="sr-only" for="crScan">Lectura del escáner portátil, marbete, SKU o UPC</label><input id="crScan" type="text" inputmode="text" enterkeyhint="done" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Escanea o escribe marbete, SKU o UPC" aria-describedby="crSync"><button id="crKeyboard" class="ghost" type="button" aria-label="Abrir teclado para escribir un código">⌨ Escribir</button></form>
       <div class="cr-indicators"><span id="crDevice">Captura preparada para lector portátil</span><span id="crSync" role="status" aria-live="polite">Comprobando servidor…</span><button id="crCameraButton" type="button" class="secondary">Cámara</button></div><div id="crCamera"></div>
     </section>
     <div id="crFeedback" class="cr-feedback" role="status" aria-live="polite" hidden></div>
@@ -99,7 +99,7 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     try{const count=queue.approveWithoutLocation();feedback(count+' pieza'+(count===1?'':'s')+' preparada'+(count===1?'':'s')+' para registrar sin ubicación','info');render();input.focus();}
     catch(error){fail(error);}
   };
-  $('crKeyboard').onclick=()=>{$('crScan').inputMode=$('crScan').inputMode==='none'?'text':'none';input.focus();};
+  $('crKeyboard').onclick=()=>{const field=$('crScan');if(!ready())return;field.inputMode='text';field.blur();field.focus({preventScroll:true});};
   $('crConfirmSwitch').onclick=()=>{queue.confirmSwitch(true);render();input.focus();};
   $('crCancelSwitch').onclick=()=>{queue.confirmSwitch(false);render();input.focus();};
   $('crCameraButton').onclick=async()=>{
