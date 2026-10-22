@@ -1,6 +1,12 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
 import { vantisBackendConfig } from './vantis-backend-config.mjs?v=4.0.2';
-import * as XLSX from 'https://esm.sh/xlsx@0.18.5';
+// Excel loads only when requested; routine scanning must not wait for a large XLSX bundle.
+let spreadsheetPromise=null;
+function getSpreadsheet(){
+  spreadsheetPromise ||= import('https://esm.sh/xlsx@0.18.5')
+    .catch(error=>{spreadsheetPromise=null;throw error;});
+  return spreadsheetPromise;
+}
 import { startScanner, stopScanner } from './scanner.js?v=4.0.6';
 import { getMarbete, normalizeMarbete, parseMarbeteScan, assignProductLocation, registerMarbete, locationQuery } from './product-location.mjs?v=3.9.5';
 import { FastExitQueue } from './exit-queue.mjs?v=3.8.0';
@@ -303,13 +309,22 @@ function render() {
   homeView();
 }
 
+function syncNetworkBadge(){
+  const node=document.getElementById('connectionState');if(!node)return;
+  const online=navigator.onLine!==false;
+  node.classList.toggle('offline',!online);
+  node.innerHTML='<i></i> '+(online?'Red disponible':'Sin conexión de red');
+}
+window.addEventListener('online',syncNetworkBadge);
+window.addEventListener('offline',syncNetworkBadge);
+
 function kpi(label,val,cls='') { return `<div class="kpi ${cls}"><span>${label}</span><strong>${val}</strong></div>`; }
 
 async function homeView() {
   shell(`
     <section class="hero">
       <div><div class="eyebrow">${esc(deptName())}</div><h1>¿Qué necesitas hacer?</h1><p class="muted">Elige una acción. La app te guía paso a paso.</p></div>
-      <div class="live-badge"><i></i> En línea</div>
+      <div class="live-badge" id="connectionState" role="status"><i></i> Comprobando red</div>
     </section>
     <section class="action-grid">
       <button class="action-card green" data-act="ENTRADA"><b>＋</b><strong>Recibir mercancía</strong><span>Escanea y registra sin pasos extra</span></button>
@@ -322,6 +337,7 @@ async function homeView() {
     <section class="card"><div class="section-head"><h3>Hoy</h3><span class="tiny">Actualización en tiempo real</span></div><div id="summary" class="kpis"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div></section>
     ${S.admin ? `<section class="card"><h3>Estado de la operación</h3><div id="checklist"><div class="skeleton"></div></div></section><section class="quick-row"><button data-go="import" class="secondary">Importar Excel / CSV</button><button data-go="history" class="secondary">Ver historial</button></section>` : `<section class="tip-card"><b>Tip rápido</b><span>En cada entrada o salida escribe tu nombre en “Nota”. Así queda claro quién realizó el movimiento.</span></section>`}
   `);
+  syncNetworkBadge();
   document.querySelectorAll('[data-act]').forEach(b => b.onclick = () => { S.moveType=b.dataset.act; if(S.moveType==='ENTRADA'){fastReceiveView();return;} S.view='move'; render(); });
   $('quickReceive').onclick=()=>{S.moveType='ENTRADA';fastReceiveView();};
   document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { S.view=b.dataset.go; render(); });
@@ -939,6 +955,7 @@ function normalizeImportCode(value,{upc=false}={}) {
 async function readImportFile(e) {
   const f=e.target.files?.[0]; if (!f) return;
   try {
+    const XLSX=await getSpreadsheet();
     const buf=await f.arrayBuffer();
     const wb=XLSX.read(buf,{type:'array',cellDates:false});
     const ws=wb.Sheets[wb.SheetNames[0]];
@@ -1063,9 +1080,12 @@ async function runImport() {
   }
 }
 
-function downloadTemplate() {
+async function downloadTemplate() {
+  try {
+  const XLSX=await getSpreadsheet();
   const ws=XLSX.utils.json_to_sheet([{SKU:'1000001',UPC:'750000000001',Descripción:'Producto ejemplo',Marca:'Marca',Talla:'M',Color:'Negro',Precio:499,Stock:10,Mínimo:2}]), wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Inventario'); XLSX.writeFile(wb,'plantilla_inventario.xlsx');
+  } catch {toast('No se pudo cargar Excel. Comprueba tu conexión y reintenta.','error');}
 }
 
 let historyRows=[];
@@ -1092,9 +1112,12 @@ async function loadHistory() {
   $('historyList').innerHTML=historyRows.map(x=>`<div class="history-row"><div><b class="${x.tipo==='SALIDA'?'txt-red':x.tipo==='ENTRADA'?'txt-green':''}">${esc(x.tipo)} · ${esc(x.sku)}</b><span>${esc(x.descripcion||'')}</span><span>${x.marbete_codigo?'Ubicación '+esc(x.marbete_codigo):''}</span><span>${new Date(x.created_at).toLocaleString('es-MX')}</span>${x.nota?`<span class="history-note">Nota: ${esc(x.nota)}</span>`:''}</div><div class="right"><strong>${x.impacto>0?'+':''}${x.impacto}</strong><span>${x.stock_anterior??'—'} → ${x.stock_resultante}</span></div></div>`).join('')||'<p class="muted">Sin movimientos.</p>';
 }
 
-function exportHistory(kind) {
+async function exportHistory(kind) {
   const rows=historyRows.map(x=>({Fecha:new Date(x.created_at).toLocaleString('es-MX'),Tipo:x.tipo,SKU:x.sku,UPC:x.upc||'',Descripción:x.descripcion||'',Cantidad:x.cantidad,Impacto:x.impacto,'Stock antes':x.stock_anterior,'Stock después':x.stock_resultante,Acceso:x.user_nombre||'',Ubicación:x.marbete_codigo||'',Nota:x.nota||''}));
   if (!rows.length) return toast('No hay datos para exportar.','error');
+  let XLSX;
+  try {XLSX=await getSpreadsheet();}
+  catch {toast('No se pudo cargar el exportador. Comprueba tu conexión.','error');return;}
   const ws=XLSX.utils.json_to_sheet(rows);
   if (kind==='csv') { const csv=XLSX.utils.sheet_to_csv(ws); downloadBlob(csv,'historial.csv','text/csv;charset=utf-8'); }
   else { const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Historial'); XLSX.writeFile(wb,'historial_inventario.xlsx'); }
