@@ -1,0 +1,15 @@
+/* VANTIS · registro visual protegido y no intrusivo */
+.vantis-evidence{margin:18px 0;padding:17px 0;border-top:1px solid #e9dfe7}
+.vantis-evidence h3{display:flex;align-items:baseline;flex-wrap:wrap;gap:10px;margin:0 0 8px;font-size:18px;color:#271d2b}
+.vantis-evidence h3 small{font-size:11px;font-weight:650;color:#865873}
+.vantis-evidence .muted{font-size:12px;line-height:1.5;margin:0 0 12px}
+.vantis-evidence-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px}
+.vantis-evidence-item{margin:0;padding:8px;border:1px solid #eadddf;background:#fff;border-radius:14px;box-shadow:0 4px 15px #270b1710;overflow:hidden}
+.vantis-evidence-item a{display:block;outline-offset:3px}
+.vantis-evidence-item img,.vantis-evidence-missing{width:100%;height:140px;object-fit:cover;border-radius:9px;background:#f5eff2;display:block}
+.vantis-evidence-missing{display:grid;place-items:center;color:#766676;font-size:12px}
+.vantis-evidence-item figcaption{font-size:11px;line-height:1.5;color:#4a3241;margin-top:7px;overflow-wrap:anywhere}
+.vantis-evidence-item figcaption span{color:#79727d}
+.scanner-evidence-note{display:block;padding:5px 10px;font-size:11px;line-height:1.4;color:inherit;opacity:.75}
+.cr-photo-status{font-size:11px!important;line-height:1.4;min-height:0!important;color:#ffdcdb!important;margin:3px 0!important}
+@media (max-width:480px){.vantis-evidence-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.vantis-evidence-item img,.vantis-evidence-missing{height:128px}}
