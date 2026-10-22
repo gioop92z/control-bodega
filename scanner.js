@@ -56,6 +56,24 @@ export async function startScanner(cb, label = 'código', options = {}) {
       hits = 0;
     }
   }
+  function snapshot() {
+    // Copiar el fotograma ANTES de cerrar el lector: no se invoca getUserMedia
+    // de nuevo, no se interrumpe el flujo y no se toman imágenes en segundo plano.
+    try {
+      const video=[...document.querySelectorAll('#scannerViewport video')].reverse()
+        .find(node=>node.videoWidth>0&&node.videoHeight>0&&node.readyState>=2);
+      if(!video)return Promise.resolve(null);
+      const sourceWidth=video.videoWidth,sourceHeight=video.videoHeight;
+      const cropWidth=sourceWidth*.84,cropHeight=sourceHeight*.84;
+      const width=Math.min(640,Math.round(cropWidth));
+      const canvas=document.createElement('canvas');
+      canvas.width=width;canvas.height=Math.max(1,Math.round(width*cropHeight/cropWidth));
+      canvas.getContext('2d',{alpha:false}).drawImage(video,
+        (sourceWidth-cropWidth)/2,(sourceHeight-cropHeight)/2,cropWidth,cropHeight,
+        0,0,canvas.width,canvas.height);
+      return new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.52));
+    }catch(error){console.warn('VANTIS: fotograma no disponible',error);return Promise.resolve(null);}
+  }
   function accept(raw, repeat = false) {
     if (!stillActive()) return;
     const code = String(raw ?? '').trim();
@@ -71,10 +89,11 @@ export async function startScanner(cb, label = 'código', options = {}) {
       if (++hits < 2) return;
     }
     last = code;
+    const frame = options.captureEvidence ? snapshot() : null;
     if (!options.continuous) {
       stopScanner();
       try {
-        Promise.resolve(cb(code)).catch(error => {
+        Promise.resolve(cb(code,frame)).catch(error => {
           console.warn('VANTIS scan handler:',error);
         });
       } catch(error) {
@@ -88,7 +107,7 @@ export async function startScanner(cb, label = 'código', options = {}) {
     if (repeatButton) repeatButton.disabled = false;
     status((options.acknowledgedOnly ? 'Lectura detectada · ' : '✓ ' + accepted + ' lectura(s) · ') + code);
     try {
-      Promise.resolve(cb(code)).then(message => {
+      Promise.resolve(cb(code,frame)).then(message => {
         if (message) status(message);
       }).catch(error => {
         status(error?.message || 'No se pudo agregar el código.');
@@ -106,6 +125,7 @@ export async function startScanner(cb, label = 'código', options = {}) {
         '<video id="scanVideo" autoplay muted playsinline></video><div class="guide"></div></div>' +
       '<div class="scanner-note">' +
         '<div id="scannerStatus" role="status" aria-live="polite">Enfoca el QR o el código de barras completo.</div>' +
+        (options.captureEvidence?'<small class="scanner-evidence-note">Al registrar mercancía con esta cámara se conserva un fotograma del código como evidencia interna, sin confirmaciones adicionales.</small>':'') +
         (options.continuous && options.allowRepeat !== false ? '<button id="scanRepeat" type="button" class="btn-light" style="margin:10px 0" disabled>+1 del mismo código</button>' : '') +
         '<button id="scanSwitchEngine" type="button" class="btn-light" style="margin:8px">Otro lector</button>' +
       '</div></div>');
