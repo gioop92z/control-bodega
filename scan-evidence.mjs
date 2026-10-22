@@ -112,6 +112,15 @@ export class ScanEvidence {
   }
   dispose(){globalThis.removeEventListener?.('online',this.online);}
 }
+export async function listLocalSkuEvidence(departmentId,userId,sku,{limit=6}={}) {
+  const rows=(await all()).filter(row=>row.departmentId===departmentId&&row.userId===userId&&row.sku===sku)
+    .sort((a,b)=>String(b.capturedAt).localeCompare(String(a.capturedAt))).slice(0,limit);
+  return rows.map(row=>({
+    evento_id:row.id,capturada_en:row.capturedAt,codigo_leido:row.code,
+    url:URL.createObjectURL(row.blob),local:true
+  }));
+}
+
 export async function listSkuEvidence(sb,departmentId,sku,{limit=6}={}) {
   const response=await sb.from('vantis_evidencias_escaneo')
     .select('evento_id,capturada_en,objeto_path,codigo_leido')
