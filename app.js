@@ -7,7 +7,7 @@ import { mountFastExit } from './exit-queue-ui.mjs?v=3.8.0';
 import { ReceiveQueue } from './receive-queue.mjs?v=3.9.5';
 import { mountFastReceive } from './receive-queue-ui.mjs?v=3.9.5';
 import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?v=3.10.1';
-import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=3.10.1';
+import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=3.10.2';
 
 const sb = createClient(
   'https://dkqovohxkxlcccvagpij.supabase.co',
@@ -19,7 +19,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '3.10.1';
+const APP_VERSION = '3.10.2';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 const HISTORY_RESTART_CUTOFF = '2026-10-15T22:15:00.000Z';
 
@@ -54,6 +54,7 @@ let receiveQueue = null;
 let receiveCleanup = null;
 let continuousQueue = null;
 let continuousCleanup = null;
+let floatingReceiveElement=null,floatingReceiveFocus=null,floatingReceiveKeydown=null;
 
 function receiveBusy() {
   if(continuousQueue && !continuousQueue.disposed && (continuousQueue.busy || continuousQueue.pending || continuousQueue.state.pendingSwitch)) { toast('La recepción conserva lecturas pendientes. Revisa su estado antes de salir.','error'); return true; }
@@ -284,15 +285,17 @@ async function homeView() {
       <div class="live-badge"><i></i> En línea</div>
     </section>
     <section class="action-grid">
-      <button class="action-card green" data-act="ENTRADA"><b>＋</b><strong>Recibir mercancía</strong><span>Escaneo continuo por marbete</span></button>
+      <button class="action-card green" data-act="ENTRADA"><b>＋</b><strong>Recibir mercancía</strong><span>Escanea y registra sin pasos extra</span></button>
       <button class="action-card red" data-act="SALIDA"><b>−</b><strong>Sacar de bodega</strong><span>Registrar lo que sale</span></button>
       <button class="action-card" data-go="search"><b>⌕</b><strong>Buscar producto</strong><span>UPC, SKU o ubicación</span></button>
       <button class="action-card" data-go="count"><b>✓</b><strong>Inventario físico</strong><span>Contar y detectar diferencias</span></button>
     </section>
+    <button id="quickReceive" class="vr-floating-launch" type="button" aria-label="Abrir escaneo de mercancía"><span class="vr-launch-glyph" aria-hidden="true">▦</span><span>Escanear</span></button>
     <section class="card"><div class="section-head"><h3>Hoy</h3><span class="tiny">Actualización en tiempo real</span></div><div id="summary" class="kpis"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div></section>
     ${S.admin ? `<section class="card"><h3>Estado de la operación</h3><div id="checklist"><div class="skeleton"></div></div></section><section class="quick-row"><button data-go="import" class="secondary">Importar Excel / CSV</button><button data-go="history" class="secondary">Ver historial</button></section>` : `<section class="tip-card"><b>Tip rápido</b><span>En cada entrada o salida escribe tu nombre en “Nota”. Así queda claro quién realizó el movimiento.</span></section>`}
   `);
-  document.querySelectorAll('[data-act]').forEach(b => b.onclick = () => { S.moveType=b.dataset.act; S.view='move'; render(); });
+  document.querySelectorAll('[data-act]').forEach(b => b.onclick = () => { S.moveType=b.dataset.act; if(S.moveType==='ENTRADA'){fastReceiveView();return;} S.view='move'; render(); });
+  $('quickReceive').onclick=()=>{S.moveType='ENTRADA';fastReceiveView();};
   document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { S.view=b.dataset.go; render(); });
 
   const [sum,loc] = await Promise.all([
@@ -343,34 +346,65 @@ function fastExitView() {
 }
 
 
-function fastReceiveView() {
-  shell('<section class="page-title"><button id="backHome" type="button" class="ghost">← Inicio</button></section><div id="continuousReceiveRoot"></div>');
+
+function floatingReceiveFrame(){
+  if(floatingReceiveElement?.isConnected)return floatingReceiveElement;
+  floatingReceiveFocus=document.activeElement;
+  const layer=document.createElement('div');
+  layer.id='vantisReceiveFloat';layer.className='vr-receive-float';
+  layer.innerHTML=`<div class="vr-float-backdrop" aria-hidden="true"></div><section class="vr-float-sheet" role="dialog" aria-modal="true" aria-label="Recibir mercancía">
+    <header class="vr-float-header"><div class="vr-float-identity"><span class="vr-float-mark" aria-hidden="true">▦</span><div><strong>Recibir mercancía</strong><span>Escaneo directo · ${esc(deptName())}</span></div></div><button id="vrFloatClose" class="vr-close" type="button" aria-label="Cerrar ventana de escaneo">✕</button></header>
+    <div id="vrFloatBody" class="vr-float-body"></div></section>`;
+  document.body.appendChild(layer);document.body.classList.add('vr-receive-open');floatingReceiveElement=layer;
+  layer.querySelector('#vrFloatClose').addEventListener('click',closeFloatingReceive);
+  layer.querySelector('.vr-float-backdrop').addEventListener('click',closeFloatingReceive);
+  floatingReceiveKeydown=event=>{if(event.key!=='Escape'||layer.querySelector('.cr-overlay:not([hidden])'))return;event.preventDefault();closeFloatingReceive();};
+  document.addEventListener('keydown',floatingReceiveKeydown);
+  return layer;
+}
+function closeFloatingReceive(){
+  if(!floatingReceiveElement||receiveBusy())return;
+  continuousCleanup?.();continuousCleanup=null;continuousQueue=null;
+  receiveCleanup?.();receiveCleanup=null;
+  document.removeEventListener('keydown',floatingReceiveKeydown);floatingReceiveKeydown=null;
+  floatingReceiveElement.remove();floatingReceiveElement=null;
+  document.body.classList.remove('vr-receive-open');
+  if(floatingReceiveFocus?.isConnected)floatingReceiveFocus.focus();
+  floatingReceiveFocus=null;
+}
+function fastReceiveView(){
+  // El escaneo funciona en la pantalla Inicio, sin navegar a otro módulo.
+  if(S.view!=='home'){S.view='home';homeView();}
+  const layer=floatingReceiveFrame(),panel=layer.querySelector('#vrFloatBody');
+  receiveCleanup?.();receiveCleanup=null;
+  continuousCleanup?.();continuousCleanup=null;
+  panel.innerHTML='<div id="continuousReceiveRoot"></div>';
   const badge=(sessionStorage.getItem('nova.employeeNumber')||'').trim();
   const actor=badge?(S.admin?'Jefe ':'Empleado ')+badge:'';
   const deptId=S.deptId;
   const current=new ContinuousReceive({api:new SupabaseReceiptApi(sb,deptId),storage:localStorage,userId:S.user.id,deptId,actor});
   continuousQueue=current;
-  $('backHome').onclick=()=>{if(receiveBusy())return;S.view='home';render();};
-  continuousCleanup=mountContinuousReceive($('continuousReceiveRoot'),current,{
-    startScanner,stopScanner,isCurrent:()=>S.view==='move'&&S.moveType==='ENTRADA'&&S.deptId===deptId&&continuousQueue===current,
+  continuousCleanup=mountContinuousReceive(panel.querySelector('#continuousReceiveRoot'),current,{
+    startScanner,stopScanner,
+    isCurrent:()=>S.view==='home'&&S.deptId===deptId&&continuousQueue===current&&floatingReceiveElement===layer,
     onLegacy:()=>{if(receiveBusy())return;legacyReceiveView();},
-    onUnavailable:()=>legacyReceiveView('Recepción continua pendiente de activar en el servidor. Tu recepción por lote sigue disponible.')
+    onUnavailable:()=>{if(floatingReceiveElement===layer)legacyReceiveView('Escaneo directo no disponible en el servidor. Usa el registro por lote mientras se activa.');}
   });
 }
-
-function legacyReceiveView(notice='') {
-  const badge = (sessionStorage.getItem('nova.employeeNumber') || '').trim();
-  const actor = badge ? (S.admin?'Jefe ':'Empleado ') + badge : '';
-  if (!receiveQueue || receiveQueue.deptId!==S.deptId || receiveQueue.userId!==S.user.id || receiveQueue.actor!==actor) {
-    receiveQueue = new ReceiveQueue({sb,deptId:S.deptId,userId:S.user.id,actor,storage:localStorage,uuid:()=>crypto.randomUUID()});
-  }
+function legacyReceiveView(notice=''){
+  const layer=floatingReceiveFrame(),panel=layer.querySelector('#vrFloatBody');
+  continuousCleanup?.();continuousCleanup=null;continuousQueue=null;
+  receiveCleanup?.();receiveCleanup=null;
+  const badge=(sessionStorage.getItem('nova.employeeNumber')||'').trim();
+  const actor=badge?(S.admin?'Jefe ':'Empleado ')+badge:'';
+  if(!receiveQueue||receiveQueue.deptId!==S.deptId||receiveQueue.userId!==S.user.id||receiveQueue.actor!==actor)
+    receiveQueue=new ReceiveQueue({sb,deptId:S.deptId,userId:S.user.id,actor,storage:localStorage,uuid:()=>crypto.randomUUID()});
   receiveQueue.resume();
-  shell('<section class="page-title"><button id="backHome" type="button" class="ghost">← Inicio</button><h1>Recibir mercancía</h1><p class="muted">Escanea piezas y confirma el lote.</p></section>'+(notice?'<div class="notice">'+esc(notice)+' <button id="tryContinuous" type="button" class="ghost">Comprobar activación</button></div>':'')+'<div id="fastReceiveRoot"></div>');
-  $('tryContinuous')?.addEventListener('click',fastReceiveView);
-  $('backHome').onclick = () => {if(receiveBusy())return;S.view='home';render();};
+  panel.innerHTML=(notice?'<p class="vr-compat-note" role="status">'+esc(notice)+'</p>':'')+'<div id="fastReceiveRoot"></div>';
   const deptId=S.deptId,current=receiveQueue;
-  receiveCleanup=mountFastReceive($('fastReceiveRoot'),current,{
-    startScanner,stopScanner,isCurrent:()=>S.view==='move'&&S.moveType==='ENTRADA'&&S.deptId===deptId&&receiveQueue===current
+  receiveCleanup=mountFastReceive(panel.querySelector('#fastReceiveRoot'),current,{
+    startScanner,stopScanner,
+    isCurrent:()=>S.view==='home'&&S.deptId===deptId&&receiveQueue===current&&floatingReceiveElement===layer
   });
 }
 

@@ -7,17 +7,18 @@ const short = code => String(code || '').replace(/^ZAP-/, '');
 const labels = {queued:'Pendiente de sincronización',sending:'Guardando…',uncertain:'Por confirmar · reintento seguro',confirmed:'Confirmado en servidor',failed:'No registrado'};
 
 export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCurrent=()=>true,onLegacy=()=>{},onUnavailable=()=>{}}) {
-  let destroyed=false,frame=null,camera=false,opening=false,audio=null,lastSignal='',notice='',feedbackTimer=null,wake=null;
+  let destroyed=false,frame=null,camera=false,opening=false,audio=null,lastSignal='',notice='',feedbackTimer=null,toastTimer=null,wake=null;
   const $=id=>root.querySelector('#'+id);
   const current=()=>!destroyed && root.isConnected && isCurrent();
   const ready=()=>current() && queue.canScan;
-  root.innerHTML=`<section class="continuous-receive" aria-label="Recepción masiva">
-    <div class="cr-heading"><div><span class="cr-brand">VANTIS <i>|</i> RECEPCIÓN MASIVA</span><span class="cr-department">${esc(queue.actor)}</span></div><button id="crFinish" type="button" class="ghost">Finalizar recepción</button></div>
+  root.innerHTML=`<section class="continuous-receive" aria-label="Recibir mercancía">
+    <div class="cr-heading"><div><span class="cr-brand">VANTIS <i>|</i> ESCANEO ACTIVO</span><span class="cr-department">${esc(queue.actor)}</span></div><button id="crFinish" type="button" class="ghost">Finalizar recepción</button></div>
     <section class="cr-stage"><span id="crLocationLabel" class="cr-kicker">MARBETE ACTIVO</span><strong id="crLocation" class="cr-location">—</strong><h1 id="crInstruction">ESCANEA UN MARBETE PARA COMENZAR</h1><p id="crLocationState"></p>
       <div class="cr-counters"><div><strong id="crVisitCount">0</strong><span>PIEZAS EN ESTE MARBETE</span></div><div><strong id="crTotalCount">0</strong><span>TOTAL CONFIRMADO EN SESIÓN</span></div></div>
       <form id="crScanForm" autocomplete="off"><label class="sr-only" for="crScan">Lectura del escáner portátil, marbete, SKU o UPC</label><input id="crScan" inputmode="none" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Escanea marbete, SKU o UPC" aria-describedby="crSync"><button id="crKeyboard" class="ghost" type="button" aria-label="Escribir un código">⌨</button></form>
       <div class="cr-indicators"><span id="crDevice">Captura preparada para lector portátil</span><span id="crSync" role="status" aria-live="polite">Comprobando servidor…</span><button id="crCameraButton" type="button" class="secondary">Cámara</button></div><div id="crCamera"></div>
     </section>
+    <div id="crFeedback" class="cr-feedback" role="status" aria-live="polite" hidden></div>
     <div id="crError" class="cr-error" role="alert" hidden></div><div id="crNotice" class="cr-notice" role="status" aria-live="polite"></div>
     <section id="crLast" class="cr-last" aria-live="polite"><span>ÚLTIMA LECTURA</span><strong>Listo para comenzar</strong><small>El contador aumenta al recibir confirmación real del servidor.</small></section>
     <section class="cr-history"><div class="cr-section-title"><h2>Últimos registros</h2><button id="crUndo" type="button" class="ghost">Deshacer último registro</button></div><div id="crRows"></div></section>
@@ -35,12 +36,18 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     try {const oscillator=audio.createOscillator(),gain=audio.createGain();oscillator.connect(gain);gain.connect(audio.destination);
       oscillator.frequency.value=ok?1046:220;gain.gain.value=.045;oscillator.start();gain.gain.exponentialRampToValueAtTime(.001,audio.currentTime+.10);oscillator.stop(audio.currentTime+.12);}catch{}
   }
-  function fail(error) {notice=error?.message||String(error);beep(false);render();}
+  function feedback(message,tone='success') {
+    const node=$('crFeedback');if(!node||!current())return;
+    clearTimeout(toastTimer);node.textContent=message;node.dataset.tone=tone;node.hidden=false;
+    toastTimer=setTimeout(()=>{node.hidden=true;},2100);
+  }
+  function fail(error) {notice=error?.message||String(error);beep(false);feedback(notice,'error');render();}
   function scan(code) {
     notice='';
     try {
       const result=queue.scan(code);
-      if(result.type==='switch') queueMicrotask(()=>$('crConfirmSwitch')?.focus());
+      if(result.type==='switch'){feedback('Confirma el cambio de marbete','info');queueMicrotask(()=>$('crConfirmSwitch')?.focus());}
+      else if(result.type!=='piece')feedback('Validando marbete…','info');
       return result.type==='piece'?'Lectura protegida · pendiente de confirmación':result.type==='switch'?'Confirma el cambio de marbete':'Marbete en validación';
     } catch(error) {fail(error);throw error;}
     finally {render();}
@@ -118,16 +125,16 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
   window.addEventListener('beforeunload',beforeUnload);window.addEventListener('online',online);window.addEventListener('offline',offline);
   document.addEventListener('visibilitychange',visible);root.addEventListener('pointerdown',gesture,{once:true});
   queue.onChange=scheduleRender;
-  queue.onFailure=row=>{notice=row.error;beep(false);scheduleRender();};
+  queue.onFailure=row=>{notice=row.error;beep(false);feedback(row.error||'No se pudo confirmar esta pieza','error');scheduleRender();};
   queue.onConfirmed=()=>{
-    beep(true);root.classList.add('cr-success');clearTimeout(feedbackTimer);feedbackTimer=setTimeout(()=>root.classList.remove('cr-success'),160);scheduleRender();
+    beep(true);feedback('✓ Pieza registrada en servidor');root.classList.add('cr-success');clearTimeout(feedbackTimer);feedbackTimer=setTimeout(()=>root.classList.remove('cr-success'),160);scheduleRender();
   };
   render();void queue.start().then(()=>{
     if(current()&&queue.backend==='missing'&&!queue.rows.length){onUnavailable();return;}
     render();input.focus();
   });
   return ()=>{
-    destroyed=true;if(frame!==null)cancelAnimationFrame(frame);clearTimeout(feedbackTimer);input.destroy();stopScanner();void queue.dispose();
+    destroyed=true;if(frame!==null)cancelAnimationFrame(frame);clearTimeout(feedbackTimer);clearTimeout(toastTimer);input.destroy();stopScanner();void queue.dispose();
     window.removeEventListener('beforeunload',beforeUnload);window.removeEventListener('online',online);window.removeEventListener('offline',offline);
     document.removeEventListener('visibilitychange',visible);void wake?.release();void audio?.close();queue.onConfirmed=()=>{};queue.onFailure=()=>{};
   };
