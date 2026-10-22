@@ -1,47 +1,41 @@
-# VANTIS 4.0.1 — Implementación incremental
+# VANTIS — estado real de migración (22 de octubre de 2026)
 
-Fecha: 22 de octubre de 2026. Repositorio: gioop92z/control-bodega.
+## Destinos
+- Repositorio público: gioop92z/control-bodega (rama main).
+- Supabase NUEVO: `uphnzyembyrouvqohwys` (Vantis).
+- Supabase ANTERIOR usado aún por la app: `dkqovohxkxlcccvagpij`.
+- Modo predeterminado de la app: BASE ANTERIOR; el inventario operativo NO se ha cambiado.
+- Piloto explícito: `https://gioop92z.github.io/control-bodega/?backend=nuevo`.
+- Integración GitHub→Supabase en el panel: **aún necesita vincular el repositorio** (no basta autorizar la GitHub App).
 
-## Alcance EXCLUIDO expresamente
-- No implementar reposición inteligente de bodega a piso.
-- No implementar integraciones con ventas, pedidos o catálogos externos.
-- No implementar asistente de IA VANTIS.
+## Cambios efectivamente aplicados al servidor nuevo
+1. Esquema de 10 tablas públicas: departamentos, productos, marbetes, producto_marbetes, movimientos, conteos, conteo_lineas, operadores v4, incidencias v4 y traslados v4.
+2. RLS activo en todas las tablas públicas. RPC públicas como SECURITY INVOKER; operaciones privilegiadas en `vantis_core`, sin exposición de claves privadas al frontend.
+3. Movimiento de stock idempotente por UUID, histórico, control de saldo y marbete. Alta de códigos provisionales (stock inicial 0), incrementada por cada entrada confirmada.
+4. Importar catálogo por SKU sin reemplazar stock existente; ajuste físico separado con auditoría; resumen de departamento y cierre idempotente de conteo.
+5. Traslado atómico entre marbetes que no modifica stock general; creación/consulta de incidencias con acceso por departamento.
+6. Recepción continua habilitada: preflight, marbete, lecturas identificadas, reversas y ledger privado. Corregida doble suma de cantidad por ubicación.
+7. Optimizaciones: índices de llaves foráneas y políticas de autenticación.
+8. Se revocó la ejecución pública de `public.rls_auto_enable()` tras alerta de seguridad.
 
-## Funciones integradas al código del frontend
-- **Centro operativo:** acceso desde Inicio, métricas confirmadas desde consultas al servidor, conteos recientes y alertas de artículos agotados/SKU provisionales; no se escriben inventarios desde ese panel.
-- **Localizador:** búsqueda exacta por SKU/UPC, marbetes del departamento, cantidades conocidas por ubicación, avisos explícitos si existe cantidad sin determinar o diferencia; no ajusta stock solo.
-- **Preparación de apoyos:** captura manual o lector conectado como teclado, acumulación de lecturas, borradores conservados por departamento/actor en este navegador, enlace con la fila existente de Salidas para revisión y confirmación posterior; NO hay reserva de stock interdispositivo.
-- **Inventario grande:** paginación incremental de 100 productos por página en vez de mostrar solo los primeros 100.
-- **Traslados:** formulario de captura y llamada protegida al RPC transaccional `vantis_trasladar_v4` con identificador de idempotencia; el cliente no simula el guardado si el RPC no existe.
-- **Incidencias:** formulario y consulta del historial, reintentos con folio UUID; no modifica existencias. No confirma registro si Supabase no responde.
-- **Conteos:** consulta de estados de conteos existentes (módulo previo de conteo físico permanece intacto).
+## Evidencia y alcance de pruebas
+- Verificado mediante conexión Supabase: 10 tablas, todas con RLS, migraciones registradas, funciones presentes y proyecto saludable.
+- El asesor de seguridad marca únicamente una advertencia informativa por la tabla privada `vantis_recepcion.lecturas`, protegida sin políticas y sin acceso DML de los roles públicos. Es intencional.
+- El esquema inicial tiene **0 departamentos, 0 productos, 0 existencias, 0 usuarios en Auth**; no es una copia de la base anterior.
+- Las RPC no han podido probarse con una sesión Auth real en este nuevo proyecto (no existen usuarios); faltan pruebas con dos operadores y escáner físico/iPhone.
+- Se actualizaron las pruebas unitarias del frontend por nueva configuración; es necesario comprobar el último pipeline de GitHub Pages.
 
-## Infraestructura lista, pero NO activada
-`supabase/migrations/20261022000000_vantis_operaciones_v4.sql` contiene tablas y políticas RLS para operadores, incidencias, historial de traslados y RPC atómico de traslados. **No se ha aplicado al servidor**; el conector Supabase no devuelve proyectos y rechaza acceso al proyecto cuyo identificador figura en la app.
+## BLOQUEADORES DEL CAMBIO DEFINITIVO
+1. La conexión actual a Supabase solo autoriza el proyecto nuevo. Acceso al antiguo `dkqovohxkxlcccvagpij` devuelve *sin permisos*. Sin esa conexión o exportación de base anterior NO se pueden copiar ni cotejar departamentos, productos, ubicaciones, stocks, movimientos y conteos reales.
+2. Crear o migrar cuentas vía Supabase Auth y asignar permisos. No generar filas a mano en `auth.users`; no reutilizar PIN embebidos públicamente para un sistema empresarial.
+3. Vincular `gioop92z/control-bodega` en Supabase > Integrations > GitHub > Add connection. Esa operación del panel no se ha podido ejecutar con las herramientas actuales.
+4. Conciliar cantidades por SKU y ubicación, auditar filas, cuentas, saldos y lecturas pendientes. Hacer copia de seguridad verificable. Solo entonces cambiar el backend predeterminado y probar la app en varios dispositivos.
 
-Antes de desplegar:
-1. Conectar el proyecto Supabase correcto y verificar la identidad/propiedad.
-2. Hacer respaldo de esquema y existencias. Revisar esquema exacto, FK, tipos, políticas RLS, índices y roles actuales.
-3. Ejecutar la migración primero en entorno de pruebas con casos de permisos, concurrencia, saldo insuficiente, ubicación desconocida, repetición de solicitud y respuesta de red perdida.
-4. Confirmar expresamente que nunca cambia `productos.stock` en un traslado y que sí actualiza las dos cantidades localizadas y el historial en una transacción.
-5. Ejecutar avisos de seguridad de Supabase y revisar funciones privilegiadas. Rotar credenciales públicas compartidas y sustituir accesos 10/99 por identidad individual, respetando los flujos existentes.
-6. Hacer pruebas reales en iPhone, escáner HID, cámara, navegador de escritorio y al menos dos sesiones simultáneas. Validar GitHub Pages y el despliegue.
+## Fases funcionales
+- Seguridad/confiabilidad: base y políticas instaladas, migración de identidad individual pendiente.
+- Velocidad operativa: recepción continua y salidas rápidas en frontend; recepción del servidor nuevo preparada; ensayos reales pendientes.
+- Control/inteligencia: localizador, panel, apoyos, incidencias, conteos y traslados implementados parcialmente. Informes consolidados y reservas multiusuario pendientes.
+- Plataforma empresarial: paginación existente, estructura segura nueva; no están terminados multi-sesión, reportes por turno, offline multidispositivo, impresión industrial ni pruebas de carga certificadas.
+- No desarrollar reposición inteligente, integraciones con sistemas externos ni asistente IA: exclusiones expresas del usuario.
 
-## Funciones PENDIENTES, no declarar completadas
-- Migración de accesos verdaderamente individuales con servidor y permisos por área.
-- Traslados e incidencias operativos en producción (dependen de migración).
-- Reservas de existencias multiusuario y preparación de varios pedidos con asignación automática.
-- Recepción contrastada contra manifiesto/documento esperado.
-- Conteos cíclicos programados y reglas de seguimiento de diferencias.
-- Reportes empresariales por turno y supervisión consolidada multiusuario.
-- Impresión industrial de etiquetas/marbetes desde la app.
-- Pruebas de carga certificables de más de 100.000 lecturas y un flujo offline en varios dispositivos.
-- Mapa digital/RFID (solo si la operación lo justifica).
-
-## Evidencia de validación
-- Comprobación sintáctica de `app.js`, `operations-v4.mjs` y archivos existentes cargados desde GitHub.
-- Cinco comprobaciones puras de consolidación de preparaciones y conciliación de cantidades pasaron.
-- Pruebas automatizadas añadidas en `tests/ops-v4.test.mjs` y flujo de GitHub Actions en `.github/workflows/vantis-ops.yml`; su ejecución real no se pudo comprobar desde esta sesión.
-- No se pudo validar el servidor Supabase, el navegador iOS ni un despliegue GitHub Pages vivo.
-
-Esta entrega es una **mejora parcial** y no una certificación de funcionamiento de toda la plataforma.
+**NO afirmar migración completa ni operatividad 100% hasta que los cuatro bloqueadores se hayan resuelto.**
