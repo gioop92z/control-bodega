@@ -79,6 +79,7 @@ export class ContinuousReceive {
     this.journal = new ReceiptJournal(storage, [userId,deptId,encodeURIComponent(actor)].join('/'));
     this.mirror=new InventoryJournalMirror(this.journal.base);
     this.restoredFromBackup=false;
+    this.compacting=null;this.compactedThrough=0;
     this.cache = new Map(); this.timer = null; this.job = null; this.owned = false; this.disposed = false;
     this.storageError = ''; this.error = ''; this.backend = 'checking'; this.selecting = false; this.compatibility = false;
     this.release = null; this.nextSequence = 0;
@@ -130,8 +131,21 @@ export class ContinuousReceive {
     // a newer session. Construction never writes another tab's metadata.
     try {
       const saved=this.journal.readSession();
-      if(saved){this.state=saved;this.rows=this.journal.readRows(saved.id);}
-      else {
+      if(saved){
+        this.state=saved;
+        const localRows=this.journal.readRows(saved.id);
+        // Old confirmed rows may have been safely compacted out of localStorage.
+        // The copy in IndexedDB is read under the exclusive Web Lock.
+        let archived=[];
+        try{archived=await this.mirror.readRows(saved.id);}
+        catch(e){this.mirror.error=String(e?.message||e);}
+        if(Number(saved.compactedThrough||0)>0 && !archived.length)
+          throw Error('No se pudo recuperar la parte archivada del diario. Conserva los datos del navegador.');
+        const merged=new Map(archived.map(row=>[row.id,row]));
+        for(const row of localRows)merged.set(row.id,row); // freshest local status always wins
+        this.rows=[...merged.values()].sort((a,b)=>a.sequence-b.sequence);
+        this.compactedThrough=Number(saved.compactedThrough||0);
+      } else {
         // Restore only when the synchronous session pointer is absent; never
         // combine two divergent journals or invent confirmations.
         let backup=null;
@@ -277,12 +291,33 @@ export class ContinuousReceive {
     try { await this.job; }
     finally {
       this.job=null;this.changed();
+      await this.compactJournal();
       const actionable=this.rows.filter(r=>['queued','uncertain'].includes(r.status)&&(r.location||r.unlocatedApproved));
       if(actionable.length&&!this.disposed){
         const retry=Math.min(...actionable.map(r=>Math.max(0,(r.retryAt||0)-this.now())));
         this.schedule(Math.max(1000,Math.min(30000,retry||1000)));
       }
     }
+  }
+  async compactJournal(){
+    if(this.compacting)return this.compacting;
+    if(this.rows.length<420||!this.mirror||this.mirror.error||typeof indexedDB==='undefined')return;
+    this.compacting=(async()=>{
+      const threshold=Math.max(0,this.rows.length-240);
+      const targets=this.rows.slice(0,threshold).filter(r=>r.sequence>this.compactedThrough&&r.status==='confirmed');
+      if(targets.length<60)return;
+      await this.mirror.flush();
+      if(this.mirror.error)return;
+      // Persist an archive checkpoint before trimming local copies.
+      const maxSeq=Math.max(...targets.map(r=>r.sequence));
+      this.state.compactedThrough=maxSeq;
+      if(!this.saveSession())return;
+      for(const row of targets)try{
+        this.storage.removeItem(this.journal.base+'/row/'+this.state.id+'/'+row.id);
+      }catch(error){this.mirror.error=String(error?.message||error);break;}
+      this.compactedThrough=maxSeq;
+    })();
+    try{await this.compacting;}finally{this.compacting=null;}
   }
   async process() {
     if (this.state.candidate) { await this.activateCandidate(); if (this.state.candidate) return; }
