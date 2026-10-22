@@ -22,7 +22,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '4.0.3';
+const APP_VERSION = '4.0.4';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 const HISTORY_RESTART_CUTOFF = '2026-10-15T22:15:00.000Z';
 
@@ -66,7 +66,8 @@ let photoEvidenceService=null;
 function cameraEvidenceService(){
   if(photoEvidenceService?.departmentId===S.deptId&&photoEvidenceService?.userId===S.user?.id)return photoEvidenceService;
   photoEvidenceService?.dispose();
-  photoEvidenceService=new ScanEvidence({sb,departmentId:S.deptId,userId:S.user.id,onIssue:message=>{
+  photoEvidenceService=new ScanEvidence({sb,departmentId:S.deptId,userId:S.user.id,
+    cloudEnabled:vantisBackendConfig.mode!=='LEGACY_PRODUCCION',onIssue:message=>{
     const status=document.getElementById('crPhotoStatus');
     if(status)status.textContent=message;
   }});
@@ -642,7 +643,7 @@ async function doSearch(code) {
       S.searchType='product'; S.searchResult=p; S.locations=locs; S.evidenceStatus='loading';
       // La búsqueda de stock es independiente de la descarga de imágenes.
       void Promise.allSettled([
-        listSkuEvidence(sb,deptId,p.sku),
+        vantisBackendConfig.mode==='LEGACY_PRODUCCION'?Promise.resolve([]):listSkuEvidence(sb,deptId,p.sku),
         listLocalSkuEvidence(deptId,S.user.id,p.sku)
       ]).then(([remote,local])=>{
         if(!current()){
