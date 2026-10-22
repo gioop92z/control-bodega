@@ -13,12 +13,13 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
   const ready=()=>current() && queue.canScan;
   root.innerHTML=`<section class="continuous-receive" aria-label="Recibir mercancía">
     <div class="cr-heading"><div><span class="cr-brand">VANTIS <i>|</i> ESCANEO ACTIVO</span><span class="cr-department">${esc(queue.actor)}</span></div><button id="crFinish" type="button" class="ghost">Finalizar recepción</button></div>
-    <section class="cr-stage"><span id="crLocationLabel" class="cr-kicker">MARBETE ACTIVO</span><strong id="crLocation" class="cr-location">—</strong><h1 id="crInstruction">ESCANEA UN MARBETE PARA COMENZAR</h1><p id="crLocationState"></p>
+    <section class="cr-stage"><span id="crLocationLabel" class="cr-kicker">MARBETE ACTIVO</span><strong id="crLocation" class="cr-location">—</strong><h1 id="crInstruction">ESCANEA UN SKU O UN MARBETE</h1><p id="crLocationState"></p>
       <div class="cr-counters"><div><strong id="crVisitCount">0</strong><span>PIEZAS EN ESTE MARBETE</span></div><div><strong id="crTotalCount">0</strong><span>TOTAL CONFIRMADO EN SESIÓN</span></div></div>
       <form id="crScanForm" autocomplete="off"><label class="sr-only" for="crScan">Lectura del escáner portátil, marbete, SKU o UPC</label><input id="crScan" inputmode="none" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Escanea marbete, SKU o UPC" aria-describedby="crSync"><button id="crKeyboard" class="ghost" type="button" aria-label="Escribir un código">⌨</button></form>
       <div class="cr-indicators"><span id="crDevice">Captura preparada para lector portátil</span><span id="crSync" role="status" aria-live="polite">Comprobando servidor…</span><button id="crCameraButton" type="button" class="secondary">Cámara</button></div><div id="crCamera"></div>
     </section>
     <div id="crFeedback" class="cr-feedback" role="status" aria-live="polite" hidden></div>
+    <div id="crPendingLocation" class="cr-pending-location" hidden><div><b id="crPendingLocationCount">0 piezas esperando ubicación</b><small>Escanea un marbete y se vincularán automáticamente, o guárdalas sin ubicación.</small></div><button id="crSaveWithoutLocation" type="button" class="secondary">Registrar sin marbete</button></div>
     <div id="crError" class="cr-error" role="alert" hidden></div><div id="crNotice" class="cr-notice" role="status" aria-live="polite"></div>
     <section id="crLast" class="cr-last" aria-live="polite"><span>ÚLTIMA LECTURA</span><strong>Listo para comenzar</strong><small>El contador aumenta al recibir confirmación real del servidor.</small></section>
     <section class="cr-history"><div class="cr-section-title"><h2>Últimos registros</h2><button id="crUndo" type="button" class="ghost">Deshacer último registro</button></div><div id="crRows"></div></section>
@@ -48,6 +49,7 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
       const result=queue.scan(code);
       if(result.type==='switch'){feedback('Confirma el cambio de marbete','info');queueMicrotask(()=>$('crConfirmSwitch')?.focus());}
       else if(result.type!=='piece')feedback('Validando marbete…','info');
+      if(result.type==='piece'&&!queue.state.active&&!queue.state.candidate)feedback('✓ SKU conservado. Escanea un marbete o registra sin ubicación.','info');
       return result.type==='piece'?'Lectura protegida · pendiente de confirmación':result.type==='switch'?'Confirma el cambio de marbete':'Marbete en validación';
     } catch(error) {fail(error);throw error;}
     finally {render();}
@@ -57,13 +59,16 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
   function render() {
     if(!current())return;
     const report=queue.report(),active=queue.state.candidate||queue.state.active,pending=Boolean(queue.state.candidate);
-    $('crLocationLabel').textContent=pending?'MARBETE POR VALIDAR':'MARBETE ACTIVO';
+    $('crLocationLabel').textContent=pending?'MARBETE POR VALIDAR':active?'MARBETE ACTIVO':'UBICACIÓN OPCIONAL';
     $('crLocation').textContent=active?short(active.code):'—';
-    $('crInstruction').textContent=active?'ESCANEA LA SIGUIENTE PIEZA':'ESCANEA UN MARBETE PARA COMENZAR';
+    $('crInstruction').textContent=active?'ESCANEA LA SIGUIENTE PIEZA':'ESCANEA SKU O MARBETE PARA COMENZAR';
     $('crLocationState').textContent=queue.compatibility
       ? 'Modo compatible: guardado automático con verificación del historial. Una lectura incierta nunca se reenvía sin comprobación.'
-      : pending?'Las lecturas quedarán pendientes hasta validar esta ubicación.':active?'Cada lectura registra una unidad en esta ubicación.':'';
+      : pending?'Las lecturas quedarán pendientes hasta validar esta ubicación.':active?'Cada lectura registra una unidad en esta ubicación.':'Empieza por el SKU o el cajón. Si el SKU va primero, se conserva hasta asignarle ubicación o registrarlo sin marbete.';
     $('crVisitCount').textContent=num(report.visitPieces);$('crTotalCount').textContent=num(report.totalPieces);
+    $('crPendingLocation').hidden=!report.awaitingLocation||Boolean(active);
+    $('crPendingLocationCount').textContent=num(report.awaitingLocation)+' pieza'+(report.awaitingLocation===1?'':'s')+' esperando ubicación';
+    $('crSaveWithoutLocation').disabled=!ready()||!report.awaitingLocation;
     $('crScan').disabled=!ready();
     $('crDevice').textContent=camera?'Cámara activa · QR y barras':opening?'Abriendo cámara…':lastSignal?'Lector portátil · última señal '+lastSignal:'Captura preparada para lector portátil';
     $('crCameraButton').textContent=camera?'Cerrar cámara':'Cámara';$('crCameraButton').disabled=opening||(!ready()&&!camera);
@@ -72,9 +77,9 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     $('crError').hidden=!(queue.error||queue.storageError);$('crError').textContent=queue.storageError||queue.error;
     $('crNotice').textContent=notice;
     const last=queue.rows.at(-1);
-    if(last)$('crLast').innerHTML='<span>ÚLTIMA LECTURA '+(last.kind==='undo'?'· COMPENSACIÓN':'')+'</span><strong>'+esc(last.product?.descripcion||last.code)+'</strong><small>SKU '+esc(last.product?.sku||last.code)+' · '+esc(short(last.location))+'</small>'+stamp(last)+(last.error?'<small>'+esc(last.error)+'</small>':'');
-    $('crRows').innerHTML=queue.rows.length?[...queue.rows].reverse().slice(0,8).map(row=>'<article class="cr-row"><div><b>'+esc(row.product?.descripcion||row.code)+'</b><small>'+esc(row.product?.sku||row.code)+' · '+esc(short(row.location))+(row.kind==='undo'?' · Deshacer':'')+'</small>'+(row.error?'<small class="txt-red">'+esc(row.error)+'</small>':'')+'</div><div><strong>'+(row.kind==='undo'?'−1':'+1')+'</strong>'+stamp(row)+'</div></article>').join(''):'<p class="muted">Aquí aparecerán las piezas escaneadas.</p>';
-    $('crUndo').disabled=queue.compatibility||!ready()||!queue.rows.some(row=>row.kind==='receive'&&row.status==='confirmed'&&!queue.rows.some(other=>other.reverses===row.id&&other.status!=='failed'));
+    if(last)$('crLast').innerHTML='<span>ÚLTIMA LECTURA '+(last.kind==='undo'?'· COMPENSACIÓN':'')+'</span><strong>'+esc(last.product?.descripcion||last.code)+'</strong><small>SKU '+esc(last.product?.sku||last.code)+' · '+esc(short(last.location)||'SIN UBICACIÓN')+'</small>'+stamp(last)+(last.error?'<small>'+esc(last.error)+'</small>':'');
+    $('crRows').innerHTML=queue.rows.length?[...queue.rows].reverse().slice(0,8).map(row=>'<article class="cr-row"><div><b>'+esc(row.product?.descripcion||row.code)+'</b><small>'+esc(row.product?.sku||row.code)+' · '+esc(short(row.location)||'SIN UBICACIÓN')+(row.kind==='undo'?' · Deshacer':'')+'</small>'+(row.error?'<small class="txt-red">'+esc(row.error)+'</small>':'')+'</div><div><strong>'+(row.kind==='undo'?'−1':'+1')+'</strong>'+stamp(row)+'</div></article>').join(''):'<p class="muted">Aquí aparecerán las piezas escaneadas.</p>';
+    $('crUndo').disabled=queue.compatibility||!ready()||!queue.rows.some(row=>row.kind==='receive'&&row.location&&row.status==='confirmed'&&!queue.rows.some(other=>other.reverses===row.id&&other.status!=='failed'));
     $('crUndo').title=queue.compatibility?'Deshacer automático disponible al activar la migración segura.':'Deshacer la última entrada confirmada';
     $('crRetry').disabled=!queue.owned||queue.busy||Boolean(queue.storageError);
     $('crRetryFailed').hidden=!report.failed;$('crRetryFailed').disabled=!queue.owned||queue.busy;
@@ -84,11 +89,15 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     $('crOld').textContent=short(active?.code);$('crNew').textContent=short(queue.state.pendingSwitch?.code);
     $('crSummary').hidden=!queue.state.endedAt;
     if(queue.state.endedAt) {
-      $('crSummaryBody').innerHTML='<strong class="cr-summary-count">'+num(report.totalPieces)+' piezas confirmadas</strong><p>'+num(report.locations.length)+' marbetes · '+num(report.confirmed)+' movimientos confirmados · '+num(report.pending)+' pendientes · '+num(report.failed)+' fallidos</p><p><b>'+esc(report.actor)+'</b><br>Inicio: '+esc(new Date(report.startedAt).toLocaleString('es-MX'))+'<br>Fin: '+esc(new Date(report.endedAt).toLocaleString('es-MX'))+'</p>'+(report.pending?'<p class="cr-pending-text">La sesión conserva lecturas pendientes. Continúa la sincronización; estas piezas todavía no están confirmadas.</p>':'')+'<table><thead><tr><th>Marbete</th><th>Piezas</th><th>Pendientes</th><th>Fallidos</th></tr></thead><tbody>'+report.locations.map(row=>'<tr><td>'+esc(short(row.marbete))+'</td><td>'+num(row.pieces)+'</td><td>'+num(row.pending)+'</td><td>'+num(row.failed)+'</td></tr>').join('')+'</tbody></table>';
+      $('crSummaryBody').innerHTML='<strong class="cr-summary-count">'+num(report.totalPieces)+' piezas confirmadas</strong><p>'+num(report.locations.filter(row=>row.marbete).length)+' marbetes · '+num(report.confirmed)+' movimientos confirmados · '+num(report.pending)+' pendientes · '+num(report.failed)+' fallidos</p><p><b>'+esc(report.actor)+'</b><br>Inicio: '+esc(new Date(report.startedAt).toLocaleString('es-MX'))+'<br>Fin: '+esc(new Date(report.endedAt).toLocaleString('es-MX'))+'</p>'+(report.pending?'<p class="cr-pending-text">La sesión conserva lecturas pendientes. Continúa la sincronización; estas piezas todavía no están confirmadas.</p>':'')+'<table><thead><tr><th>Marbete</th><th>Piezas</th><th>Pendientes</th><th>Fallidos</th></tr></thead><tbody>'+report.locations.map(row=>'<tr><td>'+esc(short(row.marbete)||'SIN UBICACIÓN')+'</td><td>'+num(row.pieces)+'</td><td>'+num(row.pending)+'</td><td>'+num(row.failed)+'</td></tr>').join('')+'</tbody></table>';
       $('crNewSession').disabled=Boolean(report.pending)||queue.busy;
     }
   }
   $('crScanForm').onsubmit=event=>{event.preventDefault();input.flush();};
+  $('crSaveWithoutLocation').onclick=()=>{
+    try{const count=queue.approveWithoutLocation();feedback(count+' pieza'+(count===1?'':'s')+' preparada'+(count===1?'':'s')+' para registrar sin ubicación','info');render();input.focus();}
+    catch(error){fail(error);}
+  };
   $('crKeyboard').onclick=()=>{$('crScan').inputMode=$('crScan').inputMode==='none'?'text':'none';input.focus();};
   $('crConfirmSwitch').onclick=()=>{queue.confirmSwitch(true);render();input.focus();};
   $('crCancelSwitch').onclick=()=>{queue.confirmSwitch(false);render();input.focus();};
