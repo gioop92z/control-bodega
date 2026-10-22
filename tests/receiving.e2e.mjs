@@ -128,8 +128,9 @@ try {
   for(const selector of ['.cr-stage','#crScan','.cr-counters','#crLocation','.cr-heading']){
     assert.equal(await page.locator(selector).evaluate(el=>{const r=el.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth;}),true,selector+' must fit on mobile');
   }
-  assert.equal(await page.locator('.bottom-nav').isVisible(),false);
-  assert.equal(await page.locator('.topbar').isVisible(),false);
+  assert.equal(await page.locator('#vantisReceiveFloat').isVisible(),true,'receiving should be a floating dialog');
+  assert.equal(await page.locator('.vr-float-sheet').isVisible(),true,'glass panel should be visible');
+  assert.equal(await page.locator('.topbar').isVisible(),true,'Inicio remains present behind the scanner');
   await page.screenshot({path:'/tmp/vantis-receiving-qa/mobile.png',fullPage:true});
   const before=await page.evaluate(()=>window.__receiptFixture.products[0].stock);
   await page.locator('#crUndo').click();await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='1,609');
@@ -153,7 +154,7 @@ try {
   // the previous receiving operation or pretending continuous saving works.
   await page.evaluate(()=>{localStorage.clear();localStorage.setItem('__missingBackend','1');});
   await page.reload({waitUntil:'networkidle'});await page.locator('[data-act="ENTRADA"]').click();await page.locator('#receiveCode').waitFor();
-  assert.match(await page.locator('.notice').first().innerText(),/pendiente de activar/);
+  assert.match(await page.locator('.vr-compat-note').first().innerText(),/no disponible/);
   assert.equal(blockedWrites,0);assert.deepEqual(errors,[]);
   console.log('Receiving desktop/mobile passed: HID/Tab/no suffix, 100/500/1000 reads, technical duplicate terminators, camera/QR continuity, switch/cancel, durable restore, lost response, audited undo, CSV, unknown article, safe legacy fallback. No real inventory writes.');
 } finally {await browser.close();await new Promise(resolve=>server.close(resolve));}
