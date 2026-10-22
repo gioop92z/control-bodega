@@ -171,7 +171,16 @@ try {
   assert.equal(await page.evaluate(()=>window.__receiptFixture.products.find(x=>x.sku==='MANUAL-123')?.stock),1);
   // Source can deploy before the additive server migration without breaking
   // the previous receiving operation or pretending continuous saving works.
-  await page.evaluate(()=>{localStorage.clear();localStorage.setItem('__missingBackend','1');});
+  await page.evaluate(async()=>{
+    // Clearing all site data removes BOTH localStorage and IndexedDB.
+    // Leaving IndexedDB intact intentionally restores protected prior scans.
+    await new Promise((resolve,reject)=>{
+      const request=indexedDB.deleteDatabase('vantis-recepcion-respaldo-v5');
+      request.onsuccess=resolve;request.onerror=()=>reject(request.error);
+      request.onblocked=()=>reject(Error('Database still open'));
+    });
+    localStorage.clear();localStorage.setItem('__missingBackend','1');
+  });
   await page.reload({waitUntil:'networkidle'});await page.locator('[data-act="ENTRADA"]').click();await page.locator('#receiveCode').waitFor();
   assert.match(await page.locator('.vr-compat-note').first().innerText(),/no disponible/);
   assert.equal(blockedWrites,0);assert.deepEqual(errors,[]);
