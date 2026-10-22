@@ -13,9 +13,9 @@ import { FastExitQueue } from './exit-queue.mjs?v=3.8.0';
 import { mountFastExit } from './exit-queue-ui.mjs?v=3.8.0';
 import { ReceiveQueue } from './receive-queue.mjs?v=3.9.5';
 import { mountFastReceive } from './receive-queue-ui.mjs?v=3.9.5';
-import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?v=4.0.6';
+import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?v=5.0.0';
 import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=4.0.6';
-import { mountOperations } from './operations-v4.mjs?v=4.0.1';
+import { mountOperations } from './operations-v4.mjs?v=5.0.0';
 import { ScanEvidence, listSkuEvidence, listLocalSkuEvidence } from './scan-evidence.mjs?v=4.0.4';
 
 const sb = createClient(
@@ -364,6 +364,13 @@ function operationsView() {
   const department=S.deptId;
   operationsCleanup=mountOperations($('operationsRoot'),{
     sb,deptId:department,admin:S.admin,actor:sessionStorage.getItem('nova.employeeNumber')||S.displayName,
+    userId:S.user?.id||'',startScanner,stopScanner,
+    getReceiveStatus:()=>{
+      const q=continuousQueue;
+      if(!q||q.deptId!==department)return {backend:'No abierta',pending:0,confirmed:0};
+      const r=q.report();
+      return {backend:q.backend,pending:r.pending,confirmed:r.confirmed,mirrorError:q.mirror?.error||'',restored:q.restoredFromBackup};
+    },
     onBack:()=>{if(S.view!=='operations')return;S.view='home';render();},
     onExit:lines=>{
       if(S.view!=='operations'||S.deptId!==department||exitBusy()||receiveBusy())throw Error('La operación actual no permite preparar otra salida.');
