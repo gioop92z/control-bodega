@@ -120,13 +120,26 @@ export function mountOperations(root,{sb,deptId,admin=false,actor='',onBack=()=>
   }
   function incidents(){
     $('opBody').innerHTML='<div class="op-panel"><h2>Incidencias de mercancía</h2><p>Registra daños, diferencias, pérdidas o devoluciones para revisión. Una incidencia NO modifica stock automáticamente.</p><form id="opIncidentForm" class="op-stack"><label>SKU / UPC <input name="sku" required maxlength="120" autocomplete="off"></label><label>Tipo <select name="tipo"><option value="DANIO">Mercancía dañada</option><option value="DIFERENCIA">Diferencia de inventario</option><option value="PERDIDA">No localizada</option><option value="DEVOLUCION">Devolución</option></select></label><label>Detalle <textarea name="descripcion" required maxlength="1000" rows="3" placeholder="Describe qué sucedió"></textarea></label><button class="primary">Registrar incidencia</button></form><div id="opIncidentList"><p>Consultando incidencias…</p></div></div>';
-    const form=$('opIncidentForm');
+    const form=$('opIncidentForm');let incidentId=null;
+    form.addEventListener('input',()=>{incidentId=null;});
     form.onsubmit=async e=>{
       e.preventDefault();if(busy)return;const f=new FormData(form),sku=safeCode(f.get('sku')),descripcion=String(f.get('descripcion')||'').trim(),tipo=String(f.get('tipo')||'');
       if(!sku||sku.length>120||!descripcion||descripcion.length>1000){message('Completa los datos.','error');return;}
-      busy=true;
-      try{const r=await sb.from('vantis_incidencias_v4').insert({departamento_id:deptId,sku,tipo,descripcion}).select('id').single();failQuery(r);message('Incidencia confirmada por el servidor. Folio '+r.data.id,'success');form.reset();void loadIncidents(epoch);}
-      catch(error){message('No se pudo confirmar la incidencia: '+errorText(error)+'. No se marcó como guardada.','error');}
+      incidentId ||= crypto.randomUUID();busy=true;
+      try{
+        const payload={id:incidentId,departamento_id:deptId,sku,tipo,descripcion};
+        // Before retrying an uncertain write, verify the same folio first.
+        const existing=await sb.from('vantis_incidencias_v4').select('id,departamento_id,sku,tipo,descripcion').eq('id',incidentId).maybeSingle();
+        if(existing.error)throw existing.error;
+        if(existing.data){
+          if(existing.data.sku!==sku||existing.data.tipo!==tipo||existing.data.descripcion!==descripcion||existing.data.departamento_id!==deptId)throw Error('Folio previo con contenido diferente.');
+        }else{
+          const r=await sb.from('vantis_incidencias_v4').insert(payload).select('id').single();failQuery(r);
+        }
+        message('Incidencia confirmada por el servidor. Folio '+incidentId,'success');
+        incidentId=null;form.reset();void loadIncidents(epoch);
+      }
+      catch(error){message('No se pudo confirmar la incidencia: '+errorText(error)+'. El folio se conserva para reintentar sin duplicar.','error');}
       finally{busy=false;}
     };
     void loadIncidents(epoch);
