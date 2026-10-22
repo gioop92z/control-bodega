@@ -69,3 +69,7 @@ html,body,.app-shell{background:#faf7fa!important}
 @media(prefers-reduced-motion:reduce){
  .action-card,.vr-floating-launch{transition:none!important}
 }
+
+/* Network connectivity is not a guarantee that Supabase has committed a movement. */
+.live-badge.offline{background:#fff0da!important;color:#815300!important;border-color:#efcb88!important}
+.live-badge.offline i{background:#dc8b1d!important;animation:none!important}
