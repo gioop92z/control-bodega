@@ -50,7 +50,7 @@ export class LegacyReceiptApi {
   }
   async receive(payload,{allowWrite=false,sku,userId}={}){
     if(!payload?.p_id || !payload?.p_sesion || !sku || !userId ||
-       !payload.p_operador || !payload.p_producto || !payload.p_marbete ||
+       !payload.p_operador || !payload.p_producto ||
        payload.p_departamento!==this.deptId || payload.p_reversa){
       throw fail('Operación incompatible con la recepción antigua.','LEGACY_DENIED');
     }
@@ -64,7 +64,7 @@ export class LegacyReceiptApi {
       .select('id,sku,activo,departamento_id').eq('id',payload.p_producto).maybeSingle());
     if(!product||product.sku!==sku||product.activo!==true||product.departamento_id!==this.deptId)
       throw fail('Artículo no disponible en el departamento.','LEGACY_DENIED');
-    await assignProductLocation(this.sb,{productId:product.id,sku,deptId:this.deptId,marbeteCode:payload.p_marbete});
+    if(payload.p_marbete)await assignProductLocation(this.sb,{productId:product.id,sku,deptId:this.deptId,marbeteCode:payload.p_marbete});
     // The old RPC owns the actual stock mutation and movement insert. Never
     // change product stock with client-side UPDATE/UPSERT.
     await locationQuery(this.sb.rpc('mover_stock_v2',{
