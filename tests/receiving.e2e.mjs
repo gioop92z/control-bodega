@@ -77,7 +77,7 @@ try {
     return route.abort();
   });
   await page.route('**/scanner.js*',route=>route.fulfill({contentType:'text/javascript',body:`
-    export async function startScanner(cb,label,options={}){window.__scanner={cb,label,options};window.__cameraOpens=(window.__cameraOpens||0)+1;const div=document.createElement('div');div.id='scanner';div.textContent='Cámara de prueba';options.inlineTarget.appendChild(div);}
+    export async function startScanner(cb,label,options={}){window.__scanner={cb,label,options};window.__cameraOpens=(window.__cameraOpens||0)+1;const div=document.createElement('div');div.id='scanner';div.textContent='Cámara de prueba';document.body.appendChild(div);}
     export function stopScanner(){const s=window.__scanner;window.__scanner=null;document.getElementById('scanner')?.remove();s?.options.onClose?.();}
   `}));
   let blockedWrites=0;
@@ -113,7 +113,8 @@ try {
   assert.equal(await page.evaluate(()=>window.__cameraOpens),1);
   await page.evaluate(()=>window.__scanner.cb('{"marbete":"ZAP-402-003"}'));
   await page.locator('#crConfirmSwitch').click();await page.waitForFunction(()=>document.getElementById('crLocation').textContent==='402-003'&&document.getElementById('crLocationLabel').textContent==='MARBETE ACTIVO');
-  assert.equal(await page.evaluate(()=>window.__cameraOpens),1);
+  await page.waitForFunction(()=>window.__cameraOpens===2,'camera should resume after confirming a location');
+  assert.equal(await page.evaluate(()=>document.getElementById('scanner')?.parentElement===document.body),true);
   await page.locator('#crCameraButton').click();
   // Large HID bursts exercise actual input listeners and durable browser storage.
   for(const count of [100,500,1000]){
