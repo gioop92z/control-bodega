@@ -6,7 +6,7 @@ const num = value => Number(value).toLocaleString('es-MX');
 const short = code => String(code || '').replace(/^ZAP-/, '');
 const labels = {queued:'Pendiente de sincronización',sending:'Guardando…',uncertain:'Por confirmar · reintento seguro',confirmed:'Confirmado en servidor',failed:'No registrado'};
 
-export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCurrent=()=>true,onLegacy=()=>{},onUnavailable=()=>{}}) {
+export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCurrent=()=>true,onLegacy=()=>{},onUnavailable=()=>{},onEvidence=()=>{},onEvidenceConfirmed=()=>{}}) {
   let destroyed=false,frame=null,camera=false,opening=false,audio=null,lastSignal='',notice='',feedbackTimer=null,toastTimer=null,wake=null;
   const $=id=>root.querySelector('#'+id);
   const current=()=>!destroyed && root.isConnected && isCurrent();
@@ -43,10 +43,11 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     toastTimer=setTimeout(()=>{node.hidden=true;},2100);
   }
   function fail(error) {notice=error?.message||String(error);beep(false);feedback(notice,'error');render();}
-  function scan(code) {
+  function scan(code,frame=null) {
     notice='';
     try {
       const result=queue.scan(code);
+      if(result.type==='piece'&&frame)onEvidence(result.id,code,frame);
       if(result.type==='switch'){feedback('Confirma el cambio de marbete','info');queueMicrotask(()=>$('crConfirmSwitch')?.focus());}
       else if(result.type!=='piece')feedback('Validando marbete…','info');
       if(result.type==='piece'&&!queue.state.active&&!queue.state.candidate)feedback('✓ SKU conservado. Escanea un marbete o registra sin ubicación.','info');
@@ -106,8 +107,8 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     unlockSound();if(camera){stopScanner();return;}
     opening=true;render();
     try {
-      await startScanner(code=>{if(!ready())throw Error('Lectura en pausa. Confirma el cambio o reanuda la recepción.');return scan(code);},'marbete o mercancía',{
-        continuous:true,qrEnabled:true,acknowledgedOnly:true,allowRepeat:false,inlineTarget:$('crCamera'),
+      await startScanner((code,frame)=>{if(!ready())throw Error('Lectura en pausa. Confirma el cambio o reanuda la recepción.');return scan(code,frame);},'marbete o mercancía',{
+        continuous:true,qrEnabled:true,captureEvidence:true,acknowledgedOnly:true,allowRepeat:false,inlineTarget:$('crCamera'),
         onClose:()=>{camera=false;opening=false;render();input.focus();}
       });
       camera=true;
@@ -136,9 +137,12 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
   document.addEventListener('visibilitychange',visible);root.addEventListener('pointerdown',gesture,{once:true});
   queue.onChange=scheduleRender;
   queue.onFailure=row=>{notice=row.error;beep(false);feedback(row.error||'No se pudo confirmar esta pieza','error');scheduleRender();};
-  queue.onConfirmed=()=>{
+  queue.onConfirmed=row=>{
+    onEvidenceConfirmed(row);
     beep(true);feedback('✓ Pieza registrada en servidor');root.classList.add('cr-success');clearTimeout(feedbackTimer);feedbackTimer=setTimeout(()=>root.classList.remove('cr-success'),160);scheduleRender();
   };
+  // Tras reabrir la recepción, reintenta imágenes locales de movimientos confirmados.
+  queue.rows.filter(row=>row.kind==='receive'&&row.status==='confirmed').forEach(onEvidenceConfirmed);
   render();void queue.start().then(()=>{
     if(current()&&queue.backend==='missing'&&!queue.rows.length){onUnavailable();return;}
     render();input.focus();
