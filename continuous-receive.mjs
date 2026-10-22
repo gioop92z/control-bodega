@@ -289,7 +289,10 @@ export class ContinuousReceive {
       } catch (error) { this.backend = 'offline'; this.error = 'Lecturas protegidas; catálogo pendiente: ' + message(error); break; }
       // Four requests can be in flight; each transaction locks its product on
       // the server. Input capture remains independent of network latency.
-      const ready = candidates.filter(row => row.product&&(row.location||row.unlocatedApproved)&&row.status !== 'failed');
+      const ready = candidates.filter(row => row.product&&(row.location||row.unlocatedApproved)&&row.status !== 'failed'&&row.visitId!==this.state.candidate?.visitId);
+      // SKU-first readings can sit in local staging indefinitely. Do not spin
+      // while there is no server movement ready to commit.
+      if(!ready.length)break;
       for (let offset = 0; offset < ready.length; offset += 4) {
         if (this.disposed || this.storageError || this.backend !== 'ready' || !this.online()) break;
         await Promise.all(ready.slice(offset,offset+4).map(row => this.send(row)));
