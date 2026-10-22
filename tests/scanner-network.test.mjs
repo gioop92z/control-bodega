@@ -7,14 +7,18 @@ function scannerHarness({zxingFails=false}={}) {
   const nodes=new Map(),callbacks={},calls=[];
   let zxingCallback=null,quaggaDetected=null,quaggaProcessed=null;
   let zxingStops=0,quaggaStops=0,clock=0,engine='',lastHints=null, scheduled=0;
+  const classes=()=>{const entries=new Set();return {
+    add:name=>entries.add(name),remove:name=>entries.delete(name),
+    contains:name=>entries.has(name)
+  };};
   const element=id=>({
-    id,disabled:false,textContent:'',onclick:null,
+    id,disabled:false,textContent:'',onclick:null,classList:classes(),
     addEventListener(name,callback){callbacks[id+':'+name]=callback;},
     remove(){nodes.delete(id);}
   });
   const document={
     getElementById:id=>nodes.get(id)||null,
-    body:{insertAdjacentHTML(where,html){
+    body:{classList:classes(),insertAdjacentHTML(where,html){
       for(const match of html.matchAll(/\bid="([^"]+)"/g)) nodes.set(match[1],element(match[1]));
     }}
   };
@@ -51,7 +55,7 @@ function scannerHarness({zxingFails=false}={}) {
     else quaggaDetected?.({codeResult:{code,decodedCodes:[{error:.1}]}});
   };
   return {
-    ...sandbox.api,nodes,calls,scan,
+    ...sandbox.api,nodes,calls,scan,bodyClasses:document.body.classList,
     absent:()=>{if(engine==='zxing')zxingCallback?.(null);else quaggaProcessed?.({});},
     advance:ms=>{clock+=ms;},target:{insertAdjacentHTML:document.body.insertAdjacentHTML},
     repeat:()=>callbacks['scanRepeat:click']?.(),
@@ -131,4 +135,29 @@ test('QR-enabled scan preserves location URL contents exactly for the parser',as
   await h.startScanner(value=>scanned.push(value),'ubicación',{qrEnabled:true});
   h.scan('https://example.org/ubicacion?marbete=ZAP-405-010');
   assert.deepEqual(scanned,['https://example.org/ubicacion?marbete=ZAP-405-010']);
+});
+
+test('full-screen camera escapes the inventory modal and acknowledges QR/SKU scans in green',async()=>{
+  const h=scannerHarness(),received=[];
+  const forbiddenInline={insertAdjacentHTML(){throw Error('Camera must not mount in scrolling modal');}};
+  await h.startScanner(code=>received.push(code),'marbete o mercancía',{
+    continuous:true,qrEnabled:true,inlineTarget:forbiddenInline,allowRepeat:false
+  });
+  assert.equal(h.bodyClasses.contains('vantis-scanner-open'),true);
+  assert.ok(h.nodes.has('scanner'),'camera is appended to the body');
+  h.scan('ZAP-402-001');h.scan('ZAP-402-001');
+  assert.deepEqual(received,['ZAP-402-001']);
+  assert.equal(h.nodes.get('scanner').classList.contains('scanner-detected'),true);
+  assert.equal(h.nodes.get('scannerReceiptCode').textContent,'ZAP-402-001');
+  h.stopScanner();
+  assert.equal(h.bodyClasses.contains('vantis-scanner-open'),false);
+});
+
+test('scanner CSS is loaded and supports full viewport plus green detection',()=>{
+  const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+  const css=readFileSync(new URL('../scanner-pro.css',import.meta.url),'utf8');
+  assert.match(html,/scanner-pro\.css\?v=4\.0\.5/);
+  assert.match(css,/#scanner\.scanner-pro\{/);
+  assert.match(css,/height:100dvh!important/);
+  assert.match(css,/\.scanner-pro\.scanner-detected \.scanner-target/);
 });
