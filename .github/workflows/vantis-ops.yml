@@ -1,0 +1,23 @@
+name: VANTIS Operations Safety
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  operations-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify JavaScript syntax
+        run: |
+          node --check app.js
+          node --check operations-v4.mjs
+          node --check continuous-receive-ui.mjs
+      - name: Run isolated operations tests
+        run: node --test tests/ops-v4.test.mjs
