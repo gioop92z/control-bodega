@@ -54,6 +54,17 @@ export class SupabaseReceiptApi {
     ? this.legacy.activate(code)
     : locationQuery(this.sb.rpc('vantis_activar_marbete_v1', {p_departamento:this.deptId, p_codigo:code})); }
   lookup(codes) { return lookupSupportCodes(this.sb, codes, this.deptId); }
+  async ensureProduct(raw){
+    const code=cleanSupportCode(raw),before=await this.lookup([code]);
+    if(before.get(code)?.product)return before.get(code).product;
+    if(/ambiguo/i.test(before.get(code)?.error||''))throw Error('UPC ambiguo: escanea el SKU específico.');
+    let failure=null;
+    try {await locationQuery(this.sb.rpc('crear_producto_codigo',{p_token:null,p_departamento:this.deptId,p_codigo:code}));}
+    catch(error){failure=error;}
+    const after=await this.lookup([code]),product=after.get(code)?.product;
+    if(product?.id&&product.activo&&product.departamento_id===this.deptId)return product;
+    throw Error('SKU '+code+' pendiente de alta: '+(failure?.message||'el servidor no confirmó la creación.'));
+  }
   async receive(payload) { return locationQuery(this.sb.rpc('vantis_recibir_pieza_v1', payload)); }
   legacyReceive(payload,options) { return this.legacy.receive(payload,options); }
 }
@@ -166,20 +177,38 @@ export class ContinuousReceive {
       this.setCandidate(label); return {type:'location'};
     }
     const location = this.state.candidate || this.state.active;
-    if (!location) throw Error('Escanea un marbete para comenzar. Este código no es un marbete válido.');
     const productCode = cleanSupportCode(code), id = eventId || this.makeId();
     if (this.rows.some(row => row.id === id)) return {type:'duplicate-event',id};
     const row = {id,sessionId:this.state.id,sequence:++this.nextSequence,kind:'receive',
-      code:productCode,quantity:1,location:location.code,visitId:location.visitId,
+      code:productCode,quantity:1,location:location?.code||null,visitId:location?.visitId||null,unlocatedApproved:false,
       capturedAt:new Date(this.now()).toISOString(),status:'queued',attempts:0,error:'',product:null,payload:null};
     if (!this.saveRow(row)) { this.nextSequence--; throw Error(this.storageError); }
     this.rows.push(row); this.changed(); this.schedule(25); return {type:'piece',id};
   }
   setCandidate(code) {
-    this.state.candidate = {code,visitId:this.makeId()};
-    if (!this.saveSession()) throw Error(this.storageError);
+    const candidate={code,visitId:this.makeId()};
+    if(!this.state.active&&!this.state.candidate){
+      for(const row of this.rows.filter(r=>r.kind==='receive'&&!r.location&&!r.unlocatedApproved)){
+        const updated={...row,location:code,visitId:candidate.visitId};
+        if(!this.saveRow(updated))throw Error(this.storageError);
+        Object.assign(row,updated);
+      }
+    }
+    this.state.candidate=candidate;
+    if(!this.saveSession())throw Error(this.storageError);
     this.changed();
-    if (this.backend === 'ready') void this.activateCandidate();
+    if(this.backend==='ready')void this.activateCandidate();
+  }
+  approveWithoutLocation(){
+    if(!this.canScan)throw Error('La recepción no está preparada para guardar sin ubicación.');
+    const rows=this.rows.filter(r=>r.kind==='receive'&&!r.location&&!r.unlocatedApproved&&r.status==='queued');
+    if(!rows.length)throw Error('No hay lecturas esperando ubicación.');
+    for(const row of rows){
+      const updated={...row,unlocatedApproved:true};
+      if(!this.saveRow(updated))throw Error(this.storageError);
+      Object.assign(row,updated);
+    }
+    this.changed();this.schedule(0);return rows.length;
   }
   confirmSwitch(accept) {
     const request = this.state.pendingSwitch; if (!request) return;
@@ -204,7 +233,9 @@ export class ContinuousReceive {
       this.error = 'Marbete sin activar: ' + message(error);
       if (permanent(error)) {
         for (const row of this.rows.filter(row => row.visitId === target.visitId && !row.payload)) {
-          row.status = 'failed'; row.error = this.error; this.saveRow(row); this.onFailure(row);
+          const updated={...row,location:null,visitId:null,unlocatedApproved:false,status:'queued',error:'Marbete rechazado. La pieza sigue pendiente.'};
+          if(!this.saveRow(updated))break;
+          Object.assign(row,updated);
         }
         this.state.candidate = null; this.saveSession();
       } else { this.backend = 'offline'; this.schedule(4000); }
@@ -224,7 +255,7 @@ export class ContinuousReceive {
     if (!this.owned || this.disposed || this.storageError || this.backend !== 'ready' || !this.online()) return;
     this.job = this.process(); this.changed();
     try { await this.job; }
-    finally { this.job = null; this.changed(); if (this.pending && !this.disposed) this.schedule(this.backend === 'ready' ? 1000 : 4000); }
+    finally {this.job=null;this.changed();const actionable=this.rows.some(r=>['queued','uncertain'].includes(r.status)&&(r.location||r.unlocatedApproved)&&(!r.retryAt||r.retryAt<=this.now()));if(actionable&&!this.disposed)this.schedule(this.backend==='ready'?1000:4000);}
   }
   async process() {
     if (this.state.candidate) { await this.activateCandidate(); if (this.state.candidate) return; }
@@ -235,17 +266,30 @@ export class ContinuousReceive {
       try {
         const codes = [...new Set(unresolved.map(row => row.code))].filter(code => !this.cache.has(code));
         if (codes.length) for (const [code,result] of await this.api.lookup(codes)) if (result.product) this.cache.set(code,result.product);
-        for (const row of unresolved) {
-          row.product = this.cache.get(row.code) || null;
-          if (!row.product || row.product.departamento_id !== this.deptId || !row.product.activo) {
-            row.status = 'failed'; row.error = 'Artículo no encontrado o ambiguo en este departamento. No se registró stock.';
-            this.saveRow(row); this.onFailure(row);
+        const issues=new Map();
+        for(const code of new Set(unresolved.filter(r=>!this.cache.has(r.code)).map(r=>r.code))){
+          try{
+            if(!this.api.ensureProduct)throw Error('El servidor no admite alta automática de artículos.');
+            const product=await this.api.ensureProduct(code);
+            if(!product?.id||!product.activo||product.departamento_id!==this.deptId)throw Error('El catálogo no confirmó el artículo.');
+            this.cache.set(code,product);
+          }catch(error){issues.set(code,message(error));}
+        }
+        for(const row of unresolved){
+          const product=this.cache.get(row.code);
+          if(product?.activo&&product.departamento_id===this.deptId){
+            row.product=product;row.error='';this.saveRow(row);
+          }else{
+            row.error=issues.get(row.code)||'SKU pendiente de confirmar en el catálogo.';
+            row.retryAt=this.now()+15000;
+            if(!this.saveRow(row))return;
+            this.onFailure(row);
           }
         }
       } catch (error) { this.backend = 'offline'; this.error = 'Lecturas protegidas; catálogo pendiente: ' + message(error); break; }
       // Four requests can be in flight; each transaction locks its product on
       // the server. Input capture remains independent of network latency.
-      const ready = candidates.filter(row => row.status !== 'failed');
+      const ready = candidates.filter(row => row.product&&(row.location||row.unlocatedApproved)&&row.status !== 'failed');
       for (let offset = 0; offset < ready.length; offset += 4) {
         if (this.disposed || this.storageError || this.backend !== 'ready' || !this.online()) break;
         await Promise.all(ready.slice(offset,offset+4).map(row => this.send(row)));
@@ -261,7 +305,7 @@ export class ContinuousReceive {
     // Persist transport choice before sending. If the migration is installed
     // mid-session, old uncertain writes must only be RECONCILED, never sent
     // through the new RPC as fresh inventory.
-    row.writeMode ||= this.compatibility ? 'legacy' : 'modern';
+    row.writeMode ||= (!row.location||this.compatibility) ? 'legacy' : 'modern';
     row.status = 'sending'; row.attempts++;
     if (!this.saveRow(row)) return;
     this.changed();
@@ -296,7 +340,7 @@ export class ContinuousReceive {
     if (this.compatibility) throw Error('El deshacer automático necesita la migración segura. Revisa el movimiento en el historial.');
     if (!this.canScan) throw Error('Reanuda la recepción antes de deshacer.');
     const reversed = new Set(this.rows.filter(row => row.kind === 'undo' && row.status !== 'failed').map(row => row.reverses));
-    const original = [...this.rows].reverse().find(row => row.kind === 'receive' && row.status === 'confirmed' && !reversed.has(row.id));
+    const original = [...this.rows].reverse().find(row => row.kind === 'receive' && row.location && row.status === 'confirmed' && !reversed.has(row.id));
     if (!original) throw Error('No hay una entrada confirmada que se pueda deshacer.');
     const row = {id:this.makeId(),sessionId:this.state.id,sequence:++this.nextSequence,kind:'undo',
       code:original.code,quantity:1,location:original.location,visitId:original.visitId,reverses:original.id,
@@ -329,8 +373,9 @@ export class ContinuousReceive {
   }
   report() {
     const locations = new Map(), active = this.state.candidate || this.state.active;
-    let confirmed = 0, failed = 0, net = 0, visit = 0;
+    let confirmed = 0, failed = 0, net = 0, visit = 0, awaitingLocation=0;
     for (const row of this.rows) {
+      if(row.kind==='receive'&&!row.location&&!row.unlocatedApproved&&row.status!=='confirmed')awaitingLocation++;
       const value = locations.get(row.location) || {marbete:row.location,pieces:0,confirmed:0,pending:0,failed:0};
       if (row.status === 'confirmed') {
         const delta = row.kind === 'undo' ? -1 : 1;
@@ -342,7 +387,7 @@ export class ContinuousReceive {
     }
     return {sessionId:this.state.id,userId:this.userId,actor:this.actor,deptId:this.deptId,startedAt:this.state.startedAt,
       endedAt:this.state.endedAt,totalPieces:net,visitPieces:visit,locations:[...locations.values()],
-      confirmed,pending:this.pending,failed,rows:this.rows};
+      confirmed,pending:this.pending,awaitingLocation,failed,rows:this.rows};
   }
   async dispose() {
     this.disposed = true; clearTimeout(this.timer); this.timer = null;
@@ -355,11 +400,11 @@ export class ContinuousReceive {
 export function receiptCsv(report) {
   const cell = value => '"' + String(value ?? '').replace(/^[=+@-]/,"'$&").replace(/"/g,'""') + '"';
   const lines = [
-    ['VANTIS','Recepción masiva',report.sessionId],['Responsable',report.actor],['Usuario',report.userId],
+    ['VANTIS','Recepción de mercancía',report.sessionId],['Responsable',report.actor],['Usuario',report.userId],
     ['Inicio',report.startedAt],['Fin',report.endedAt || 'En curso'],['Piezas confirmadas netas',report.totalPieces],
     ['Movimientos confirmados',report.confirmed],['Pendientes',report.pending],['Fallidos',report.failed],[],
     ['Marbete','Piezas netas','Confirmados','Pendientes','Fallidos'],
-    ...report.locations.map(row=>[row.marbete,row.pieces,row.confirmed,row.pending,row.failed]),[],
+    ...report.locations.map(row=>[row.marbete||'SIN UBICACIÓN',row.pieces,row.confirmed,row.pending,row.failed]),[],
     ['Movimiento','Tipo','Reversa de','Código leído','SKU','Descripción','Cantidad','Marbete','Estado','Leído','Guardado','Error'],
     ...report.rows.map(row=>[row.id,row.kind,row.reverses,row.code,row.product?.sku,row.product?.descripcion,
       row.kind==='undo'?-1:1,row.location,row.status,row.capturedAt,row.receipt?.stored_at,row.error])
