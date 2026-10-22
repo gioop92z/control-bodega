@@ -315,8 +315,8 @@ function syncNetworkBadge(){
   node.classList.toggle('offline',!online);
   node.innerHTML='<i></i> '+(online?'Red disponible':'Sin conexión de red');
 }
-window.addEventListener('online',syncNetworkBadge);
-window.addEventListener('offline',syncNetworkBadge);
+window.addEventListener?.('online',syncNetworkBadge);
+window.addEventListener?.('offline',syncNetworkBadge);
 
 function kpi(label,val,cls='') { return `<div class="kpi ${cls}"><span>${label}</span><strong>${val}</strong></div>`; }
 
