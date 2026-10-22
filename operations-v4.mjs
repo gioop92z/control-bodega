@@ -1,4 +1,5 @@
-// VANTIS 4.0: progressive operations workspace. No inventory writes outside confirmed existing APIs.
+// VANTIS 5.0: operaciones con módulos seguros.
+import {mountVantisV5} from './vantis-v5-ui.mjs';
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const integer = value => Number(value || 0).toLocaleString('es-MX');
 const errorText = e => String(e?.message || e?.error?.message || e || 'Error desconocido');
@@ -21,8 +22,8 @@ export function compareLocationQuantities(stock, assignments) {
   const located=values.reduce((n,v)=>n+(v===null||v===undefined||v===''?0:Number(v)||0),0);
   return {located,unknown,difference:unknown?null:Number(stock||0)-located};
 }
-export function mountOperations(root,{sb,deptId,admin=false,actor='',onBack=()=>{},onExit=()=>{}}) {
-  let destroyed=false,epoch=0,tab=admin?'control':'locate',busy=false,transferId=null;
+export function mountOperations(root,{sb,deptId,admin=false,actor='',userId='',startScanner=null,stopScanner=()=>{},getReceiveStatus=()=>({}),onBack=()=>{},onExit=()=>{}}) {
+  let destroyed=false,epoch=0,tab=admin?'control':'locate',busy=false,transferId=null,v5Cleanup=()=>{};
   const localKey='vantis.ops.pick.v4:'+deptId+':'+actor;
   let draft=[];
   try{draft=normalizePickDraft(JSON.parse(localStorage.getItem(localKey)||'[]'));}catch{}
@@ -32,18 +33,21 @@ export function mountOperations(root,{sb,deptId,admin=false,actor='',onBack=()=>
   function message(text,tone='info'){const el=$('opFeedback');if(el){el.textContent=text;el.dataset.tone=tone;el.hidden=false;}}
   function header(){
     root.innerHTML='<section class="op-shell"><div class="op-heading"><div><small>VANTIS · OPERACIONES</small><h1>Centro operativo</h1><p>Localiza, prepara y supervisa sin afectar movimientos existentes.</p></div><button id="opBack" type="button" class="ghost">← Volver</button></div><nav id="opTabs" class="op-tabs" aria-label="Funciones de operación"></nav><div id="opFeedback" class="op-feedback" hidden role="status"></div><section id="opBody" class="op-body"></section></section>';
-    $('opBack').onclick=()=>{destroyed=true;onBack();};
-    const tabs=[...(admin?[['control','Centro de control']]:[]),['locate','Localizar'],['picks','Preparar apoyos'],['transfer','Traslados'],['incidents','Incidencias'],...(admin?[['counts','Conteos y diferencias']]:[])];
+    $('opBack').onclick=()=>{destroyed=true;v5Cleanup();onBack();};
+    const tabs=[...(admin?[['control','Centro de control']]:[]),['locate','Localizar'],['picks','Preparar apoyos'],['transfer','Traslados'],['diagnostics','Diagnóstico'],['cycles','Conteos cíclicos'],['incidents','Incidencias'],...(admin?[['counts','Conteos anteriores']]:[])];
     $('opTabs').innerHTML=tabs.map(([key,title])=>'<button class="op-tab'+(key===tab?' selected':'')+'" type="button" data-tab="'+key+'">'+title+'</button>').join('');
     $('opTabs').querySelectorAll('button').forEach(button=>button.onclick=()=>{if(busy)return;tab=button.dataset.tab;render();});
   }
   function render(){
+    v5Cleanup();v5Cleanup=()=>{};
     epoch++;header();
     if(tab==='control')void control(epoch);
     else if(tab==='locate')locator();
     else if(tab==='picks')picks();
     else if(tab==='transfer')transfer();
-    else if(tab==='incidents')incidents();
+    else if(['diagnostics','cycles','incidents'].includes(tab))
+      v5Cleanup=mountVantisV5($('opBody'),{sb,deptId,admin,actor,userId,startScanner,stopScanner,getReceiveStatus,
+        mode:tab==='cycles'?'cycles':tab==='incidents'?'incidents':'diagnostics'});
     else if(tab==='counts')void counts(epoch);
   }
   function failQuery(result){if(result?.error)throw result.error;return result?.data;}
@@ -157,5 +161,5 @@ export function mountOperations(root,{sb,deptId,admin=false,actor='',onBack=()=>
     }catch(error){if(current(id))$('opCountRows').innerHTML='<div class="op-error">'+esc(errorText(error))+'</div>';}
   }
   render();
-  return ()=>{destroyed=true;epoch++;};
+  return ()=>{destroyed=true;epoch++;v5Cleanup();};
 }
