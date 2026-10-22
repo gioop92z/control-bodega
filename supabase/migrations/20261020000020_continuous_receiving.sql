@@ -155,8 +155,13 @@ BEGIN
   IF stock_after IS DISTINCT FROM stock_before+delta THEN
     RAISE EXCEPTION USING ERRCODE='P0001', MESSAGE='El servidor no confirmó la variación exacta de stock.';
   END IF;
-  UPDATE public.producto_marbetes SET cantidad=qty_before+delta,updated_at=now()
-    WHERE sku=p.sku AND marbete_codigo=p_marbete;
+  -- mover_stock_v2 ya incrementa la cantidad por marbete de forma atómica.
+  -- Solo verificar: actualizar otra vez sumaría doble cada pieza escaneada.
+  PERFORM 1 FROM public.producto_marbetes
+    WHERE sku=p.sku AND marbete_codigo=p_marbete AND cantidad=qty_before+delta;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING ERRCODE='P0001', MESSAGE='Cantidad de marbete inconsistente después de recepción.';
+  END IF;
   SELECT id,tipo,sku,cantidad,departamento_id,marbete_codigo,stock_resultante,created_at INTO movement
     FROM public.movimientos WHERE id=p_id;
   IF NOT FOUND OR movement.tipo::text IS DISTINCT FROM (CASE WHEN delta=1 THEN 'ENTRADA' ELSE 'SALIDA' END)
