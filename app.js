@@ -10,6 +10,7 @@ import { mountFastReceive } from './receive-queue-ui.mjs?v=3.9.5';
 import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?v=3.10.4';
 import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=3.10.5';
 import { mountOperations } from './operations-v4.mjs?v=4.0.1';
+import { ScanEvidence, listSkuEvidence } from './scan-evidence.mjs?v=4.0.3';
 
 const sb = createClient(
   vantisBackendConfig.url,
@@ -39,6 +40,8 @@ const S = {
   locations: [],
   searchResult: null,
   searchType: null,
+  evidencePhotos: [],
+  evidenceStatus: 'idle',
   count: null,
   importHeaders: [],
   importRows: [],
@@ -58,6 +61,17 @@ let continuousQueue = null;
 let continuousCleanup = null;
 let floatingReceiveElement=null,floatingReceiveFocus=null,floatingReceiveKeydown=null;
 let operationsCleanup=null;
+let photoEvidenceService=null;
+
+function cameraEvidenceService(){
+  if(photoEvidenceService?.departmentId===S.deptId&&photoEvidenceService?.userId===S.user?.id)return photoEvidenceService;
+  photoEvidenceService?.dispose();
+  photoEvidenceService=new ScanEvidence({sb,departmentId:S.deptId,userId:S.user.id,onIssue:message=>{
+    const status=document.getElementById('crPhotoStatus');
+    if(status)status.textContent=message;
+  }});
+  return photoEvidenceService;
+}
 
 function receiveBusy() {
   if(continuousQueue && !continuousQueue.disposed && (continuousQueue.busy || continuousQueue.pending || continuousQueue.state.pendingSwitch)) { toast('La recepción conserva lecturas pendientes. Revisa su estado antes de salir.','error'); return true; }
@@ -75,6 +89,7 @@ function resetSearchContext() {
   searchPending = false;
   locationAssignment = null;
   locationSaveNotice = null;
+  S.evidencePhotos=[];S.evidenceStatus='idle';
   stopScanner();
 }
 
@@ -405,9 +420,12 @@ function fastReceiveView(){
   const actor=badge?(S.admin?'Jefe ':'Empleado ')+badge:'';
   const deptId=S.deptId;
   const current=new ContinuousReceive({api:new SupabaseReceiptApi(sb,deptId),storage:localStorage,userId:S.user.id,deptId,actor});
+  const evidence=cameraEvidenceService();
   continuousQueue=current;
   continuousCleanup=mountContinuousReceive(panel.querySelector('#continuousReceiveRoot'),current,{
     startScanner,stopScanner,
+    onEvidence:(id,code,frame)=>{void evidence.capture(id,code,frame,()=>current.rows.find(row=>row.id===id));},
+    onEvidenceConfirmed:row=>{void evidence.confirm(row);},
     isCurrent:()=>S.view==='home'&&S.deptId===deptId&&continuousQueue===current&&floatingReceiveElement===layer,
     onLegacy:()=>{if(receiveBusy())return;legacyReceiveView();},
     onUnavailable:()=>{if(floatingReceiveElement===layer)legacyReceiveView('Escaneo directo no disponible en el servidor. Usa el registro por lote mientras se activa.');}
@@ -571,12 +589,28 @@ function searchView() {
   $('giveProductLocation')?.addEventListener('click', openProductLocation);
 }
 
+function searchEvidenceHtml() {
+  if(S.evidenceStatus==='loading')return '<section class="vantis-evidence"><h3>Registro visual</h3><p class="muted">Cargando imágenes privadas de las recepciones…</p></section>';
+  if(S.evidenceStatus==='error')return '<section class="vantis-evidence"><h3>Registro visual</h3><p class="muted">Las imágenes aún no están disponibles en esta instancia.</p></section>';
+  const photos=S.evidencePhotos||[];
+  if(!photos.length)return '<section class="vantis-evidence"><h3>Registro visual</h3><p class="muted">Todavía no hay fotografías de escaneo para este SKU. Las lecturas hechas con lector portátil no generan foto.</p></section>';
+  return '<section class="vantis-evidence"><h3>Registro visual <small>'+photos.length+' últimas capturas</small></h3>'+
+    '<p class="muted">Fotogramas automáticos de lecturas confirmadas. Muestran lo que enfocaba la cámara al escanear; no necesariamente el artículo completo.</p>'+
+    '<div class="vantis-evidence-grid">'+photos.map(photo=>{
+      const when=new Date(photo.capturada_en).toLocaleString('es-MX',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+      return '<figure class="vantis-evidence-item">'+(photo.url?
+        '<a href="'+esc(photo.url)+'" target="_blank" rel="noopener noreferrer" aria-label="Abrir evidencia del '+esc(when)+'"><img loading="lazy" src="'+esc(photo.url)+'" alt="Imagen del código escaneado para '+esc(S.searchResult?.sku||'SKU')+'"></a>'
+        :'<div class="vantis-evidence-missing">Imagen no disponible</div>')+
+        '<figcaption>'+esc(when)+' <span>· '+esc(photo.codigo_leido)+'</span></figcaption></figure>';
+    }).join('')+'</div></section>';
+}
+
 function searchResultHtml() {
   if (searchPending) return '<p class="muted" role="status">Consultando artículo y ubicaciones…</p>';
   if (!S.searchResult) return '<div class="empty small-empty"><div class="empty-icon">⌕</div><p>Escanea un código para ver stock y ubicación.</p></div>';
   if (S.searchType==='product') {
     const p=S.searchResult;
-    return `<div class="product-head"><div><div class="tiny">SKU ${esc(p.sku)}${p.upc?' · UPC '+esc(p.upc):''}</div><h2>${esc(p.descripcion)}</h2><p class="muted">${esc([p.marca,p.talla,p.color].filter(Boolean).join(' · '))}</p></div><div class="stock-big">${p.stock}<span>piezas</span></div></div>${locationList(S.locations)}${locationSaveNotice?.productId===p.id?`<div class="success" role="status">✓ ${locationSaveNotice.alreadyAssigned?'El artículo ya estaba asignado a':'Ubicación guardada:'} <b>${esc(locationSaveNotice.code)}</b>.</div>`:''}<div class="product-location-action"><button id="giveProductLocation" class="${S.locations.length?'secondary':'primary'}" type="button">⌖ ${S.locations.length?'Agregar otra ubicación':'Darle ubicación'}</button><p class="tiny">${S.locations.length?'Conserva las ubicaciones actuales.':'Escanea el marbete del cajón, mueble o rack.'}</p></div><div id="productLocationPanel" hidden></div>`;
+    return `<div class="product-head"><div><div class="tiny">SKU ${esc(p.sku)}${p.upc?' · UPC '+esc(p.upc):''}</div><h2>${esc(p.descripcion)}</h2><p class="muted">${esc([p.marca,p.talla,p.color].filter(Boolean).join(' · '))}</p></div><div class="stock-big">${p.stock}<span>piezas</span></div></div>${locationList(S.locations)}${searchEvidenceHtml()}${locationSaveNotice?.productId===p.id?`<div class="success" role="status">✓ ${locationSaveNotice.alreadyAssigned?'El artículo ya estaba asignado a':'Ubicación guardada:'} <b>${esc(locationSaveNotice.code)}</b>.</div>`:''}<div class="product-location-action"><button id="giveProductLocation" class="${S.locations.length?'secondary':'primary'}" type="button">⌖ ${S.locations.length?'Agregar otra ubicación':'Darle ubicación'}</button><p class="tiny">${S.locations.length?'Conserva las ubicaciones actuales.':'Escanea el marbete del cajón, mueble o rack.'}</p></div><div id="productLocationPanel" hidden></div>`;
   }
   const m=S.searchResult;
   return `<div><div class="tiny">Ubicación</div><h2>${esc(m.codigo)}</h2><p><span class="pill">${esc(m.zona)}</span> ${esc(m.descripcion||'')}</p><div>${(m.products||[]).map(p => `<div class="product-row"><div><b>${esc(p.descripcion)}</b><span>SKU ${esc(p.sku)}${p.upc?' · UPC '+esc(p.upc):''}</span></div><strong>${p.qty??'—'}</strong></div>`).join('')||'<p class="muted">No hay productos asignados.</p>'}</div></div>`;
@@ -591,7 +625,7 @@ async function doSearch(code) {
   const request=++searchRequest, deptId=S.deptId;
   const current=()=>request===searchRequest && S.deptId===deptId && S.view==='search';
   locationAssignment=null; locationSaveNotice=null; lastSearchCode=code;
-  S.searchResult=null; S.locations=[]; searchPending=true;
+  S.searchResult=null; S.locations=[]; S.evidencePhotos=[]; S.evidenceStatus='idle'; searchPending=true;
   render();
   try {
     const p=await findProduct(code,deptId);
@@ -599,7 +633,13 @@ async function doSearch(code) {
     if (p) {
       const locs=await loadLocations(p.sku,deptId);
       if (!current()) return;
-      S.searchType='product'; S.searchResult=p; S.locations=locs;
+      S.searchType='product'; S.searchResult=p; S.locations=locs; S.evidenceStatus='loading';
+      // La búsqueda de stock es independiente de la descarga de imágenes.
+      void listSkuEvidence(sb,deptId,p.sku).then(photos=>{
+        if(current()){S.evidencePhotos=photos;S.evidenceStatus='ready';render();}
+      }).catch(error=>{
+        if(current()){console.warn('VANTIS · registro visual:',error?.message||error);S.evidenceStatus='error';render();}
+      });
       return;
     }
     const marbete=await locationQuery(sb.from('marbetes').select('codigo,zona,descripcion,created_at').eq('codigo',code).eq('activo',true).eq('departamento_id',deptId).gt('created_at',VISUAL_CLEANUP_CUTOFF).maybeSingle());
