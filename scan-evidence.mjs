@@ -40,8 +40,8 @@ const all=()=>transact('readonly','getAll',[]);
 function errorText(error){return String(error?.message||error||'Sin detalle');}
 
 export class ScanEvidence {
-  constructor({sb,departmentId,userId,onIssue=()=>{}}) {
-    this.sb=sb;this.departmentId=departmentId;this.userId=userId;this.onIssue=onIssue;
+  constructor({sb,departmentId,userId,cloudEnabled=true,onIssue=()=>{}}) {
+    this.sb=sb;this.departmentId=departmentId;this.userId=userId;this.onIssue=onIssue;this.cloudEnabled=cloudEnabled;
     this.uploading=false;this.retryScheduled=false;this.lastError='';
     this.online=()=>void this.sync();
     globalThis.addEventListener?.('online',this.online);
@@ -75,7 +75,7 @@ export class ScanEvidence {
     } catch(error) {this.issue('No se pudo preparar evidencia: '+errorText(error));}
   }
   async sync() {
-    if(this.uploading||globalThis.navigator?.onLine===false)return;
+    if(!this.cloudEnabled||this.uploading||globalThis.navigator?.onLine===false)return;
     this.uploading=true;
     let more=false,failed=false;
     try {
