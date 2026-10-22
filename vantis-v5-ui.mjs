@@ -63,7 +63,8 @@ export function mountVantisV5(root,{sb,deptId,admin=false,actor='',userId='',mod
     .eq('departamento_id',deptId).order('created_at',{ascending:false}).limit(80);
    const rows=fail(q)||[];
    if(!active(id))return;
-   const visible=admin?rows:rows.filter(r=>String(r.asignado_gafete)===String(actor).replace(/\D/g,'')||String(actor).includes(r.asignado_gafete));
+   const badge=String(actor).trim().replace(/^(?:Jefe|Empleado)\s+/i,'');
+   const visible=admin?rows:rows.filter(r=>String(r.asignado_gafete).trim()===badge);
    $('v5Cycles').innerHTML=visible.length?'<h3>Conteos asignados</h3>'+visible.map(c=>
     '<button type="button" class="v5-cycle" data-id="'+esc(c.id)+'"><b>'+esc(c.nombre)+'</b><small>'+esc(c.marbete_codigo)+' · Gafete '+esc(c.asignado_gafete)+'</small><span class="v5-state">'+esc(c.estado)+'</span></button>').join(''):'<p class="v5-empty">No hay conteos asignados.</p>';
    $('v5Cycles').querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>void showCycle(rows.find(x=>x.id===b.dataset.id)));
