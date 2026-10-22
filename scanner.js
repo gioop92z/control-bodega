@@ -1,6 +1,14 @@
 import {BrowserMultiFormatReader} from 'https://esm.sh/@zxing/browser@0.1.5';
 import {BarcodeFormat,DecodeHintType} from 'https://esm.sh/@zxing/library@0.21.3';
-import Quagga from 'https://esm.sh/@ericblade/quagga2@1.12.1';
+// The alternate reader is loaded only when ZXing fails or the user requests it.
+let quagga=null,quaggaLoading=null;
+async function getQuagga(){
+  if(quagga)return quagga;
+  quaggaLoading ||= import('https://esm.sh/@ericblade/quagga2@1.12.1')
+    .then(module=>quagga=module.default||module)
+    .catch(error=>{quaggaLoading=null;throw error;});
+  return quaggaLoading;
+}
 
 let controls = null, active = false, last = '', session = 0, onClose = null, switchTimer = null;
 let feedbackTimer = null, scanAudio = null;
@@ -19,7 +27,7 @@ const hints = new Map([
 function haltReader() {
   clearTimeout(switchTimer); switchTimer = null;
   try { controls?.stop?.(); } catch {}
-  try { Quagga.offDetected?.(); Quagga.offProcessed?.(); } catch {}
+  try { quagga?.offDetected?.(); quagga?.offProcessed?.(); } catch {}
   controls = null;
 }
 
@@ -109,18 +117,18 @@ export async function startScanner(cb, label = 'código', options = {}) {
     // Copiar el fotograma ANTES de cerrar el lector: no se invoca getUserMedia
     // de nuevo, no se interrumpe el flujo y no se toman imágenes en segundo plano.
     try {
-      const video=[...document.querySelectorAll('#scannerViewport video')].reverse()
-        .find(node=>node.videoWidth>0&&node.videoHeight>0&&node.readyState>=2);
+      const video=document.getElementById('scanVideo');
+      if(!video?.videoWidth||!video.videoHeight||video.readyState<2)return Promise.resolve(null);
       if(!video)return Promise.resolve(null);
       const sourceWidth=video.videoWidth,sourceHeight=video.videoHeight;
       const cropWidth=sourceWidth*.84,cropHeight=sourceHeight*.84;
-      const width=Math.min(640,Math.round(cropWidth));
+      const width=Math.min(480,Math.round(cropWidth));
       const canvas=document.createElement('canvas');
       canvas.width=width;canvas.height=Math.max(1,Math.round(width*cropHeight/cropWidth));
       canvas.getContext('2d',{alpha:false}).drawImage(video,
         (sourceWidth-cropWidth)/2,(sourceHeight-cropHeight)/2,cropWidth,cropHeight,
         0,0,canvas.width,canvas.height);
-      return new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.52));
+      return new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.48));
     }catch(error){console.warn('VANTIS: fotograma no disponible',error);return Promise.resolve(null);}
   }
   function accept(raw, repeat = false) {
@@ -203,7 +211,7 @@ export async function startScanner(cb, label = 'código', options = {}) {
       audio:false,
       video:{
         facingMode:{ideal:'environment'},
-        width:{ideal:1920},height:{ideal:1080},
+        width:{ideal:1280},height:{ideal:720},
         frameRate:{ideal:30,max:30}
       }
     },document.getElementById('scanVideo'),result => {
@@ -217,6 +225,8 @@ export async function startScanner(cb, label = 'código', options = {}) {
   }
 
   async function startQuagga() {
+    const Quagga=await getQuagga();
+    if(!stillActive())return;
     const target = document.getElementById('scannerViewport');
     const readers = [
       'code_128_reader','ean_reader','ean_8_reader','upc_reader',
@@ -226,12 +236,12 @@ export async function startScanner(cb, label = 'código', options = {}) {
     await new Promise((resolve,reject) => Quagga.init({
       inputStream:{
         type:'LiveStream',target,
-        constraints:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}},
+        constraints:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}},
         area:{top:'5%',right:'2%',left:'2%',bottom:'5%'}
       },
       locator:{patchSize:'medium',halfSample:false},
-      numOfWorkers:Math.min(3,navigator.hardwareConcurrency || 2),
-      frequency:18,decoder:{readers,multiple:false},locate:true
+      numOfWorkers:Math.min(2,navigator.hardwareConcurrency || 2),
+      frequency:15,decoder:{readers,multiple:false},locate:true
     },error => error ? reject(error) : resolve()));
     if (!stillActive()) {try {Quagga.stop();} catch{} return;}
     Quagga.onDetected(value => {

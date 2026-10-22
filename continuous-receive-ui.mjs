@@ -16,7 +16,7 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     <section class="cr-stage"><span id="crLocationLabel" class="cr-kicker">MARBETE ACTIVO</span><strong id="crLocation" class="cr-location">—</strong><h1 id="crInstruction">ESCANEA UN SKU O UN MARBETE</h1><p id="crLocationState"></p>
       <div class="cr-counters"><div><strong id="crVisitCount">0</strong><span>PIEZAS EN ESTE MARBETE</span></div><div><strong id="crTotalCount">0</strong><span>TOTAL CONFIRMADO EN SESIÓN</span></div></div>
       <form id="crScanForm" autocomplete="off"><label class="sr-only" for="crScan">Lectura del escáner portátil, marbete, SKU o UPC</label><input id="crScan" type="text" inputmode="text" enterkeyhint="done" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Escanea o escribe marbete, SKU o UPC" aria-describedby="crSync"><button id="crKeyboard" class="ghost" type="button" aria-label="Abrir teclado para escribir un código">⌨ Escribir</button></form>
-      <div class="cr-indicators"><span id="crDevice">Captura preparada para lector portátil</span><span id="crSync" role="status" aria-live="polite">Comprobando servidor…</span><button id="crCameraButton" type="button" class="secondary">Cámara</button></div><div id="crCamera"></div><p id="crPhotoStatus" class="cr-photo-status" role="status" aria-live="polite"></p>
+      <div class="cr-indicators"><span id="crDevice">Captura preparada para lector portátil</span><span id="crSync" role="status" aria-live="polite">Comprobando servidor…</span><button id="crCameraButton" type="button" class="secondary">Cámara</button></div><p id="crPhotoStatus" class="cr-photo-status" role="status" aria-live="polite"></p>
     </section>
     <div id="crFeedback" class="cr-feedback" role="status" aria-live="polite" hidden></div>
     <div id="crPendingLocation" class="cr-pending-location" hidden><div><b id="crPendingLocationCount">0 piezas esperando ubicación</b><small>Escanea un marbete y se vincularán automáticamente, o guárdalas sin ubicación.</small></div><button id="crSaveWithoutLocation" type="button" class="secondary">Registrar sin marbete</button></div>
@@ -53,9 +53,10 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
       if(result.type==='piece'&&!queue.state.active&&!queue.state.candidate)feedback('✓ SKU conservado. Escanea un marbete o registra sin ubicación.','info');
       return result.type==='piece'?'Lectura protegida · pendiente de confirmación':result.type==='switch'?'Confirma el cambio de marbete':'Marbete en validación';
     } catch(error) {fail(error);throw error;}
-    finally {render();}
+    finally {scheduleRender();}
   }
   function scheduleRender() {if(frame===null&&current())frame=requestAnimationFrame(()=>{frame=null;render();});}
+  let lastRowMarkup='',lastRowsMarkup='',lastSummaryMarkup='';
   const stamp=row=>'<span class="cr-badge cr-'+row.status+'">'+esc(labels[row.status])+'</span>';
   function render() {
     if(!current())return;
@@ -79,9 +80,20 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     $('crError').hidden=!(queue.error||queue.storageError);$('crError').textContent=queue.storageError||queue.error;
     $('crNotice').textContent=notice;
     const last=queue.rows.at(-1);
-    if(last)$('crLast').innerHTML='<span>ÚLTIMA LECTURA '+(last.kind==='undo'?'· COMPENSACIÓN':'')+'</span><strong>'+esc(last.product?.descripcion||last.code)+'</strong><small>SKU '+esc(last.product?.sku||last.code)+' · '+esc(short(last.location)||'SIN UBICACIÓN')+'</small>'+stamp(last)+(last.error?'<small>'+esc(last.error)+'</small>':'');
-    $('crRows').innerHTML=queue.rows.length?[...queue.rows].reverse().slice(0,8).map(row=>'<article class="cr-row"><div><b>'+esc(row.product?.descripcion||row.code)+'</b><small>'+esc(row.product?.sku||row.code)+' · '+esc(short(row.location)||'SIN UBICACIÓN')+(row.kind==='undo'?' · Deshacer':'')+'</small>'+(row.error?'<small class="txt-red">'+esc(row.error)+'</small>':'')+'</div><div><strong>'+(row.kind==='undo'?'−1':'+1')+'</strong>'+stamp(row)+'</div></article>').join(''):'<p class="muted">Aquí aparecerán las piezas escaneadas.</p>';
-    $('crUndo').disabled=queue.compatibility||!ready()||!queue.rows.some(row=>row.kind==='receive'&&row.location&&row.status==='confirmed'&&!queue.rows.some(other=>other.reverses===row.id&&other.status!=='failed'));
+    if(last){const markup='<span>ÚLTIMA LECTURA '+(last.kind==='undo'?'· COMPENSACIÓN':'')+'</span><strong>'+esc(last.product?.descripcion||last.code)+'</strong><small>SKU '+esc(last.product?.sku||last.code)+' · '+esc(short(last.location)||'SIN UBICACIÓN')+'</small>'+stamp(last)+(last.error?'<small>'+esc(last.error)+'</small>':'');
+      if(markup!==lastRowMarkup){$('crLast').innerHTML=markup;lastRowMarkup=markup;}
+    }
+    const rowsMarkup=queue.rows.length?queue.rows.slice(-8).reverse().map(row=>'<article class="cr-row"><div><b>'+esc(row.product?.descripcion||row.code)+'</b><small>'+esc(row.product?.sku||row.code)+' · '+esc(short(row.location)||'SIN UBICACIÓN')+(row.kind==='undo'?' · Deshacer':'')+'</small>'+(row.error?'<small class="txt-red">'+esc(row.error)+'</small>':'')+'</div><div><strong>'+(row.kind==='undo'?'−1':'+1')+'</strong>'+stamp(row)+'</div></article>').join(''):'<p class="muted">Aquí aparecerán las piezas escaneadas.</p>';
+    if(rowsMarkup!==lastRowsMarkup){$('crRows').innerHTML=rowsMarkup;lastRowsMarkup=rowsMarkup;}
+    // Undo eligibility is linear, even after tens of thousands of pieces.
+    const reversed=new Set();
+    for(const row of queue.rows)if(row.reverses&&row.status!=='failed')reversed.add(row.reverses);
+    let canUndo=false;
+    for(let i=queue.rows.length-1;i>=0;i--){
+      const row=queue.rows[i];
+      if(row.kind==='receive'&&row.location&&row.status==='confirmed'&&!reversed.has(row.id)){canUndo=true;break;}
+    }
+    $('crUndo').disabled=queue.compatibility||!ready()||!canUndo;
     $('crUndo').title=queue.compatibility?'Deshacer automático disponible al activar la migración segura.':'Deshacer la última entrada confirmada';
     $('crRetry').disabled=!queue.owned||queue.busy||Boolean(queue.storageError);
     $('crRetryFailed').hidden=!report.failed;$('crRetryFailed').disabled=!queue.owned||queue.busy;
@@ -91,7 +103,8 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     $('crOld').textContent=short(active?.code);$('crNew').textContent=short(queue.state.pendingSwitch?.code);
     $('crSummary').hidden=!queue.state.endedAt;
     if(queue.state.endedAt) {
-      $('crSummaryBody').innerHTML='<strong class="cr-summary-count">'+num(report.totalPieces)+' piezas confirmadas</strong><p>'+num(report.locations.filter(row=>row.marbete).length)+' marbetes · '+num(report.confirmed)+' movimientos confirmados · '+num(report.pending)+' pendientes · '+num(report.failed)+' fallidos</p><p><b>'+esc(report.actor)+'</b><br>Inicio: '+esc(new Date(report.startedAt).toLocaleString('es-MX'))+'<br>Fin: '+esc(new Date(report.endedAt).toLocaleString('es-MX'))+'</p>'+(report.pending?'<p class="cr-pending-text">La sesión conserva lecturas pendientes. Continúa la sincronización; estas piezas todavía no están confirmadas.</p>':'')+'<table><thead><tr><th>Marbete</th><th>Piezas</th><th>Pendientes</th><th>Fallidos</th></tr></thead><tbody>'+report.locations.map(row=>'<tr><td>'+esc(short(row.marbete)||'SIN UBICACIÓN')+'</td><td>'+num(row.pieces)+'</td><td>'+num(row.pending)+'</td><td>'+num(row.failed)+'</td></tr>').join('')+'</tbody></table>';
+      const summaryMarkup='<strong class="cr-summary-count">'+num(report.totalPieces)+' piezas confirmadas</strong><p>'+num(report.locations.filter(row=>row.marbete).length)+' marbetes · '+num(report.confirmed)+' movimientos confirmados · '+num(report.pending)+' pendientes · '+num(report.failed)+' fallidos</p><p><b>'+esc(report.actor)+'</b><br>Inicio: '+esc(new Date(report.startedAt).toLocaleString('es-MX'))+'<br>Fin: '+esc(new Date(report.endedAt).toLocaleString('es-MX'))+'</p>'+(report.pending?'<p class="cr-pending-text">La sesión conserva lecturas pendientes. Continúa la sincronización; estas piezas todavía no están confirmadas.</p>':'')+'<table><thead><tr><th>Marbete</th><th>Piezas</th><th>Pendientes</th><th>Fallidos</th></tr></thead><tbody>'+report.locations.map(row=>'<tr><td>'+esc(short(row.marbete)||'SIN UBICACIÓN')+'</td><td>'+num(row.pieces)+'</td><td>'+num(row.pending)+'</td><td>'+num(row.failed)+'</td></tr>').join('')+'</tbody></table>';
+      if(summaryMarkup!==lastSummaryMarkup){$('crSummaryBody').innerHTML=summaryMarkup;lastSummaryMarkup=summaryMarkup;}
       $('crNewSession').disabled=Boolean(report.pending)||queue.busy;
     }
   }
