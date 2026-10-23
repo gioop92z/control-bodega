@@ -45,8 +45,9 @@ export function recordRunProduct(dept,product,source=null){
  const evidence=source&&['verified','candidate','family_reference','operator_confirmed','family'].includes(source.status)&&
    /^\d{8,14}$/.test(String(source.liverpoolCode||''))&&validImage(source.imageUrl)&&
    String(source.productUrl||'').startsWith('https://www.liverpool.com.mx/tienda/pdp/')?source:null;
- const rank={'verified':4,'operator_confirmed':4,'family_reference':3,'family':3,'candidate':2};
- const existingRank=rank[previous.sourceStatus]||0,newRank=rank[evidence?.status]||0;
+ const photoOnly=source?.status==='preview'&&validImage(source.imageUrl)?source:null;
+ const rank={'verified':4,'operator_confirmed':4,'family_reference':3,'family':3,'candidate':2,'image_preview':1};
+ const existingRank=rank[previous.sourceStatus]||0,newRank=rank[evidence?.status||(photoOnly?'image_preview':'')]||0;
  // No reemplazar una familia fuerte por una sugerencia débil de otra familia.
  const useSource=evidence&&newRank>=existingRank;
  const item={...previous,...Object.fromEntries(Object.entries(p).filter(([,v])=>v)),seen:Date.now()};
@@ -54,6 +55,9 @@ export function recordRunProduct(dept,product,source=null){
   item.familyCode=String(evidence.liverpoolCode);item.imageUrl=evidence.imageUrl;
   item.productUrl=evidence.productUrl;item.sourceStatus=evidence.status;
   item.modelTitle=safe(evidence.title);item.sourceBrand=safe(evidence.brand);item.sourceColor=safe(evidence.color);
+ }else if(photoOnly&&existingRank<2){
+  // Una foto aislada es pista débil; nunca confirma la familia ni la talla.
+  item.imageUrl=photoOnly.imageUrl;item.sourceStatus='image_preview';
  }
  items[sku]=item;write(dept,items);return item;
 }
@@ -77,7 +81,8 @@ export function runMembers(dept,sku){
   if(sameFamily){
    const trusted=['verified','operator_confirmed','family_reference','family'];
    (trusted.includes(ref.sourceStatus)&&trusted.includes(other.sourceStatus)?confirmed:probable).push({...other,reason:'family'});
-  } else if(sameImage&&(sameModel||brandA&&brandA===brandB)){
+  } else if(sameImage&&(sameModel||brandA&&brandA===brandB||(!knownNames&&!brandA&&!brandB))){
+   // Misma foto sola = sugerencia visible, no relación certificada.
    probable.push({...other,reason:'shared-image'});
   }
  }
