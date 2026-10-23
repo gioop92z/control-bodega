@@ -17,10 +17,10 @@ import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?
 import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=5.1.0';
 import { mountOperations } from './operations-v4.mjs?v=5.0.0';
 import { ScanEvidence, listSkuEvidence, listLocalSkuEvidence } from './scan-evidence.mjs?v=5.1.1';
-import { lookupPublicCatalog, publicSearchUrl, lookupLiverpoolFamily } from './catalog-hybrid.mjs?v=5.6.0';
+import { lookupPublicCatalog, publicSearchUrl, lookupLiverpoolFamily, lookupLiverpoolModels } from './catalog-hybrid.mjs?v=5.8.0';
 import { liverpoolPreview } from './catalog-visual.mjs?v=5.6.0';
 import { catalogCandidate,confirmCatalogCandidate,rejectCatalogCandidate,isRejectedCandidate } from './catalog-relations.mjs?v=5.6.0';
-import { recordRunProduct, runMembers, fetchRunInventory, nearbyRunSuggestions } from './catalog-runs.mjs?v=5.7.1';
+import { recordRunProduct, runMembers, fetchRunInventory, nearbyRunSuggestions, knownFamilyCandidate } from './catalog-runs.mjs?v=5.8.0';
 
 const sb = createClient(
   vantisBackendConfig.url,
@@ -181,7 +181,7 @@ function resetSearchContext() {
   locationSaveNotice = null;
   clearEvidenceImages();S.evidenceStatus='idle';
   clearInterval(catalogCountdownTimer);catalogCountdownTimer=null;
-  S.externalStatus='idle';S.externalProduct=null;S.externalPreview=null;S.externalCandidate=null;
+  S.externalStatus='idle';S.externalProduct=null;S.externalPreview=null;S.externalCandidate=null;S.externalAlternatives=[];
   S.runStatus='idle';S.runData=null;runLookupSequence++;
   stopScanner();
 }
@@ -716,6 +716,7 @@ function searchView() {
     const panel=$('catalogFamilyPanel');if(panel){panel.hidden=!panel.hidden;if(!panel.hidden)$('catalogFamilyUrl')?.focus();}
   });
   $('catalogFamilyForm')?.addEventListener('submit',linkFamilyForCurrent);
+  document.querySelectorAll('[data-catalog-model-index]').forEach(el=>el.addEventListener('click',()=>selectCatalogModel(Number(el.dataset.catalogModelIndex))));
   document.querySelectorAll('[data-run-sku]').forEach(el=>el.addEventListener('click',()=>void doSearch(el.dataset.runSku)));
   $('runRefresh')?.addEventListener('click',()=>{
     const p=S.searchResult,req=searchRequest,dept=S.deptId;
@@ -789,6 +790,10 @@ function catalogSectionHtml(){
     '<div class="catalog-variant-alert"><b>'+(confirmed?'Modelo genérico identificado':'Posible modelo por verificar')+'</b> SKU de la pieza <strong>'+esc(code)+'</strong> · Código de familia Liverpool <strong>'+esc(item.liverpoolCode)+'</strong>. La imagen es del modelo; la talla se controla exclusivamente con el SKU de inventario.</div>':'';
   const actions=candidate?'<div class="catalog-candidate-buttons"><button type="button" id="catalogConfirmMatch">✓ Guardar relación del modelo</button><button type="button" id="catalogRejectMatch" class="secondary">No corresponde</button></div>':
     confirmed?'<div class="catalog-candidate-buttons"><button type="button" id="catalogRejectMatch" class="secondary">Cambiar modelo vinculado</button></div>':'';
+  const modelOptions=(!verified&&!confirmed&&S.externalAlternatives?.length>1)?
+    '<div class="catalog-model-options"><strong>Modelos Liverpool que podrían corresponder</strong><p>La búsqueda por marca y descripción encontró varias fichas. Selecciona la fotografía correcta; VANTIS no confundirá modelos ni inventará tallas.</p><div class="catalog-model-grid">'+
+    S.externalAlternatives.map((choice,index)=>'<button type="button" class="catalog-model-choice" data-catalog-model-index="'+index+'"><img loading="lazy" src="'+esc(choice.imageUrl)+'" alt="Modelo '+esc(choice.title)+'"><span>'+esc(choice.title)+'</span><small>Ficha '+esc(choice.liverpoolCode)+' · Comparar</small></button>').join('')+
+    '</div></div>':'';
   const linkForm='<div class="catalog-family-link"><button id="catalogLinkFamily" class="secondary" type="button">⌁ Vincular ficha de Liverpool</button>'+
     '<div id="catalogFamilyPanel" hidden><p>Si Liverpool no encuentra la talla, pega la URL de la ficha del modelo genérico una sola vez. VANTIS recordará la relación.</p>'+
     '<form id="catalogFamilyForm"><input id="catalogFamilyUrl" type="url" autocomplete="off" required placeholder="https://www.liverpool.com.mx/tienda/pdp/…"/>'+
@@ -797,8 +802,20 @@ function catalogSectionHtml(){
     '<div class="catalog-showcase-header"><span class="catalog-showcase-eyebrow">VANTIS · CATÁLOGO VISUAL</span><strong>Vista de producto</strong></div>'+
     '<div class="catalog-visual-stage'+(image?' has-photo':'')+'"><div class="catalog-halo"></div>'+img+'<span class="catalog-visual-stamp">'+esc(kind)+'</span></div>'+
     '<div class="catalog-showcase-foot"><div><span class="catalog-showcase-code">SKU '+esc(code)+'</span><h3>'+esc(title)+'</h3><p>'+esc(message)+'</p></div>'+timer+'</div>'+
-    comparison+actions+linkForm+
+    comparison+actions+modelOptions+linkForm+
     '<div class="catalog-showcase-actions"><a href="'+esc(sourceLink)+'" target="_blank" rel="noopener noreferrer">Ver ficha en Liverpool ↗</a><small>La foto pública no sustituye el registro visual de escaneo. No modifica stock ni ubicaciones.</small></div></section>';
+}
+function selectCatalogModel(index){
+  const choice=S.externalAlternatives?.[index];
+  const code=String(S.searchResult?.sku||lastSearchCode||'');
+  if(!choice||choice.code!==code)return;
+  S.externalCandidate={...choice,status:'candidate'};
+  if(S.searchType==='product'&&S.searchResult?.sku){
+    recordRunProduct(S.deptId,S.searchResult,S.externalCandidate);
+    const req=searchRequest,dept=S.deptId;
+    void loadRunForSearch(S.searchResult,()=>S.view==='search'&&searchRequest===req&&S.deptId===dept);
+  }
+  render();
 }
 function confirmCatalogRelation(){
   const code=String(S.searchResult?.sku||lastSearchCode||'');
@@ -869,7 +886,10 @@ async function linkFamilyForCurrent(event){
 }
 function startCatalogLookup(codes,current){
   clearInterval(catalogCountdownTimer);catalogCountdownTimer=null;
-  S.externalProduct=null;S.externalPreview=null;S.externalCandidate=catalogCandidate(codes);S.externalCountdown=8;
+  S.externalProduct=null;S.externalPreview=null;S.externalAlternatives=[];
+  S.externalCandidate=catalogCandidate(codes)||
+    (S.searchType==='product'?knownFamilyCandidate(S.deptId,S.searchResult):null);
+  S.externalCountdown=8;
   // También consulta el caché del dispositivo cuando no hay internet.
   S.externalStatus='loading';
   if(S.searchType==='product'&&S.searchResult?.sku){
@@ -877,6 +897,21 @@ function startCatalogLookup(codes,current){
     void loadRunForSearch(S.searchResult,current);
   }
   render();
+  // Consulta aparte por marca/modelo incluso si Liverpool no indexa el SKU de talla.
+  // La foto sugerida no confirma equivalencia hasta que el operador la acepte.
+  if(S.searchType==='product'&&S.searchResult?.sku){
+    const product=S.searchResult;
+    void lookupLiverpoolModels(product,deptName()).then(options=>{
+      if(!current()||S.searchResult?.sku!==product.sku||!options.length)return;
+      S.externalAlternatives=options;
+      if(S.externalStatus!=='verified'&&!S.externalCandidate&&options.length===1){
+        S.externalCandidate={...options[0],status:'candidate'};
+        recordRunProduct(S.deptId,product,S.externalCandidate);
+        void loadRunForSearch(product,current);
+      }
+      render();
+    }).catch(()=>{});
+  }
   // La imagen con código idéntico se intenta en paralelo, sin bloquear la API ni el escaneo.
   void liverpoolPreview(codes).then(preview=>{
     if(!current()||!preview)return;
@@ -1011,7 +1046,7 @@ async function doSearch(code) {
   const current=()=>request===searchRequest && S.deptId===deptId && S.view==='search';
   locationAssignment=null; locationSaveNotice=null; lastSearchCode=code;
   clearInterval(catalogCountdownTimer);catalogCountdownTimer=null;
-  S.externalStatus='idle';S.externalProduct=null;S.externalPreview=null;S.externalCandidate=null;
+  S.externalStatus='idle';S.externalProduct=null;S.externalPreview=null;S.externalCandidate=null;S.externalAlternatives=[];
   S.runStatus='idle';S.runData=null;runLookupSequence++;
   clearEvidenceImages();S.searchResult=null; S.locations=[]; S.evidenceStatus='idle'; searchPending=true;
   render();
