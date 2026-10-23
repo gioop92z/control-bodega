@@ -112,12 +112,17 @@ export class ScanEvidence {
   }
   dispose(){globalThis.removeEventListener?.('online',this.online);}
 }
-export async function listLocalSkuEvidence(departmentId,userId,sku,{limit=6}={}) {
-  const rows=(await all()).filter(row=>row.departmentId===departmentId&&row.userId===userId&&row.sku===sku)
-    .sort((a,b)=>String(b.capturedAt).localeCompare(String(a.capturedAt))).slice(0,limit);
+export async function listLocalSkuEvidence(departmentId,userId,sku,{limit=6,codes=[]}={}) {
+  // La fotografía también debe poder verse mientras la lectura sigue pendiente:
+  // el servidor aún no habrá proporcionado el SKU canónico de la pieza.
+  // Solo enlazar por código cuando el registro TODAVÍA no tiene SKU validado.
+  const aliases=new Set([sku,...codes].filter(Boolean).map(value=>String(value).trim()));
+  const rows=(await all()).filter(row=>row.departmentId===departmentId&&row.userId===userId&&(
+    row.sku===sku||(!row.sku&&aliases.has(String(row.code||'').trim()))
+  )).sort((a,b)=>String(b.capturedAt).localeCompare(String(a.capturedAt))).slice(0,limit);
   return rows.map(row=>({
     evento_id:row.id,capturada_en:row.capturedAt,codigo_leido:row.code,
-    url:URL.createObjectURL(row.blob),local:true
+    url:URL.createObjectURL(row.blob),local:true,pendingLink:!row.sku
   }));
 }
 
