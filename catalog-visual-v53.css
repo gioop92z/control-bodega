@@ -33,3 +33,13 @@
 .vantis-release-stamp{display:inline-flex;vertical-align:middle;margin-left:9px;padding:6px 10px;line-height:1.2;border-radius:100px;background:#fae8f2;border:1px solid #ecc6db;color:#a20960;font-size:11px;font-weight:850;letter-spacing:.015em;white-space:nowrap}
 .catalog-enrichment-label{display:inline-block;margin-top:3px;border-radius:7px;padding:5px 8px;background:#f8e9f1;color:#a00660;font-size:11px;font-weight:750}
 @media(max-width:480px){.vantis-release-stamp{margin-left:0;margin-top:8px;font-size:10px}.page-title h1:has(.vantis-release-stamp){display:flex;flex-wrap:wrap;gap:3px 8px;align-items:center}}
+
+/* SKU de inventario y producto padre de Liverpool son referencias distintas. */
+.catalog-variant-alert{margin:1px 17px 12px;padding:11px 13px;background:#fff5e7;border:1px solid #f3d39e;border-radius:12px;font-size:12px;line-height:1.5;color:#74451f}
+.catalog-variant-alert b{display:block;margin-bottom:3px;color:#783e0f;font-size:12px}
+.catalog-variant-alert strong{color:#522b14;font-variant-numeric:tabular-nums}
+.catalog-candidate-buttons{display:flex;gap:9px;align-items:stretch;padding:0 17px 13px;flex-wrap:wrap}
+.catalog-candidate-buttons button{font-family:inherit;font-size:12px;font-weight:800;line-height:1.3;padding:12px 14px;border-radius:12px;border:1px solid #b81277;background:#e5007d;color:white;flex:1;min-width:175px;cursor:pointer}
+.catalog-candidate-buttons button.secondary{border-color:#ead3e1;background:#fff;color:#75375b}
+.catalog-candidate-buttons button:focus-visible{outline:3px solid #8442b7;outline-offset:3px}
+@media(max-width:460px){.catalog-candidate-buttons{flex-direction:column}.catalog-candidate-buttons button{min-width:0;flex:auto;width:100%}}
