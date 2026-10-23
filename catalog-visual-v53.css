@@ -43,3 +43,15 @@
 .catalog-candidate-buttons button.secondary{border-color:#ead3e1;background:#fff;color:#75375b}
 .catalog-candidate-buttons button:focus-visible{outline:3px solid #8442b7;outline-offset:3px}
 @media(max-width:460px){.catalog-candidate-buttons{flex-direction:column}.catalog-candidate-buttons button{min-width:0;flex:auto;width:100%}}
+
+/* Asociación por código de familia: opt-in sólo como recuperación ante búsqueda sin resultado. */
+.catalog-family-link{margin:0 16px 12px;border-radius:14px;border:1px solid #f1dce8;background:#fffafd;padding:12px}
+.catalog-family-link>button{display:block;width:100%;border:1px dashed #ca82a9;color:#970663;background:#fff;border-radius:11px;padding:10px 12px;font-size:12px;font-weight:800}
+.catalog-family-link>div{padding-top:10px}
+.catalog-family-link>div[hidden]{display:none!important}
+.catalog-family-link p{margin:0 0 9px;font-size:11px;line-height:1.5;color:#756371}
+.catalog-family-link form{display:flex;flex-wrap:wrap;gap:8px}
+.catalog-family-link input{flex:1 1 220px;min-width:0;border:1px solid #dbc6d3;border-radius:10px;background:white;padding:10px;font-size:12px;line-height:1.4;color:#342735}
+.catalog-family-link form>button{flex:0 0 auto;min-width:145px;border:0;border-radius:10px;background:#e5007d;color:#fff;padding:10px 12px;font-weight:800;font-size:12px}
+.catalog-family-link form>button:disabled{opacity:.6}
+@media(max-width:440px){.catalog-family-link form{flex-direction:column}.catalog-family-link input{flex:auto;width:100%}.catalog-family-link form>button{width:100%;min-width:0}}
