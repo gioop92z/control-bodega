@@ -1,6 +1,6 @@
 // VANTIS catálogo visual: imagen pública por código, sin alterar inventario.
 // Imagen preliminar ≠ ficha verificada. No se le adjudica talla/color sin confirmar.
-const CDN_PATHS=['https://sp459.liverpool.com.mx/i/','https://ss550.liverpool.com.mx/xl/','https://ss550.liverpool.com.mx/lg/','https://ss251.liverpool.com.mx/xl/','https://ss251.liverpool.com.mx/lg/'];
+const CDN_PATHS=['https://ss237.liverpool.com.mx/lg/','https://ss237.liverpool.com.mx/xl/','https://sp459.liverpool.com.mx/i/','https://ss550.liverpool.com.mx/xl/','https://ss550.liverpool.com.mx/lg/','https://ss251.liverpool.com.mx/xl/','https://ss251.liverpool.com.mx/lg/'];
 const CACHE='vantis.imagenes-publicas.v1';
 const inFlight=new Map();
 function readCache(){
