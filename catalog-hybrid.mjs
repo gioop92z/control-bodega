@@ -69,6 +69,7 @@ export async function lookupPublicCatalog(codes){
   // Dos identificadores como máximo; son metadatos, no inventario.
   const results=await Promise.all(unique.map(one));
   return results.find(x=>x.status==='verified')||
-    (results.some(x=>x.status==='unavailable'||x.status==='offline')?{status:'unavailable',code:unique[0]}:
+    (results.some(x=>x.status==='unavailable')?{status:'unavailable',code:unique[0]}:
+      results.some(x=>x.status==='offline')?{status:'offline',code:unique[0]}:
       {status:'not_found',code:unique[0]});
 }
