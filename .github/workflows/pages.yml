@@ -38,6 +38,8 @@ jobs:
           node --check catalog-hybrid.mjs
           node --check catalog-visual.mjs
           node --check catalog-relations.mjs
+          node --check catalog-runs.mjs
+          node --test tests/catalog-runs.test.mjs
           node --check scan-evidence.mjs
           test -s index.html
           test -s app.js
@@ -45,6 +47,8 @@ jobs:
           test -s catalog-visual.mjs
           test -s catalog-hybrid.css
           test -s catalog-visual-v53.css
+          test -s catalog-runs.css
+          grep -Fq 'runSectionHtml()' app.js
           grep -Fq 'catalog-visual-v53.css' index.html
           grep -Fq 'catalog-product-showcase' app.js
       # Database integration and live Supabase API tests run separately in CI.
@@ -56,7 +60,7 @@ jobs:
           mkdir -p "${{ runner.temp }}/vantis-pages"
           git archive HEAD | tar -x -C "${{ runner.temp }}/vantis-pages"
           cat > "${{ runner.temp }}/vantis-pages/deployment-info.json" <<EOF
-          {"release":"5.6.0","commit":"${{ github.sha }}","generated_by":"github-actions-pages"}
+          {"release":"5.7.0","commit":"${{ github.sha }}","generated_by":"github-actions-pages"}
           EOF
       - name: Upload static frontend
         uses: actions/upload-pages-artifact@v3
