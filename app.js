@@ -17,7 +17,7 @@ import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?
 import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=5.1.0';
 import { mountOperations } from './operations-v4.mjs?v=5.0.0';
 import { ScanEvidence, listSkuEvidence, listLocalSkuEvidence } from './scan-evidence.mjs?v=5.1.1';
-import { lookupPublicCatalog, publicSearchUrl } from './catalog-hybrid.mjs?v=5.4.0';
+import { lookupPublicCatalog, publicSearchUrl } from './catalog-hybrid.mjs?v=5.5.1';
 import { liverpoolPreview } from './catalog-visual.mjs?v=5.4.0';
 import { catalogCandidate,confirmCatalogCandidate,rejectCatalogCandidate,isRejectedCandidate } from './catalog-relations.mjs?v=5.5.1';
 
