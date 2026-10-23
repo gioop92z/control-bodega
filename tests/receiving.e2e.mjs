@@ -156,7 +156,15 @@ try {
   await page.evaluate(()=>window.__receiptFixture.lostResponse=true);await page.keyboard.type('0012345678');await page.keyboard.press('Enter');
   await page.waitForFunction(()=>document.getElementById('crSync').textContent.includes('1 pendientes'));
   assert.equal(await page.locator('#crTotalCount').innerText(),'1,609');
-  await page.locator('#crRetry').click();await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='1,610');
+  // Recovery UX: show exact pending code, location and state even in finished summary.
+  await page.locator('#crPendingReview').waitFor({state:'visible'});
+  assert.match(await page.locator('#crPendingRows').innerText(),/0012345678/);
+  await page.locator('#crFinish').click();await page.locator('#crSummary').waitFor({state:'visible'});
+  assert.match(await page.locator('#crSummaryPending').innerText(),/0012345678/);
+  assert.equal(await page.locator('#crNewSession').isDisabled(),true,'pending row may not be abandoned');
+  await page.locator('#crSummaryRetry').click();
+  await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='1,610');
+  await page.locator('#crResume').click();
   assert.equal(await page.evaluate(()=>window.__receiptFixture.products[0].stock),1620);
   await page.keyboard.type('UNKNOWN');await page.keyboard.press('Enter');
   await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='1,611');
