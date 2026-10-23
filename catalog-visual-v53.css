@@ -1,0 +1,30 @@
+/* VANTIS 5.3: visor de producto (las fotos externas no son evidencia de recepción). */
+.catalog-product-showcase{margin:16px 0 22px;border:1px solid #efd5e4;background:#fff;border-radius:24px;box-shadow:0 14px 40px #39132b10;overflow:hidden;isolation:isolate}
+.catalog-showcase-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 18px;background:#fff}
+.catalog-showcase-eyebrow{font-size:10px;font-weight:800;color:#bd006e;letter-spacing:.12em}
+.catalog-showcase-header strong{font-size:12px;font-weight:800;color:#4b3c47}
+.catalog-visual-stage{height:300px;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;background:radial-gradient(ellipse 75% 65% at 52% 42%,#fff 3%,#fde5f0 75%,#f8d8e8 100%)}
+.catalog-visual-stage:after{content:'';position:absolute;bottom:32px;left:15%;width:70%;height:28px;background:#ac3b7950;filter:blur(18px);border-radius:50%;transform:perspective(400px) rotateX(70deg)}
+.catalog-halo{position:absolute;z-index:0;width:230px;height:230px;border:1px solid #fff9;border-radius:50%;box-shadow:0 0 0 34px #fff5,0 0 0 68px #fff3}
+.catalog-hero-image{position:relative;z-index:1;display:block;max-width:min(95%,520px);max-height:264px;width:auto;height:auto;object-fit:contain;filter:drop-shadow(0 21px 16px #6c255d33);transform:perspective(1000px) rotateY(-9deg) rotateX(4deg) translateY(-5px);animation:catalogHover 6s ease-in-out infinite;mix-blend-mode:multiply;border-radius:10px}
+.catalog-hero-image[hidden]{display:none!important}
+.catalog-visual-stage.image-missing:before{content:'La imagen no está disponible';position:absolute;z-index:1;text-align:center;font-size:14px;font-weight:750;color:#8b5373}
+.catalog-placeholder{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:0;color:#976078}
+.catalog-placeholder svg{width:min(82%,290px);height:auto;max-height:195px;filter:drop-shadow(0 13px 13px #9e3b7340);transform:perspective(600px) rotateY(-9deg) rotate(-5deg)}
+.catalog-placeholder span{font-weight:650;font-size:11px;letter-spacing:.02em}
+.catalog-visual-stamp{position:absolute;z-index:2;bottom:12px;left:50%;transform:translateX(-50%);white-space:nowrap;max-width:94%;overflow:hidden;text-overflow:ellipsis;background:#fffefbeF;border:1px solid #fff;border-radius:100px;color:#870b58;padding:7px 12px;font-size:10px;letter-spacing:.035em;font-weight:850;box-shadow:0 2px 12px #5d19331a}
+.catalog-showcase-foot{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:17px 19px 11px}
+.catalog-showcase-foot>div:first-child{min-width:0;flex:1}
+.catalog-showcase-code{font-size:11px;color:#ae116c;font-weight:850;letter-spacing:.035em}
+.catalog-showcase-foot h3{font-size:19px;line-height:1.25;color:#27202a;margin:5px 0 5px;font-weight:800;overflow-wrap:anywhere}
+.catalog-showcase-foot p{font-size:12px;color:#7c707a;line-height:1.5;margin:0}
+.catalog-timer{display:flex;gap:6px;align-items:center;color:#a3005f;white-space:nowrap;font-size:13px;font-variant-numeric:tabular-nums}
+.catalog-spinner{height:11px;width:11px;border:2px solid #e7b8d2;border-top-color:#bf076e;border-radius:100%;animation:catalogSpin .8s linear infinite}
+.catalog-showcase-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;padding:10px 19px 18px}
+.catalog-showcase-actions a{border-radius:12px;background:#e5007d;color:#fff;text-decoration:none;padding:11px 14px;font-size:13px;font-weight:800;box-shadow:0 4px 12px #e5007d35}
+.catalog-showcase-actions a:hover{background:#b70065}
+.catalog-showcase-actions small{font-size:10px;color:#857981;line-height:1.45;flex:1;min-width:160px}
+@keyframes catalogHover{0%,100%{transform:perspective(1000px) rotateY(-9deg) rotateX(4deg) translateY(-5px)}50%{transform:perspective(1000px) rotateY(-6deg) rotateX(2deg) translateY(2px)}}
+@keyframes catalogSpin{to{transform:rotate(360deg)}}
+@media(max-width:480px){.catalog-visual-stage{height:264px}.catalog-hero-image{max-height:226px}.catalog-showcase-header{padding:13px 15px}.catalog-showcase-foot{padding:15px 16px 8px}.catalog-showcase-foot h3{font-size:18px}.catalog-showcase-actions{padding:10px 16px 15px}.catalog-visual-stamp{font-size:9px}}
+@media(prefers-reduced-motion:reduce){.catalog-hero-image,.catalog-spinner{animation:none}}
