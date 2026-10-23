@@ -1,6 +1,6 @@
 // VANTIS: enriquecimiento PUBLICO, independiente del inventario y del flujo del lector.
 const ENDPOINT='https://uphnzyembyrouvqohwys.supabase.co/functions/v1/liverpool-catalogo';
-const KEY='vantis.catalogo-publico.v1';
+const KEY='vantis.catalogo-publico.v2';
 const MAX=160;
 const inflight=new Map();
 const valid=code=>/^[a-zA-Z0-9]{6,20}$/.test(String(code||''));
@@ -43,16 +43,16 @@ async function one(code){
       if(!response.ok)throw Error('Catalogo no disponible: '+response.status);
       const data=await response.json();
       if(!data||data.code!==code)throw Error('Respuesta de codigo inconsistente');
-      if(data.status==='verified'){
+      if(data.status==='verified'||data.status==='candidate'){
         if(!imageAllowed(data.imageUrl))throw Error('Imagen externa no validada');
         const link=new URL(data.productUrl);
         if(link.protocol!=='https:'||link.hostname!=='www.liverpool.com.mx'||!link.pathname.startsWith('/tienda/pdp/'))
           throw Error('Enlace externo no validado');
-        const result={status:'verified',code,title:String(data.title||'').slice(0,180),
+        const result={status:data.status,code,title:String(data.title||'').slice(0,180),
           brand:String(data.brand||'').slice(0,70),color:String(data.color||'').slice(0,45),
           imageUrl:data.imageUrl,productUrl:link.href,liverpoolCode:data.liverpoolCode||'',
           source:'liverpool_web_public',sizeVerified:false};
-        save(code,result);return result;
+        if(result.status==='verified')save(code,result);return result;
       }
       if(data.status==='not_found'){const res={status:'not_found',code};save(code,res);return res;}
       return {status:'unavailable',code};
@@ -68,7 +68,7 @@ export async function lookupPublicCatalog(codes){
   for(const code of unique){const item=cached(code);if(item?.status==='verified')return {...item,cache:'dispositivo'};}
   // Dos identificadores como máximo; son metadatos, no inventario.
   const results=await Promise.all(unique.map(one));
-  return results.find(x=>x.status==='verified')||
+  return results.find(x=>x.status==='verified')||results.find(x=>x.status==='candidate')||
     (results.some(x=>x.status==='unavailable')?{status:'unavailable',code:unique[0]}:
       results.some(x=>x.status==='offline')?{status:'offline',code:unique[0]}:
       {status:'not_found',code:unique[0]});
