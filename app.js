@@ -20,6 +20,7 @@ import { ScanEvidence, listSkuEvidence, listLocalSkuEvidence } from './scan-evid
 import { lookupPublicCatalog, publicSearchUrl, lookupLiverpoolFamily } from './catalog-hybrid.mjs?v=5.6.0';
 import { liverpoolPreview } from './catalog-visual.mjs?v=5.6.0';
 import { catalogCandidate,confirmCatalogCandidate,rejectCatalogCandidate,isRejectedCandidate } from './catalog-relations.mjs?v=5.6.0';
+import { recordRunProduct, runMembers, fetchRunInventory, nearbyRunSuggestions, storedRun } from './catalog-runs.mjs?v=5.7.0';
 
 const sb = createClient(
   vantisBackendConfig.url,
@@ -56,6 +57,8 @@ const S = {
   externalPreview: null,
   externalCandidate: null,
   externalCountdown: 8,
+  runStatus: 'idle',
+  runData: null,
   count: null,
   importHeaders: [],
   importRows: [],
@@ -80,24 +83,39 @@ let catalogCountdownTimer=null;
 const catalogBackgroundQueue=[];
 const catalogBackgroundSeen=new Set();
 let catalogBackgroundTimer=null;
+let runLookupSequence=0;
 // Nunca detiene el lector ni modifica stock: precarga solo nuevos SKU sin descripción.
+// Tras confirmar cada pieza, aprender su relación de familia SIN bloquear el escáner.
+// La consulta remota se dosifica para respetar el proveedor y no ralentizar recepciones.
 function prefetchUnknownCatalog(product){
-  if(navigator.onLine===false||!product?.sku)return;
-  const name=String(product.descripcion||'').toLowerCase().trim();
-  const unknown=!name||/^(sku|producto sin|desconocido|pendiente|sin descripci[oó]n)/i.test(name)||name===String(product.sku).toLowerCase();
-  if(!unknown||catalogBackgroundSeen.has(product.sku))return;
-  if(catalogBackgroundQueue.length>=30)return; // evita colas descontroladas en recepciones masivas
-  catalogBackgroundSeen.add(product.sku);
-  if(catalogBackgroundSeen.size>500)catalogBackgroundSeen.clear();
-  catalogBackgroundQueue.push([product.sku,product.upc]);
-  if(!catalogBackgroundTimer)catalogBackgroundTimer=setTimeout(drainUnknownCatalog,1000);
+  if(!product?.sku||!S.deptId)return;
+  const dept=S.deptId,sku=String(product.sku).trim();
+  if(!/^[a-zA-Z0-9]{6,20}$/.test(sku))return;
+  if(catalogBackgroundSeen.has(dept+':'+sku))return;
+  catalogBackgroundSeen.add(dept+':'+sku);
+  if(catalogBackgroundSeen.size>2500)catalogBackgroundSeen.clear();
+  if(catalogBackgroundQueue.length>=120)return;
+  catalogBackgroundQueue.push({dept,product:{...product}});
+  if(!catalogBackgroundTimer)catalogBackgroundTimer=setTimeout(drainUnknownCatalog,1200);
 }
 async function drainUnknownCatalog(){
   catalogBackgroundTimer=null;
-  const codes=catalogBackgroundQueue.shift();
-  if(codes&&navigator.onLine!==false){try{await lookupPublicCatalog(codes);}catch{}}
-  // Límite conservador: 1 consulta/10 s para respetar el sitio externo.
-  if(catalogBackgroundQueue.length)catalogBackgroundTimer=setTimeout(drainUnknownCatalog,10000);
+  const row=catalogBackgroundQueue.shift();
+  if(row){
+    const {dept,product}=row;
+    const known=catalogCandidate([product.sku,product.upc]);
+    recordRunProduct(dept,product,known);
+    if(navigator.onLine!==false){
+      try {
+        // Una consulta por pieza. Si existe UPC diferente, se buscará cuando se consulte el artículo.
+        const response=await lookupPublicCatalog([product.sku]);
+        if(response?.status==='verified'||response?.status==='candidate')
+          recordRunProduct(dept,product,response);
+      }catch{}
+    }
+  }
+  // Máximo 10 piezas/minuto; nunca compite con el guardado de existencias.
+  if(catalogBackgroundQueue.length)catalogBackgroundTimer=setTimeout(drainUnknownCatalog,6500);
 }
 
 function cameraEvidenceService(){
@@ -136,6 +154,7 @@ function resetSearchContext() {
   clearEvidenceImages();S.evidenceStatus='idle';
   clearInterval(catalogCountdownTimer);catalogCountdownTimer=null;
   S.externalStatus='idle';S.externalProduct=null;S.externalPreview=null;S.externalCandidate=null;
+  S.runStatus='idle';S.runData=null;runLookupSequence++;
   stopScanner();
 }
 
@@ -669,6 +688,11 @@ function searchView() {
     const panel=$('catalogFamilyPanel');if(panel){panel.hidden=!panel.hidden;if(!panel.hidden)$('catalogFamilyUrl')?.focus();}
   });
   $('catalogFamilyForm')?.addEventListener('submit',linkFamilyForCurrent);
+  document.querySelectorAll('[data-run-sku]').forEach(el=>el.addEventListener('click',()=>void doSearch(el.dataset.runSku)));
+  $('runRefresh')?.addEventListener('click',()=>{
+    const p=S.searchResult,req=searchRequest,dept=S.deptId;
+    if(p?.sku)void loadRunForSearch(p,()=>S.view==='search'&&searchRequest===req&&S.deptId===dept);
+  });
   document.querySelectorAll('.catalog-hero-image').forEach(img=>img.addEventListener('error',()=>{img.hidden=true;img.parentElement?.classList.add('image-missing');},{once:true}));
 }
 
@@ -755,6 +779,11 @@ function confirmCatalogRelation(){
   if(!confirm('Vincular el SKU '+code+' al modelo '+item.title+' (Liverpool '+item.liverpoolCode+')? Comprueba que sea el mismo zapato; la talla no se validará automáticamente.'))return;
   if(!confirmCatalogCandidate(code,item)){toast('No se pudo conservar la asociación en este dispositivo.','error');return;}
   S.externalCandidate={...item,status:'operator_confirmed'};
+  if(S.searchType==='product'){
+    recordRunProduct(S.deptId,S.searchResult,S.externalCandidate);
+    const req=searchRequest,dept=S.deptId;
+    void loadRunForSearch(S.searchResult,()=>S.view==='search'&&searchRequest===req&&S.deptId===dept);
+  }
   // Solo actualizar descripciones si el usuario confirma y tiene permiso,
   // nunca existencias, marbetes ni UPC.
   if(S.searchType==='product'&&S.searchResult?.id){
@@ -799,6 +828,10 @@ async function linkFamilyForCurrent(event){
     }
     S.externalCandidate=item;
     S.externalProduct=null;S.externalStatus='family';
+    if(S.searchType==='product'){
+      recordRunProduct(S.deptId,S.searchResult,item);
+      void loadRunForSearch(S.searchResult,current);
+    }
     render();
     if(S.searchType==='product'&&S.searchResult?.id)
       void persistVerifiedDescription(S.searchResult,item,current);
@@ -810,7 +843,12 @@ function startCatalogLookup(codes,current){
   clearInterval(catalogCountdownTimer);catalogCountdownTimer=null;
   S.externalProduct=null;S.externalPreview=null;S.externalCandidate=catalogCandidate(codes);S.externalCountdown=8;
   // También consulta el caché del dispositivo cuando no hay internet.
-  S.externalStatus='loading';render();
+  S.externalStatus='loading';
+  if(S.searchType==='product'&&S.searchResult?.sku){
+    recordRunProduct(S.deptId,S.searchResult,S.externalCandidate);
+    void loadRunForSearch(S.searchResult,current);
+  }
+  render();
   // La imagen con código idéntico se intenta en paralelo, sin bloquear la API ni el escaneo.
   void liverpoolPreview(codes).then(preview=>{if(!current()||!preview)return;S.externalPreview=preview;render();}).catch(()=>{});
   if(S.externalCandidate?.liverpoolCode){
@@ -831,6 +869,11 @@ function startCatalogLookup(codes,current){
     S.externalStatus=item.status;S.externalProduct=item.status==='verified'?item:null;
     if(item.status==='verified')S.externalCandidate=null;
     if(item.status==='candidate'&&!S.externalCandidate&&!isRejectedCandidate(item.code))S.externalCandidate={...item,status:'candidate'};
+    if(S.searchType==='product'&&S.searchResult?.sku){
+      if(item.status==='verified'||item.status==='candidate')
+        recordRunProduct(S.deptId,S.searchResult,item);
+      void loadRunForSearch(S.searchResult,current);
+    }
     render();
     if(item.status==='verified'&&S.searchType==='product')void persistVerifiedDescription(S.searchResult,item,current);
   }).catch(()=>{
@@ -849,7 +892,7 @@ function searchResultHtml() {
     const matched=isUnknownDescription(p.descripcion)?(S.externalStatus==='verified'?S.externalProduct:((['operator_confirmed','family_reference','candidate'].includes(S.externalCandidate?.status))?S.externalCandidate:null)):null;
     const displayDescription=matched?.title||p.descripcion;
     const displayBrand=matched?.brand||p.marca;
-    return `<div class="product-head"><div><div class="tiny">SKU ${esc(p.sku)}${p.upc?' · UPC '+esc(p.upc):''}</div><h2>${esc(displayDescription)}</h2>${matched?'<span class="catalog-enrichment-label">Modelo general Liverpool · talla por SKU · stock intacto</span>':''}<p class="muted">${esc([displayBrand,p.talla,p.color].filter(Boolean).join(' · '))}</p></div><div class="stock-big">${p.stock}<span>piezas</span></div></div>${catalogSectionHtml()}${locationList(S.locations)}${searchEvidenceHtml()}${locationSaveNotice?.productId===p.id?`<div class="success" role="status">✓ ${locationSaveNotice.alreadyAssigned?'El artículo ya estaba asignado a':'Ubicación guardada:'} <b>${esc(locationSaveNotice.code)}</b>.</div>`:''}<div class="product-location-action"><button id="giveProductLocation" class="${S.locations.length?'secondary':'primary'}" type="button">⌖ ${S.locations.length?'Agregar otra ubicación':'Darle ubicación'}</button><p class="tiny">${S.locations.length?'Conserva las ubicaciones actuales.':'Escanea el marbete del cajón, mueble o rack.'}</p></div><div id="productLocationPanel" hidden></div>`;
+    return `<div class="product-head"><div><div class="tiny">SKU ${esc(p.sku)}${p.upc?' · UPC '+esc(p.upc):''}</div><h2>${esc(displayDescription)}</h2>${matched?'<span class="catalog-enrichment-label">Modelo general Liverpool · talla por SKU · stock intacto</span>':''}<p class="muted">${esc([displayBrand,p.talla,p.color].filter(Boolean).join(' · '))}</p></div><div class="stock-big">${p.stock}<span>piezas</span></div></div>${catalogSectionHtml()}${runSectionHtml()}${locationList(S.locations)}${searchEvidenceHtml()}${locationSaveNotice?.productId===p.id?`<div class="success" role="status">✓ ${locationSaveNotice.alreadyAssigned?'El artículo ya estaba asignado a':'Ubicación guardada:'} <b>${esc(locationSaveNotice.code)}</b>.</div>`:''}<div class="product-location-action"><button id="giveProductLocation" class="${S.locations.length?'secondary':'primary'}" type="button">⌖ ${S.locations.length?'Agregar otra ubicación':'Darle ubicación'}</button><p class="tiny">${S.locations.length?'Conserva las ubicaciones actuales.':'Escanea el marbete del cajón, mueble o rack.'}</p></div><div id="productLocationPanel" hidden></div>`;
   }
   const m=S.searchResult;
   return `<div><div class="tiny">Ubicación</div><h2>${esc(m.codigo)}</h2><p><span class="pill">${esc(m.zona)}</span> ${esc(m.descripcion||'')}</p><div>${(m.products||[]).map(p => `<div class="product-row"><div><b>${esc(p.descripcion)}</b><span>SKU ${esc(p.sku)}${p.upc?' · UPC '+esc(p.upc):''}</span></div><strong>${p.qty??'—'}</strong></div>`).join('')||'<p class="muted">No hay productos asignados.</p>'}</div></div>`;
@@ -866,6 +909,7 @@ async function doSearch(code) {
   locationAssignment=null; locationSaveNotice=null; lastSearchCode=code;
   clearInterval(catalogCountdownTimer);catalogCountdownTimer=null;
   S.externalStatus='idle';S.externalProduct=null;S.externalPreview=null;S.externalCandidate=null;
+  S.runStatus='idle';S.runData=null;runLookupSequence++;
   clearEvidenceImages();S.searchResult=null; S.locations=[]; S.evidenceStatus='idle'; searchPending=true;
   render();
   try {
