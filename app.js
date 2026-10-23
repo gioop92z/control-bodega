@@ -17,9 +17,9 @@ import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?
 import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=5.1.0';
 import { mountOperations } from './operations-v4.mjs?v=5.0.0';
 import { ScanEvidence, listSkuEvidence, listLocalSkuEvidence } from './scan-evidence.mjs?v=5.1.1';
-import { lookupPublicCatalog, publicSearchUrl } from './catalog-hybrid.mjs?v=5.5.3';
-import { liverpoolPreview } from './catalog-visual.mjs?v=5.4.0';
-import { catalogCandidate,confirmCatalogCandidate,rejectCatalogCandidate,isRejectedCandidate } from './catalog-relations.mjs?v=5.5.1';
+import { lookupPublicCatalog, publicSearchUrl, lookupLiverpoolFamily } from './catalog-hybrid.mjs?v=5.6.0';
+import { liverpoolPreview } from './catalog-visual.mjs?v=5.6.0';
+import { catalogCandidate,confirmCatalogCandidate,rejectCatalogCandidate,isRejectedCandidate } from './catalog-relations.mjs?v=5.6.0';
 
 const sb = createClient(
   vantisBackendConfig.url,
@@ -31,7 +31,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '5.5.3';
+const APP_VERSION = '5.6.0';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 const HISTORY_RESTART_CUTOFF = '2026-10-15T22:15:00.000Z';
 
@@ -665,6 +665,10 @@ function searchView() {
   $('receiveUnknown')?.addEventListener('click',()=>fastReceiveView());
   $('catalogConfirmMatch')?.addEventListener('click',confirmCatalogRelation);
   $('catalogRejectMatch')?.addEventListener('click',rejectCatalogRelation);
+  $('catalogLinkFamily')?.addEventListener('click',()=>{
+    const panel=$('catalogFamilyPanel');if(panel){panel.hidden=!panel.hidden;if(!panel.hidden)$('catalogFamilyUrl')?.focus();}
+  });
+  $('catalogFamilyForm')?.addEventListener('submit',linkFamilyForCurrent);
   document.querySelectorAll('.catalog-hero-image').forEach(img=>img.addEventListener('error',()=>{img.hidden=true;img.parentElement?.classList.add('image-missing');},{once:true}));
 }
 
@@ -706,19 +710,19 @@ async function persistVerifiedDescription(product,found,current){
 function catalogSectionHtml(){
   const state=S.externalStatus, verified=state==='verified'&&S.externalProduct;
   const suggested=S.externalCandidate;
-  const confirmed=!!suggested&&suggested.status==='operator_confirmed'&&!verified;
+  const confirmed=!!suggested&&['operator_confirmed','family_reference'].includes(suggested.status)&&!verified;
   const candidate=!!suggested&&suggested.status==='candidate'&&!verified;
   const item=verified?S.externalProduct:((candidate||confirmed)?suggested:null);
   const preview=S.externalPreview;
-  const image=item?.imageUrl||preview?.imageUrl||'';
+  const image=(preview?.code===item?.liverpoolCode&&preview?.imageUrl)||item?.imageUrl||preview?.imageUrl||'';
   const title=item?.title||(S.searchType==='product'?S.searchResult?.descripcion:'Producto por identificar')||'Producto por identificar';
   const code=String(S.searchType==='product'?S.searchResult?.sku||lastSearchCode:lastSearchCode);
   const sourceLink=item?.productUrl||publicSearchUrl(code);
-  const kind=verified?'COINCIDENCIA EXACTA · LIVERPOOL':confirmed?'ASOCIACIÓN CONFIRMADA POR OPERADOR':
+  const kind=verified?'COINCIDENCIA EXACTA · LIVERPOOL':confirmed?'IMAGEN GENERAL DEL MODELO · LIVERPOOL':
     candidate?'POSIBLE PRODUCTO · COMPROBAR VARIANTE':image?'IMAGEN POR CÓDIGO · NO VERIFICADA':'FOTO PENDIENTE';
   const loading=state==='loading';
   const message=verified?'Liverpool confirma este identificador.':
-    confirmed?'El operador confirmó esta asociación. La talla todavía puede requerir verificación.':
+    confirmed?'Fotografía del modelo genérico de Liverpool. La talla individual sigue identificada por el SKU de VANTIS.':
     candidate?'La ficha de Liverpool tiene OTRO código. Comprueba que tu artículo corresponde a esta fotografía antes de vincularlo.':
     image?'Imagen encontrada por código. Comprueba modelo y talla.':
     loading?'Buscando imagen y ficha en Liverpool…':
@@ -731,12 +735,17 @@ function catalogSectionHtml(){
     '<div class="catalog-placeholder" aria-hidden="true"><svg viewBox="0 0 300 190"><path d="M24 129c19 0 37-6 59-30l34-35 35 7 29 31 40 14 49 7c11 2 17 12 15 22l-4 12H27c-8-6-11-15-3-28Z" fill="#f7ddea" stroke="#bc0c72" stroke-width="4" stroke-linejoin="round"/><path d="M40 151h237" stroke="#ba0a72" stroke-width="6" stroke-linecap="round"/></svg><span>Fotografía no disponible</span></div>';
   const comparison=(candidate||confirmed)?
     '<div class="catalog-variant-alert"><b>Comparar antes de asignar:</b> SKU inventario <strong>'+esc(code)+'</strong> · Código de la ficha Liverpool <strong>'+esc(item.liverpoolCode)+'</strong>. No está demostrada la talla exacta.</div>':'';
-  const actions=candidate?'<div class="catalog-candidate-buttons"><button type="button" id="catalogConfirmMatch">✓ Sí corresponde a este producto</button><button type="button" id="catalogRejectMatch" class="secondary">No corresponde</button></div>':'';
+  const actions=candidate?'<div class="catalog-candidate-buttons"><button type="button" id="catalogConfirmMatch">✓ Guardar relación del modelo</button><button type="button" id="catalogRejectMatch" class="secondary">No corresponde</button></div>':
+    confirmed?'<div class="catalog-candidate-buttons"><button type="button" id="catalogRejectMatch" class="secondary">Cambiar modelo vinculado</button></div>':'';
+  const linkForm='<div class="catalog-family-link"><button id="catalogLinkFamily" class="secondary" type="button">⌁ Vincular ficha de Liverpool</button>'+
+    '<div id="catalogFamilyPanel" hidden><p>Si Liverpool no encuentra la talla, pega la URL de la ficha del modelo genérico una sola vez. VANTIS recordará la relación.</p>'+
+    '<form id="catalogFamilyForm"><input id="catalogFamilyUrl" type="url" autocomplete="off" required placeholder="https://www.liverpool.com.mx/tienda/pdp/…"/>'+
+    '<button type="submit">Usar imagen del modelo</button></form></div></div>';
   return '<section class="catalog-product-showcase" aria-label="Catálogo visual Liverpool">'+
     '<div class="catalog-showcase-header"><span class="catalog-showcase-eyebrow">VANTIS · CATÁLOGO VISUAL</span><strong>Vista de producto</strong></div>'+
     '<div class="catalog-visual-stage'+(image?' has-photo':'')+'"><div class="catalog-halo"></div>'+img+'<span class="catalog-visual-stamp">'+esc(kind)+'</span></div>'+
     '<div class="catalog-showcase-foot"><div><span class="catalog-showcase-code">SKU '+esc(code)+'</span><h3>'+esc(title)+'</h3><p>'+esc(message)+'</p></div>'+timer+'</div>'+
-    comparison+actions+
+    comparison+actions+linkForm+
     '<div class="catalog-showcase-actions"><a href="'+esc(sourceLink)+'" target="_blank" rel="noopener noreferrer">Ver ficha en Liverpool ↗</a><small>La foto pública no sustituye el registro visual de escaneo. No modifica stock ni ubicaciones.</small></div></section>';
 }
 function confirmCatalogRelation(){
@@ -760,6 +769,43 @@ function rejectCatalogRelation(){
   rejectCatalogCandidate(code);S.externalCandidate=null;render();
 }
 
+async function linkFamilyForCurrent(event){
+  event.preventDefault();
+  const code=String(S.searchResult?.sku||lastSearchCode||'').trim();
+  const submitted=String($('catalogFamilyUrl')?.value||'').trim();
+  const req=searchRequest,dept=S.deptId,view=S.view;
+  const current=()=>searchRequest===req&&S.deptId===dept&&S.view===view&&String(S.searchResult?.sku||lastSearchCode||'')===code;
+  const button=event.currentTarget.querySelector('button[type="submit"]');
+  if(button){button.disabled=true;button.textContent='Verificando ficha…';}
+  try{
+    const found=await lookupLiverpoolFamily(code,submitted);
+    if(!current())return;
+    if(found.status!=='family'){
+      toast('No se pudo verificar esa ficha pública de Liverpool. Comprueba el enlace e inténtalo otra vez.','error');
+      return;
+    }
+    let item={...found,status:'operator_confirmed'};
+    if(!item.imageUrl){
+      const preview=await liverpoolPreview([item.liverpoolCode]);
+      if(!current())return;
+      if(preview?.imageUrl)item.imageUrl=preview.imageUrl;
+    }
+    if(!item.imageUrl){
+      toast('La ficha existe, pero Liverpool no proporcionó una imagen accesible. No se guardó una foto incorrecta.','error');
+      return;
+    }
+    if(!confirmCatalogCandidate(code,item)){
+      toast('No fue posible guardar la relación en este dispositivo.','error');return;
+    }
+    S.externalCandidate=item;
+    S.externalProduct=null;S.externalStatus='family';
+    render();
+    if(S.searchType==='product'&&S.searchResult?.id)
+      void persistVerifiedDescription(S.searchResult,item,current);
+  }finally{
+    if(current()&&button?.isConnected){button.disabled=false;button.textContent='Usar imagen del modelo';}
+  }
+}
 function startCatalogLookup(codes,current){
   clearInterval(catalogCountdownTimer);catalogCountdownTimer=null;
   S.externalProduct=null;S.externalPreview=null;S.externalCandidate=catalogCandidate(codes);S.externalCountdown=8;
@@ -767,6 +813,13 @@ function startCatalogLookup(codes,current){
   S.externalStatus='loading';render();
   // La imagen con código idéntico se intenta en paralelo, sin bloquear la API ni el escaneo.
   void liverpoolPreview(codes).then(preview=>{if(!current()||!preview)return;S.externalPreview=preview;render();}).catch(()=>{});
+  if(S.externalCandidate?.liverpoolCode){
+    const parentCode=S.externalCandidate.liverpoolCode;
+    void liverpoolPreview([parentCode]).then(preview=>{
+      if(!current()||!preview||S.externalCandidate?.liverpoolCode!==parentCode)return;
+      S.externalPreview=preview;render();
+    }).catch(()=>{});
+  }
   catalogCountdownTimer=setInterval(()=>{
     if(!current()||S.externalStatus!=='loading'){clearInterval(catalogCountdownTimer);catalogCountdownTimer=null;return;}
     S.externalCountdown=Math.max(0,S.externalCountdown-1);
@@ -793,10 +846,10 @@ function searchResultHtml() {
   if (S.searchType==='external')return '<div class="catalog-unknown"><div class="tiny">Código consultado</div><h2>'+esc(S.searchResult.code)+'</h2><p class="muted">No aparece en el inventario de este departamento. La consulta pública es solo informativa y no confirma existencias.</p>'+catalogSectionHtml()+'<button id="receiveUnknown" class="secondary" type="button">Registrar escaneando en recepción</button></div>';
   if (S.searchType==='product') {
     const p=S.searchResult;
-    const matched=isUnknownDescription(p.descripcion)?(S.externalStatus==='verified'?S.externalProduct:(S.externalCandidate?.status==='operator_confirmed'?S.externalCandidate:null)):null;
+    const matched=isUnknownDescription(p.descripcion)?(S.externalStatus==='verified'?S.externalProduct:((['operator_confirmed','family_reference','candidate'].includes(S.externalCandidate?.status))?S.externalCandidate:null)):null;
     const displayDescription=matched?.title||p.descripcion;
     const displayBrand=matched?.brand||p.marca;
-    return `<div class="product-head"><div><div class="tiny">SKU ${esc(p.sku)}${p.upc?' · UPC '+esc(p.upc):''}</div><h2>${esc(displayDescription)}</h2>${matched?'<span class="catalog-enrichment-label">Identificado en Liverpool · sin alterar existencias</span>':''}<p class="muted">${esc([displayBrand,p.talla,p.color].filter(Boolean).join(' · '))}</p></div><div class="stock-big">${p.stock}<span>piezas</span></div></div>${catalogSectionHtml()}${locationList(S.locations)}${searchEvidenceHtml()}${locationSaveNotice?.productId===p.id?`<div class="success" role="status">✓ ${locationSaveNotice.alreadyAssigned?'El artículo ya estaba asignado a':'Ubicación guardada:'} <b>${esc(locationSaveNotice.code)}</b>.</div>`:''}<div class="product-location-action"><button id="giveProductLocation" class="${S.locations.length?'secondary':'primary'}" type="button">⌖ ${S.locations.length?'Agregar otra ubicación':'Darle ubicación'}</button><p class="tiny">${S.locations.length?'Conserva las ubicaciones actuales.':'Escanea el marbete del cajón, mueble o rack.'}</p></div><div id="productLocationPanel" hidden></div>`;
+    return `<div class="product-head"><div><div class="tiny">SKU ${esc(p.sku)}${p.upc?' · UPC '+esc(p.upc):''}</div><h2>${esc(displayDescription)}</h2>${matched?'<span class="catalog-enrichment-label">Modelo general Liverpool · talla por SKU · stock intacto</span>':''}<p class="muted">${esc([displayBrand,p.talla,p.color].filter(Boolean).join(' · '))}</p></div><div class="stock-big">${p.stock}<span>piezas</span></div></div>${catalogSectionHtml()}${locationList(S.locations)}${searchEvidenceHtml()}${locationSaveNotice?.productId===p.id?`<div class="success" role="status">✓ ${locationSaveNotice.alreadyAssigned?'El artículo ya estaba asignado a':'Ubicación guardada:'} <b>${esc(locationSaveNotice.code)}</b>.</div>`:''}<div class="product-location-action"><button id="giveProductLocation" class="${S.locations.length?'secondary':'primary'}" type="button">⌖ ${S.locations.length?'Agregar otra ubicación':'Darle ubicación'}</button><p class="tiny">${S.locations.length?'Conserva las ubicaciones actuales.':'Escanea el marbete del cajón, mueble o rack.'}</p></div><div id="productLocationPanel" hidden></div>`;
   }
   const m=S.searchResult;
   return `<div><div class="tiny">Ubicación</div><h2>${esc(m.codigo)}</h2><p><span class="pill">${esc(m.zona)}</span> ${esc(m.descripcion||'')}</p><div>${(m.products||[]).map(p => `<div class="product-row"><div><b>${esc(p.descripcion)}</b><span>SKU ${esc(p.sku)}${p.upc?' · UPC '+esc(p.upc):''}</span></div><strong>${p.qty??'—'}</strong></div>`).join('')||'<p class="muted">No hay productos asignados.</p>'}</div></div>`;
