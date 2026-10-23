@@ -64,3 +64,24 @@ test('nearby matches use model text but never claim proven family',async()=>{
  assert.deepEqual(result.map(x=>x.sku),['1180031261']);
  assert.equal(modelName('Zapato Elefante 17 CM Negro'),modelName('Zapato Elefante 18 CM Negro'));
 });
+
+test('identical Liverpool photo suggests a run even when product family is not published',()=>{
+ db.clear();
+ const url='https://ss405.liverpool.com.mx/xl/1180031226.jpg';
+ const p={sku:'1111111111',descripcion:'Producto nuevo 1111111111',color:'NEGRO'};
+ const q={sku:'1111111112',descripcion:'Producto nuevo 1111111112',color:'NEGRO'};
+ recordRunProduct('dept',p,{status:'preview',imageUrl:url});
+ recordRunProduct('dept',q,{status:'preview',imageUrl:url});
+ const grouped=runMembers('dept',p.sku);
+ assert.deepEqual(grouped.probable.map(x=>x.sku),[q.sku]);
+ assert.equal(grouped.confirmed.length,0);
+ assert.equal(grouped.ref.familyCode,undefined);
+});
+test('an unrelated photo does not override a verified family',()=>{
+ db.clear();
+ const p={sku:'1111111111',descripcion:'Tenis Elefante 17 CM',marca:'ELEFANTE',color:'NEGRO'};
+ recordRunProduct('dept',p,{...family,status:'verified'});
+ recordRunProduct('dept',p,{status:'preview',imageUrl:'https://ss405.liverpool.com.mx/xl/9999999999.jpg'});
+ assert.equal(runMembers('dept',p.sku).ref.familyCode,'1180031226');
+ assert.equal(runMembers('dept',p.sku).ref.imageUrl,family.imageUrl);
+});
