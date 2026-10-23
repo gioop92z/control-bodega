@@ -23,3 +23,16 @@
 .vantis-run-bottom span{font-size:10px;color:#837882;max-width:380px;line-height:1.4;flex:1}
 .vantis-run-bottom button{min-height:34px;font-size:11px;padding:7px 11px;border:1px solid #ecd7e4;background:#fff;border-radius:9px;color:#9b1765;font-weight:800}
 @media(max-width:450px){.vantis-run-header{padding:12px}.vantis-run-header b{font-size:14px}.vantis-run-row{padding:8px;gap:6px}.vantis-run-size{min-width:52px;font-size:12px}.vantis-run-sku{font-size:11px}.vantis-run-family{padding:0 12px 12px}}
+
+
+/* Comparación segura de fichas genéricas cuando el SKU hijo no tiene fotografía. */
+.catalog-model-options{margin:14px 14px 18px;border:1px solid #f0d1e3;border-radius:17px;padding:15px;background:#fffafd}
+.catalog-model-options>strong{display:block;color:#a00060;font-size:15px;line-height:1.25}
+.catalog-model-options>p{color:#756874;font-size:12px;line-height:1.45;margin:7px 0 12px}
+.catalog-model-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+.catalog-model-choice{appearance:none;min-width:0;border:1px solid #ead6e3;background:#fff;border-radius:13px;padding:8px;text-align:left;display:flex;flex-direction:column;gap:5px;cursor:pointer}
+.catalog-model-choice:focus-visible{outline:3px solid #e5007d;outline-offset:2px}
+.catalog-model-choice img{display:block;width:100%;height:115px;object-fit:contain;background:#fff;border-radius:9px}
+.catalog-model-choice span{font-size:12px;font-weight:800;line-height:1.3;color:#34303a;overflow-wrap:anywhere}
+.catalog-model-choice small{font-size:11px;color:#a00060}
+@media(min-width:600px){.catalog-model-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
