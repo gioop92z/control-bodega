@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ContinuousReceive,receiptCsv} from '../continuous-receive.mjs';
+import {ContinuousReceive,receiptCsv,withNetworkDeadline} from '../continuous-receive.mjs';
 import {durableMemory,receiptLocks,receivingDb} from './helpers/receiving-db.mjs';
 
 const SKU='0012345678',UPC='0200000000001';
@@ -170,4 +170,32 @@ test('storage failure stops capture before a network write; missing server never
 test('incomplete storage acknowledgement never increments confirmed counters',async t=>{
   const h=await setup(t);await location(h.queue);h.db.wrongReply=true;h.queue.scan(SKU);await h.queue.flush();
   assert.equal(h.queue.report().totalPieces,0);assert.equal(h.queue.pending,1);assert.equal(h.events.length,0);assert.equal(h.queue.backend,'invalid');
+});
+
+test('network timeout releases a hanging request instead of blocking receiving indefinitely',async()=>{
+  await assert.rejects(withNetworkDeadline(()=>new Promise(()=>{}),'Confirmación de pieza',12),error=>
+    error.code==='VANTIS_TIMEOUT' && /protegida/.test(error.message));
+});
+
+test('pending detail survives finish/resume and keeps its same UUID for safe retry',async t=>{
+  let online=true;
+  const h=await setup(t,{online:()=>online});await location(h.queue);
+  online=false;h.db.networkError=true;
+  const saved=h.queue.scan('0012345678');
+  const pending=h.queue.pendingDetails();
+  assert.equal(pending.length,1);
+  assert.equal(pending[0].id,saved.id);
+  assert.equal(pending[0].sku,'0012345678');
+  assert.match(pending[0].marbete,/402-001/);
+  assert.equal(pending[0].canSync,true);
+  const finish=h.queue.finish();
+  assert.equal(finish.totalPieces,0);
+  assert.equal(finish.pending,1);
+  assert.throws(()=>h.queue.newSession(),/sincroniza/i);
+  h.queue.resume();
+  online=true;h.db.networkError=false;
+  await h.queue.reconnect();
+  assert.equal(h.queue.pendingDetails().length,0);
+  assert.equal(h.queue.report().totalPieces,1);
+  assert.equal(h.db.requests[0].p_id,saved.id);
 });
