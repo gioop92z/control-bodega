@@ -60,7 +60,7 @@ jobs:
           mkdir -p "${{ runner.temp }}/vantis-pages"
           git archive HEAD | tar -x -C "${{ runner.temp }}/vantis-pages"
           cat > "${{ runner.temp }}/vantis-pages/deployment-info.json" <<EOF
-          {"release":"5.7.0","commit":"${{ github.sha }}","generated_by":"github-actions-pages"}
+          {"release":"5.7.1","commit":"${{ github.sha }}","generated_by":"github-actions-pages"}
           EOF
       - name: Upload static frontend
         uses: actions/upload-pages-artifact@v3
