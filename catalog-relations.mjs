@@ -23,7 +23,7 @@ export function catalogCandidate(codes){
     if(saved&&saved.code===code&&safeCode(saved.liverpoolCode)&&String(saved.productUrl||'').startsWith('https://www.liverpool.com.mx/tienda/pdp/')){
       return {...saved,status:'operator_confirmed'};
     }
-    if(CANDIDATES[code])return {...CANDIDATES[code]};
+    if(CANDIDATES[code]&&!isRejectedCandidate(code))return {...CANDIDATES[code]};
   }
   return null;
 }
