@@ -1,6 +1,6 @@
 // VANTIS catálogo visual: imagen pública por código, sin alterar inventario.
 // Imagen preliminar ≠ ficha verificada. No se le adjudica talla/color sin confirmar.
-const CDN_PATHS=['https://ss237.liverpool.com.mx/lg/','https://ss237.liverpool.com.mx/xl/','https://sp459.liverpool.com.mx/i/','https://ss550.liverpool.com.mx/xl/','https://ss550.liverpool.com.mx/lg/','https://ss251.liverpool.com.mx/xl/','https://ss251.liverpool.com.mx/lg/'];
+const CDN_PATHS=['https://ss405.liverpool.com.mx/xl/','https://ss405.liverpool.com.mx/lg/','https://ss237.liverpool.com.mx/lg/','https://ss237.liverpool.com.mx/xl/','https://sp459.liverpool.com.mx/i/','https://ss550.liverpool.com.mx/xl/','https://ss550.liverpool.com.mx/lg/','https://ss251.liverpool.com.mx/xl/','https://ss251.liverpool.com.mx/lg/'];
 const CACHE='vantis.imagenes-publicas.v1';
 const inFlight=new Map();
 function readCache(){
@@ -44,7 +44,7 @@ export async function liverpoolPreview(codes){
     if(inFlight.has(code)){const v=await inFlight.get(code);if(v)return v;continue;}
     const task=(async()=>{
       // Únicamente CDN de Liverpool; no se adivinan fotos de marcas similares.
-      const candidates=CDN_PATHS.map(prefix=>prefix+code+'.jpg');
+      const candidates=CDN_PATHS.flatMap(prefix=>[prefix+code+'.jpg',prefix+code+'_1p.jpg']);
       // Dos comprobaciones concurrentes. Incluye CDN de imágenes actual (sp459/i/) y legado (ss550).
       for(let i=0;i<candidates.length;i+=2){
         const results=await Promise.all(candidates.slice(i,i+2).map(url=>probe(url)));
