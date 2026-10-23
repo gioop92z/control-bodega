@@ -17,8 +17,8 @@ import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?
 import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=5.1.0';
 import { mountOperations } from './operations-v4.mjs?v=5.0.0';
 import { ScanEvidence, listSkuEvidence, listLocalSkuEvidence } from './scan-evidence.mjs?v=5.1.1';
-import { lookupPublicCatalog, publicSearchUrl } from './catalog-hybrid.mjs?v=5.3.0';
-import { liverpoolPreview } from './catalog-visual.mjs?v=5.3.1';
+import { lookupPublicCatalog, publicSearchUrl } from './catalog-hybrid.mjs?v=5.4.0';
+import { liverpoolPreview } from './catalog-visual.mjs?v=5.4.0';
 
 const sb = createClient(
   vantisBackendConfig.url,
@@ -30,7 +30,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '5.3.1';
+const APP_VERSION = '5.4.0';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 const HISTORY_RESTART_CUTOFF = '2026-10-15T22:15:00.000Z';
 
@@ -656,7 +656,7 @@ async function saveMove() {
 }
 
 function searchView() {
-  shell(`<section class="page-title"><h1>Buscar</h1><p class="muted">Escanea UPC, SKU o un marbete.</p></section><button id="scanSearch" class="scan-btn">📷 Escanear código</button><form id="manualSearch" class="inline-form"><input id="searchCode" aria-label="UPC, SKU o marbete" placeholder="UPC, SKU o marbete" autocomplete="off" value="${esc(lastSearchCode)}"><button class="secondary">Buscar</button></form><section class="card" aria-busy="${searchPending}">${searchResultHtml()}</section>`);
+  shell(`<section class="page-title"><h1>Buscar <span class="vantis-release-stamp">v${APP_VERSION} · Catálogo visual</span></h1><p class="muted">Escanea UPC, SKU o un marbete.</p></section><button id="scanSearch" class="scan-btn">📷 Escanear código</button><form id="manualSearch" class="inline-form"><input id="searchCode" aria-label="UPC, SKU o marbete" placeholder="UPC, SKU o marbete" autocomplete="off" value="${esc(lastSearchCode)}"><button class="secondary">Buscar</button></form><section class="card" aria-busy="${searchPending}">${searchResultHtml()}</section>`);
   $('scanSearch').onclick = () => openScanner(doSearch,'UPC, SKU o marbete');
   $('manualSearch').onsubmit = e => { e.preventDefault(); doSearch($('searchCode').value).catch(x=>toast(humanError(x),'error')); };
   $('giveProductLocation')?.addEventListener('click', openProductLocation);
@@ -680,6 +680,25 @@ function searchEvidenceHtml() {
     }).join('')+'</div></section>';
 }
 
+function isUnknownDescription(value){
+  const label=String(value||'').trim();
+  return !label||/^(?:producto nuevo|producto sin|sku\b|sin descripci[oó]n|desconocido|pendiente de identificar)/i.test(label);
+}
+async function persistVerifiedDescription(product,found,current){
+  if(!product?.id||!isUnknownDescription(product.descripcion)||!found?.title||!current())return;
+  const patch={descripcion:String(found.title).slice(0,180)};
+  if(found.brand&&!product.marca)patch.marca=String(found.brand).slice(0,70);
+  try{
+    // Solo campos descriptivos, nunca stock, UPC ni ubicación.
+    const {data,error}=await sb.from('productos').update(patch)
+      .eq('id',product.id).eq('departamento_id',S.deptId).eq('descripcion',product.descripcion)
+      .select('id,descripcion,marca').maybeSingle();
+    if(!error&&data&&current()&&S.searchResult?.id===product.id){
+      S.searchResult={...S.searchResult,descripcion:data.descripcion,marca:data.marca||S.searchResult.marca};
+      render();
+    }
+  }catch{/* Sin permiso de escritura se presenta la información verificada sin tocar la base. */}
+}
 function catalogSectionHtml(){
   const state=S.externalStatus,item=S.externalProduct,preview=S.externalPreview;
   const verified=state==='verified'&&item;
@@ -725,6 +744,7 @@ function startCatalogLookup(codes,current){
     if(!current())return;
     clearInterval(catalogCountdownTimer);catalogCountdownTimer=null;
     S.externalStatus=item.status;S.externalProduct=item.status==='verified'?item:null;render();
+    if(item.status==='verified'&&S.searchType==='product')void persistVerifiedDescription(S.searchResult,item,current);
   }).catch(()=>{
     if(!current())return;
     clearInterval(catalogCountdownTimer);catalogCountdownTimer=null;
@@ -738,7 +758,10 @@ function searchResultHtml() {
   if (S.searchType==='external')return '<div class="catalog-unknown"><div class="tiny">Código consultado</div><h2>'+esc(S.searchResult.code)+'</h2><p class="muted">No aparece en el inventario de este departamento. La consulta pública es solo informativa y no confirma existencias.</p>'+catalogSectionHtml()+'<button id="receiveUnknown" class="secondary" type="button">Registrar escaneando en recepción</button></div>';
   if (S.searchType==='product') {
     const p=S.searchResult;
-    return `<div class="product-head"><div><div class="tiny">SKU ${esc(p.sku)}${p.upc?' · UPC '+esc(p.upc):''}</div><h2>${esc(p.descripcion)}</h2><p class="muted">${esc([p.marca,p.talla,p.color].filter(Boolean).join(' · '))}</p></div><div class="stock-big">${p.stock}<span>piezas</span></div></div>${catalogSectionHtml()}${locationList(S.locations)}${searchEvidenceHtml()}${locationSaveNotice?.productId===p.id?`<div class="success" role="status">✓ ${locationSaveNotice.alreadyAssigned?'El artículo ya estaba asignado a':'Ubicación guardada:'} <b>${esc(locationSaveNotice.code)}</b>.</div>`:''}<div class="product-location-action"><button id="giveProductLocation" class="${S.locations.length?'secondary':'primary'}" type="button">⌖ ${S.locations.length?'Agregar otra ubicación':'Darle ubicación'}</button><p class="tiny">${S.locations.length?'Conserva las ubicaciones actuales.':'Escanea el marbete del cajón, mueble o rack.'}</p></div><div id="productLocationPanel" hidden></div>`;
+    const matched=S.externalStatus==='verified'&&isUnknownDescription(p.descripcion)?S.externalProduct:null;
+    const displayDescription=matched?.title||p.descripcion;
+    const displayBrand=matched?.brand||p.marca;
+    return `<div class="product-head"><div><div class="tiny">SKU ${esc(p.sku)}${p.upc?' · UPC '+esc(p.upc):''}</div><h2>${esc(displayDescription)}</h2>${matched?'<span class="catalog-enrichment-label">Identificado en Liverpool · sin alterar existencias</span>':''}<p class="muted">${esc([displayBrand,p.talla,p.color].filter(Boolean).join(' · '))}</p></div><div class="stock-big">${p.stock}<span>piezas</span></div></div>${catalogSectionHtml()}${locationList(S.locations)}${searchEvidenceHtml()}${locationSaveNotice?.productId===p.id?`<div class="success" role="status">✓ ${locationSaveNotice.alreadyAssigned?'El artículo ya estaba asignado a':'Ubicación guardada:'} <b>${esc(locationSaveNotice.code)}</b>.</div>`:''}<div class="product-location-action"><button id="giveProductLocation" class="${S.locations.length?'secondary':'primary'}" type="button">⌖ ${S.locations.length?'Agregar otra ubicación':'Darle ubicación'}</button><p class="tiny">${S.locations.length?'Conserva las ubicaciones actuales.':'Escanea el marbete del cajón, mueble o rack.'}</p></div><div id="productLocationPanel" hidden></div>`;
   }
   const m=S.searchResult;
   return `<div><div class="tiny">Ubicación</div><h2>${esc(m.codigo)}</h2><p><span class="pill">${esc(m.zona)}</span> ${esc(m.descripcion||'')}</p><div>${(m.products||[]).map(p => `<div class="product-row"><div><b>${esc(p.descripcion)}</b><span>SKU ${esc(p.sku)}${p.upc?' · UPC '+esc(p.upc):''}</span></div><strong>${p.qty??'—'}</strong></div>`).join('')||'<p class="muted">No hay productos asignados.</p>'}</div></div>`;
