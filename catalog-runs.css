@@ -1,0 +1,25 @@
+/* VANTIS 5.7: visualización de corridas de tallas, inferencia sin modificar existencias. */
+.vantis-run{margin:15px 0 18px;background:#fff;border-radius:18px;border:1px solid #e5d1df;box-shadow:0 5px 19px #70244a0a;overflow:hidden}
+.vantis-run-header{display:flex;align-items:center;gap:12px;padding:15px 15px 10px;min-width:0}
+.vantis-run-header>div{flex:1;min-width:0}
+.vantis-run-header b{display:block;font-size:15px;color:#30222e;font-weight:850}
+.vantis-run-header p{font-size:12px;line-height:1.4;color:#7e6f7a;margin:3px 0 0;overflow-wrap:anywhere}
+.vantis-run-icon{flex:none;width:35px;height:35px;display:grid;place-items:center;font-size:24px;font-weight:850;color:#bc0670;background:#fde8f2;border-radius:11px}
+.vantis-run-count{flex:none;border:1px solid #f2cade;background:#fff5fa;color:#b00669;border-radius:100px;font-weight:850;font-size:12px;padding:7px 10px;white-space:nowrap}
+.vantis-run-family{margin:0;padding:0 15px 14px;color:#877781;font-size:11px}
+.vantis-run-family strong{font-variant-numeric:tabular-nums;color:#8d0e58}
+.vantis-run details{border-top:1px solid #f3e9f0}
+.vantis-run summary{padding:13px 15px;color:#ad116c;font-weight:800;font-size:13px;cursor:pointer;list-style-position:inside}
+.vantis-run details[open] summary{border-bottom:1px solid #f6edf2}
+.vantis-run-group{padding:8px 12px 10px}
+.vantis-run-sub{color:#83767f;text-transform:uppercase;letter-spacing:.045em;font-size:10px;font-weight:850;padding:7px 3px 8px}
+.vantis-run-row{display:flex;width:100%;align-items:center;gap:9px;text-align:left;min-height:43px;padding:9px 11px;margin:0 0 5px;border-radius:10px;border:1px solid #eee1e8;background:#fff;box-shadow:none;color:#2d2831;cursor:pointer}
+.vantis-run-row:hover{background:#fff7fb;border-color:#e7bbd4}
+.vantis-run-size{font-weight:850;font-size:13px;color:#bd006d;white-space:nowrap;min-width:66px}
+.vantis-run-sku{font-size:12px;color:#5e515c;min-width:0;flex:1;overflow-wrap:anywhere}
+.vantis-run-row strong{font-size:12px;font-weight:850;white-space:nowrap;font-variant-numeric:tabular-nums}
+.vantis-run-empty{color:#867982;font-size:12px;line-height:1.5;padding:1px 16px 12px}
+.vantis-run-bottom{padding:10px 14px 13px;border-top:1px solid #f2e7ee;display:flex;align-items:center;justify-content:space-between;gap:11px;flex-wrap:wrap}
+.vantis-run-bottom span{font-size:10px;color:#837882;max-width:380px;line-height:1.4;flex:1}
+.vantis-run-bottom button{min-height:34px;font-size:11px;padding:7px 11px;border:1px solid #ecd7e4;background:#fff;border-radius:9px;color:#9b1765;font-weight:800}
+@media(max-width:450px){.vantis-run-header{padding:12px}.vantis-run-header b{font-size:14px}.vantis-run-row{padding:8px;gap:6px}.vantis-run-size{min-width:52px;font-size:12px}.vantis-run-sku{font-size:11px}.vantis-run-family{padding:0 12px 12px}}
