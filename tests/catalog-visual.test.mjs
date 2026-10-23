@@ -4,7 +4,7 @@ import {liverpoolPreview} from '../catalog-visual.mjs';
 
 function setup(validUrl){
   const memory=new Map();
-  globalThis.navigator={onLine:true};
+  Object.defineProperty(globalThis,'navigator',{value:{onLine:true},configurable:true});
   globalThis.localStorage={
     getItem:key=>memory.get(key)||null,
     setItem:(key,value)=>memory.set(key,String(value))
