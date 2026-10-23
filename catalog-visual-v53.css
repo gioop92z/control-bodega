@@ -28,3 +28,8 @@
 @keyframes catalogSpin{to{transform:rotate(360deg)}}
 @media(max-width:480px){.catalog-visual-stage{height:264px}.catalog-hero-image{max-height:226px}.catalog-showcase-header{padding:13px 15px}.catalog-showcase-foot{padding:15px 16px 8px}.catalog-showcase-foot h3{font-size:18px}.catalog-showcase-actions{padding:10px 16px 15px}.catalog-visual-stamp{font-size:9px}}
 @media(prefers-reduced-motion:reduce){.catalog-hero-image,.catalog-spinner{animation:none}}
+
+/* Versión visible: permite detectar publicación antigua sin borrar inventarios. */
+.vantis-release-stamp{display:inline-flex;vertical-align:middle;margin-left:9px;padding:6px 10px;line-height:1.2;border-radius:100px;background:#fae8f2;border:1px solid #ecc6db;color:#a20960;font-size:11px;font-weight:850;letter-spacing:.015em;white-space:nowrap}
+.catalog-enrichment-label{display:inline-block;margin-top:3px;border-radius:7px;padding:5px 8px;background:#f8e9f1;color:#a00660;font-size:11px;font-weight:750}
+@media(max-width:480px){.vantis-release-stamp{margin-left:0;margin-top:8px;font-size:10px}.page-title h1:has(.vantis-release-stamp){display:flex;flex-wrap:wrap;gap:3px 8px;align-items:center}}
