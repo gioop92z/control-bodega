@@ -660,7 +660,7 @@ function catalogSectionHtml(){
   if(state==='idle')return '';
   if(state==='loading')return '<section class="catalog-smart catalog-loading" aria-live="polite"><span class="catalog-mark">◉</span><div><b>Consultando catálogo Liverpool</b><p>Validando coincidencia exacta de código, sin detener el inventario.</p></div><strong id="catalogCountdown">'+S.externalCountdown+' s</strong></section>';
   if(state==='verified'&&item){
-    return '<section class="catalog-smart catalog-ready"><div class="catalog-photo"><img loading="lazy" src="'+esc(item.imageUrl)+'" alt="Imagen pública de '+esc(item.title)+'" referrerpolicy="no-referrer" onerror="this.closest(\'.catalog-photo\').classList.add(\'image-missing\');this.remove()"></div><div class="catalog-meta"><span class="catalog-tag">✓ COINCIDENCIA VERIFICADA · LIVERPOOL</span><h3>'+esc(item.title)+'</h3><p>'+esc([item.brand,item.color].filter(Boolean).join(' · '))+'</p><small>Foto del catálogo en línea · talla no verificada. No modifica existencias.</small><a href="'+esc(item.productUrl)+'" target="_blank" rel="noopener noreferrer">Ver ficha original ↗</a></div></section>';
+    return '<section class="catalog-smart catalog-ready"><div class="catalog-photo"><img loading="lazy" src="'+esc(item.imageUrl)+'" alt="Imagen pública de '+esc(item.title)+'" referrerpolicy="no-referrer"></div><div class="catalog-meta"><span class="catalog-tag">✓ COINCIDENCIA VERIFICADA · LIVERPOOL</span><h3>'+esc(item.title)+'</h3><p>'+esc([item.brand,item.color].filter(Boolean).join(' · '))+'</p><small>Foto del catálogo en línea · talla no verificada. No modifica existencias.</small><a href="'+esc(item.productUrl)+'" target="_blank" rel="noopener noreferrer">Ver ficha original ↗</a></div></section>';
   }
   const code=S.searchType==='product'?(S.searchResult?.sku||lastSearchCode):lastSearchCode;
   const url=publicSearchUrl(code);
@@ -669,7 +669,7 @@ function catalogSectionHtml(){
 function startCatalogLookup(codes,current){
   clearInterval(catalogCountdownTimer);catalogCountdownTimer=null;
   S.externalProduct=null;S.externalCountdown=8;
-  if(navigator.onLine===false){S.externalStatus='offline';render();return;}
+  // También consulta el caché del dispositivo cuando no hay internet.
   S.externalStatus='loading';render();
   catalogCountdownTimer=setInterval(()=>{
     if(!current()||S.externalStatus!=='loading'){clearInterval(catalogCountdownTimer);catalogCountdownTimer=null;return;}
