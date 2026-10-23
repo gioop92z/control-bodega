@@ -85,6 +85,38 @@ async function lookup(code,signal){
   }
   return variantCandidate;
 }
+function allowedFamilyUrl(raw){
+  try {
+    const url=new URL(raw);
+    if(url.protocol!=='https:'||url.hostname!=='www.liverpool.com.mx')return null;
+    if(!/^\/tienda\/pdp\/[a-zA-Z0-9%_./-]+\/\d{8,14}$/.test(url.pathname))return null;
+    const familyId=url.pathname.match(/\/(\d{8,14})$/)?.[1];
+    if(!familyId)return null;
+    url.search='';url.hash='';
+    return {url:url.toString(),familyId};
+  }catch{return null;}
+}
+async function lookupFamily(child,raw,signal){
+  const target=allowedFamilyUrl(raw);
+  if(!target)return {status:'invalid_family_link',code:child};
+  const response=await fetch(target.url,{signal,redirect:'follow',headers:{Accept:'text/html'}});
+  if(!response.ok||!(response.headers.get('content-type')||'').includes('text/html'))return {status:'unavailable',code:child};
+  const page=canonical(response.url);
+  if(!page||!page.endsWith('/'+target.familyId))return {status:'unavailable',code:child};
+  const html=(await response.text()).slice(0,1800000);
+  const parsed=productFrom(html,page,target.familyId);
+  if(parsed)return {...parsed,status:'family',code:child,liverpoolCode:target.familyId,
+    matchType:'operator_linked_parent',sizeVerified:false};
+  // En páginas hidratadas la galería puede faltar del HTML inicial.
+  // Nunca inventamos marca ni descripción: si la ficha pública no tiene título
+  // verificable se devuelve unavailable; el cliente podrá probar la foto CDN.
+  const title=meta(html,'og:title')||meta(html,'twitter:title');
+  if(!title)return {status:'unavailable',code:child};
+  return {status:'family',code:child,liverpoolCode:target.familyId,
+    title:title.replace(/\s*[|·]\s*Liverpool.*$/i,'').slice(0,180),
+    brand:'',color:'',imageUrl:'',productUrl:page,
+    source:SOURCE,matchType:'operator_linked_parent',sizeVerified:false};
+}
 function reply(payload,status=200,origin=''){
   return new Response(JSON.stringify(payload),{status,headers:{'content-type':'application/json; charset=utf-8',
     'access-control-allow-origin':origin||'https://gioop92z.github.io','vary':'Origin','cache-control':'no-store'}});
@@ -101,6 +133,17 @@ Deno.serve(async req=>{
   if(requests.size>200)for(const [k,v] of requests)if(v.at<now-120000)requests.delete(k);
   const counter=requests.get(key)||{n:0,at:now};counter.n++;requests.set(key,counter);
   if(counter.n>12)return reply({status:'rate_limited',searchUrl:searchUrl(code)},429,origin);
+  const familyUrl=new URL(req.url).searchParams.get('familyUrl')||'';
+  if(familyUrl){
+    // El vínculo es explícito y está limitado a PDP públicas de Liverpool.
+    const ctrl=new AbortController();
+    const deadline=setTimeout(()=>ctrl.abort(),7500);
+    try {
+      const result=await lookupFamily(code,familyUrl,ctrl.signal);
+      return reply(result,200,origin);
+    }catch{return reply({status:'unavailable',code},200,origin);}
+    finally{clearTimeout(deadline);}
+  }
   const fallback={status:'not_found',code,source:SOURCE,searchUrl:searchUrl(code)};
   const sb=createClient(Deno.env.get('SUPABASE_URL')||'',Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'',
     {auth:{autoRefreshToken:false,persistSession:false}});
