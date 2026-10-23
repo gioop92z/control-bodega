@@ -8,6 +8,16 @@ const CANDIDATES=Object.freeze({
     productUrl:'https://www.liverpool.com.mx/tienda/pdp/zapato-mary-jane-mila-de-piel-para-ni%C3%B1o/1180029353',
     imageUrl:'https://ss405.liverpool.com.mx/xl/1180029353.jpg',
     source:'liverpool_web_public',status:'candidate',confidence:'operator_review_required'
+  }),
+  // Relación de SKU de talla con ficha genérica mostrada por el operador.
+  '1180031266':Object.freeze({
+    code:'1180031266',liverpoolCode:'1180031226',
+    title:'Zapato Mary Jane Mila de piel para niña',
+    brand:'ELEFANTE',color:'Negro',
+    productUrl:'https://www.liverpool.com.mx/tienda/pdp/zapato-mary-jane-elefante-mila-de-piel-para-ni%C3%B1a/1180031226',
+    imageUrl:'https://ss405.liverpool.com.mx/xl/1180031226.jpg',
+    source:'liverpool_web_public',status:'family_reference',
+    confidence:'operator_documented_parent',sizeVerified:false
   })
 });
 const KEY='vantis.catalogo-relaciones-confirmadas.v1';
