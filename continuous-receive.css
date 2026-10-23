@@ -21,3 +21,41 @@ body:has(.cr-standalone .continuous-receive) .page-title:before{display:none}
 
 /* Mobile manual input remains available alongside hardware scanning. */
 .cr-stage #crKeyboard{flex:0 0 auto;min-width:96px;min-height:50px;padding:8px 12px;white-space:nowrap;font-size:13px}
+
+
+/* VANTIS 5.1 · conciliación de lecturas pendientes (no cambia stock) */
+.cr-pending-review{margin:16px 0;padding:17px;border-radius:18px;background:#fff6ea;
+ border:1px solid #e8b970;border-left:5px solid #df920c;color:#533314;box-shadow:0 3px 13px #68460b12}
+.cr-pending-review[hidden],.cr-summary-pending[hidden],#crSummaryRetry[hidden]{display:none!important}
+.cr-pending-title{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.cr-pending-title small{color:#955909;font-size:10px;letter-spacing:.12em;font-weight:850}
+.cr-pending-title h2{font-size:19px!important;margin:3px 0;color:#593810}
+.cr-pending-title>span{background:#9e5407;color:#fff;border-radius:14px;min-width:43px;
+ text-align:center;font-weight:900;font-size:22px;padding:8px 10px;font-variant-numeric:tabular-nums}
+.cr-pending-review>p,.cr-summary-pending>p{font-size:13px;line-height:1.5;margin:9px 0 12px;color:#64471f}
+.cr-pending-rows{display:grid;gap:8px;max-height:275px;overflow-y:auto}
+.cr-pending-item{display:flex;align-items:start;justify-content:space-between;flex-wrap:wrap;gap:8px;
+ background:#fff;border:1px solid #eed8b4;border-radius:12px;padding:12px;color:#3a2a1b}
+.cr-pending-item>div{flex:1 1 180px;min-width:0}
+.cr-pending-item b{display:block;font-size:13px;color:#352438;overflow-wrap:anywhere}
+.cr-pending-item span:not(.cr-pending-state),.cr-pending-item small{display:block;font-size:11px;line-height:1.4;margin-top:5px;
+ color:#695766;overflow-wrap:anywhere}
+.cr-pending-item small{color:#934a10}
+.cr-pending-state{background:#fff0cd;color:#835006;padding:6px 8px;border-radius:8px;font-size:10px;
+ font-weight:780;white-space:normal;max-width:150px}
+.cr-pending-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:13px}
+.cr-pending-actions button{flex:1 1 180px;min-height:45px;font-size:13px}
+.cr-summary-pending{background:#fff8e8;border:1px solid #e6bf82;border-radius:15px;
+ padding:13px;margin:12px 0;max-height:min(38dvh,360px);overflow:auto;color:#3b2712}
+.cr-summary-pending h3{font-size:15px;margin:5px 0 8px;color:#844603}
+.cr-summary-pending .cr-pending-item{margin:8px 0}
+#crSummaryRetry{width:100%;min-height:48px;margin:12px 0;font-size:13px}
+.cr-summary .quick-row{display:flex;gap:10px;flex-wrap:wrap}
+.cr-summary .quick-row button{flex:1 1 170px;min-width:0;white-space:normal}
+.cr-summary #crNewSession:disabled{opacity:.5}
+@media(max-width:520px){
+ .cr-pending-review{padding:14px}
+ .cr-dialog.cr-summary{padding:20px;max-height:88dvh}
+ .cr-pending-actions button{flex-basis:100%}
+ .cr-summary .quick-row button{flex-basis:42%}
+}

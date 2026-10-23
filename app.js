@@ -13,8 +13,8 @@ import { FastExitQueue } from './exit-queue.mjs?v=3.8.0';
 import { mountFastExit } from './exit-queue-ui.mjs?v=3.8.0';
 import { ReceiveQueue } from './receive-queue.mjs?v=3.9.5';
 import { mountFastReceive } from './receive-queue-ui.mjs?v=3.9.5';
-import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?v=5.0.0';
-import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=4.0.6';
+import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?v=5.1.0';
+import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=5.1.0';
 import { mountOperations } from './operations-v4.mjs?v=5.0.0';
 import { ScanEvidence, listSkuEvidence, listLocalSkuEvidence } from './scan-evidence.mjs?v=4.0.4';
 
@@ -430,7 +430,19 @@ function floatingReceiveFrame(){
   return layer;
 }
 function closeFloatingReceive(){
-  if(!floatingReceiveElement||receiveBusy())return;
+  if(!floatingReceiveElement)return;
+  const pending=continuousQueue?.pending||0;
+  if(continuousQueue){
+    if(continuousQueue.busy){
+      toast('El servidor está procesando una lectura. En cuanto termine o expire la conexión, podrás cerrar y recuperar el registro.','error');
+      return;
+    }
+    if(continuousQueue.selecting||continuousQueue.state.pendingSwitch){
+      toast('Confirma o cancela el cambio de marbete antes de cerrar.','error');
+      return;
+    }
+    if(pending&&!confirm('Hay '+pending+' lectura(s) pendiente(s) de confirmación.\n\nSe conservarán en este dispositivo para reintentar al abrir otra vez Recibir mercancía. NO se consideran existencias confirmadas.\n\n¿Cerrar solo esta ventana?'))return;
+  } else if(receiveBusy())return;
   continuousCleanup?.();continuousCleanup=null;continuousQueue=null;
   receiveCleanup?.();receiveCleanup=null;
   document.removeEventListener('keydown',floatingReceiveKeydown);floatingReceiveKeydown=null;

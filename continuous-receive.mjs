@@ -8,6 +8,20 @@ const message = error => String(error?.message || error || 'No se pudo guardar.'
 const permanent = error => /^(22|23|P0001)/.test(String(error?.code || ''));
 const missing = error => /PGRST202|42883/.test(String(error?.code || ''));
 const uuid = () => crypto.randomUUID();
+// La petición puede quedarse esperando indefinidamente en Safari aunque haya Wi-Fi.
+// Timeout de diagnóstico: una escritura que no respondió es INCIERTA, nunca fallida.
+// Se reutiliza el mismo UUID en cualquier recuperación (RPC idempotente).
+export function withNetworkDeadline(action,label,ms=18000){
+  let timer;
+  return Promise.race([
+    Promise.resolve().then(action),
+    new Promise((_,reject)=>{
+      timer=setTimeout(()=>reject(Object.assign(
+        new Error(label+' agotó el tiempo de respuesta. La lectura sigue protegida para conciliación.'),
+        {code:'VANTIS_TIMEOUT'})),ms);
+    })
+  ]).finally(()=>clearTimeout(timer));
+}
 const canonical = code => {
   try { const value = parseMarbeteScan(code); return /^ZAP-(402|405|459)-\d{3,4}$/.test(value) ? value : null; }
   catch { return null; }
@@ -172,7 +186,7 @@ export class ContinuousReceive {
     if (!this.owned || this.disposed || this.storageError) return;
     try {
       if (!this.online()) throw Error('Sin conexión.');
-      const result = await this.api.capabilities();
+      const result = await withNetworkDeadline(()=>this.api.capabilities(),'Consulta al servidor');
       const compatible = result?.version===1 && result?.mode==='legacy' &&
         result?.atomic===false && result?.idempotent===false && result?.guarded===true;
       const modern = result?.version===1 && result?.atomic===true && result?.idempotent===true;
@@ -254,7 +268,7 @@ export class ContinuousReceive {
     if (this.selecting || !this.state.candidate || !this.online() || this.backend !== 'ready') return;
     const target = this.state.candidate; this.selecting = true; this.changed();
     try {
-      const location = await this.api.activate(target.code);
+      const location = await withNetworkDeadline(()=>this.api.activate(target.code),'Validación del marbete');
       if (!location?.codigo || canonical(location.codigo) !== canonical(target.code) || location.departamento_id !== this.deptId || location.activo !== true) throw Object.assign(Error('El servidor no confirmó el marbete.'), {code:'P0001'});
       // Rows captured during validation keep their visit and canonical server ID.
       for (const row of this.rows.filter(row => row.visitId === target.visitId && !row.payload)) {
@@ -327,12 +341,12 @@ export class ContinuousReceive {
       const unresolved = candidates.filter(row => !row.payload && !row.product && row.kind === 'receive');
       try {
         const codes = [...new Set(unresolved.map(row => row.code))].filter(code => !this.cache.has(code));
-        if (codes.length) for (const [code,result] of await this.api.lookup(codes)) if (result.product) this.cache.set(code,result.product);
+        if (codes.length) for (const [code,result] of await withNetworkDeadline(()=>this.api.lookup(codes),'Consulta de catálogo')) if (result.product) this.cache.set(code,result.product);
         const issues=new Map();
         for(const code of new Set(unresolved.filter(r=>!this.cache.has(r.code)).map(r=>r.code))){
           try{
             if(!this.api.ensureProduct)throw Error('El servidor no admite alta automática de artículos.');
-            const product=await this.api.ensureProduct(code);
+            const product=await withNetworkDeadline(()=>this.api.ensureProduct(code),'Alta de SKU');
             if(!product?.id||!product.activo||product.departamento_id!==this.deptId)throw Error('El catálogo no confirmó el artículo.');
             this.cache.set(code,product);
           }catch(error){issues.set(code,message(error));}
@@ -376,11 +390,11 @@ export class ContinuousReceive {
     this.changed();
     const started=startMetric();
     try {
-      const reply = row.writeMode==='legacy'
-        ? await this.api.legacyReceive(structuredClone(row.payload),{
+      const reply = await withNetworkDeadline(() => row.writeMode==='legacy'
+        ? this.api.legacyReceive(structuredClone(row.payload),{
             allowWrite:row.attempts===1,sku:row.product.sku,userId:this.userId
           })
-        : await this.api.receive(structuredClone(row.payload));
+        : this.api.receive(structuredClone(row.payload)), 'Confirmación de pieza');
       if (reply?.id !== row.id || reply.session_id !== this.state.id || reply.user_id !== this.userId ||
         reply.product_id !== row.product.id || reply.sku !== row.product.sku || reply.marbete_codigo !== row.location ||
         reply.kind !== row.kind || reply.quantity !== 1 || !Number.isFinite(Date.parse(reply.stored_at)) || reply.stock_resultante == null || !Number.isSafeInteger(Number(reply.stock_resultante))) {
@@ -425,8 +439,21 @@ export class ContinuousReceive {
     this.cache.clear(); this.changed(); void this.reconnect();
   }
   async reconnect() {
-    for (const row of this.rows) if (row.status === 'uncertain') row.retryAt = 0;
-    await this.connect(); await this.flush();
+    if (!this.owned || this.disposed || this.storageError) return;
+    // Si hay solicitudes en curso, deja que finalicen (o agoten su plazo)
+    // antes de lanzar otra consulta. Los folios no cambian jamás.
+    if(this.job) await this.job;
+    for(const row of this.rows)if(row.status==='uncertain')row.retryAt=0;
+    if(this.backend!=='ready')await this.connect();
+    if(this.backend==='ready')await this.flush();
+    this.changed();
+  }
+  pendingDetails() {
+    return this.rows.filter(row=>row.status!=='confirmed'&&row.status!=='failed')
+      .map(row=>({id:row.id,sequence:row.sequence,code:row.code,sku:row.product?.sku||row.code,
+        descripcion:row.product?.descripcion||'',marbete:row.location||null,
+        status:row.status,error:row.error||'',capturedAt:row.capturedAt,attempts:row.attempts,
+        canSync:Boolean(row.location||row.unlocatedApproved)}));
   }
   finish() {
     if (this.state.pendingSwitch) throw Error('Confirma o cancela el cambio de marbete.');

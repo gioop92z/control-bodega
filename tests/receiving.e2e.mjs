@@ -68,7 +68,7 @@ try {
   const page=await browser.newPage({viewport:{width:1440,height:1050},reducedMotion:'reduce'}),errors=[];
   page.on('pageerror',error=>errors.push(error.message));
   await page.addInitScript(()=>{
-    sessionStorage.setItem('nova.employeeNumber','472918');sessionStorage.setItem('vantis.session.ready','1');sessionStorage.setItem('vantis.session.department','dept1');sessionStorage.setItem('vantis.session.role','seller');localStorage.setItem('inv.dept','dept1');
+    sessionStorage.setItem('nova.employeeNumber',localStorage.getItem('__missingBackend')?'472919':'472918');sessionStorage.setItem('vantis.session.ready','1');sessionStorage.setItem('vantis.session.department','dept1');sessionStorage.setItem('vantis.session.role','seller');localStorage.setItem('inv.dept','dept1');
   });
   await page.route('https://esm.sh/**',route=>{
     const url=route.request().url();
@@ -156,7 +156,15 @@ try {
   await page.evaluate(()=>window.__receiptFixture.lostResponse=true);await page.keyboard.type('0012345678');await page.keyboard.press('Enter');
   await page.waitForFunction(()=>document.getElementById('crSync').textContent.includes('1 pendientes'));
   assert.equal(await page.locator('#crTotalCount').innerText(),'1,609');
-  await page.locator('#crRetry').click();await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='1,610');
+  // Recovery UX: show exact pending code, location and state even in finished summary.
+  await page.locator('#crPendingReview').waitFor({state:'visible'});
+  assert.match(await page.locator('#crPendingRows').innerText(),/0012345678/);
+  await page.locator('#crFinish').click();await page.locator('#crSummary').waitFor({state:'visible'});
+  assert.match(await page.locator('#crSummaryPending').innerText(),/0012345678/);
+  assert.equal(await page.locator('#crNewSession').isDisabled(),true,'pending row may not be abandoned');
+  await page.locator('#crSummaryRetry').click();
+  await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='1,610');
+  await page.locator('#crResume').click();
   assert.equal(await page.evaluate(()=>window.__receiptFixture.products[0].stock),1620);
   await page.keyboard.type('UNKNOWN');await page.keyboard.press('Enter');
   await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='1,611');
@@ -171,16 +179,8 @@ try {
   assert.equal(await page.evaluate(()=>window.__receiptFixture.products.find(x=>x.sku==='MANUAL-123')?.stock),1);
   // Source can deploy before the additive server migration without breaking
   // the previous receiving operation or pretending continuous saving works.
-  await page.evaluate(async()=>{
-    // Clearing all site data removes BOTH localStorage and IndexedDB.
-    // Leaving IndexedDB intact intentionally restores protected prior scans.
-    await new Promise((resolve,reject)=>{
-      const request=indexedDB.deleteDatabase('vantis-recepcion-respaldo-v5');
-      request.onsuccess=resolve;request.onerror=()=>reject(request.error);
-      request.onblocked=()=>reject(Error('Database still open'));
-    });
-    localStorage.clear();localStorage.setItem('__missingBackend','1');
-  });
+  // Simula otro operador con diario local aislado; nunca borra el respaldo de 472918.
+  await page.evaluate(()=>{localStorage.clear();localStorage.setItem('__missingBackend','1');});
   await page.reload({waitUntil:'networkidle'});await page.locator('[data-act="ENTRADA"]').click();await page.locator('#receiveCode').waitFor();
   assert.match(await page.locator('.vr-compat-note').first().innerText(),/no disponible/);
   assert.equal(blockedWrites,0);assert.deepEqual(errors,[]);
