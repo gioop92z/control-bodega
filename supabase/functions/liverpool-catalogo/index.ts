@@ -69,19 +69,40 @@ async function lookup(code,signal){
   if(!r.ok||!(r.headers.get('content-type')||'').includes('text/html'))return null;
   const html=(await r.text()).slice(0,2000000);
   const direct=productFrom(html,r.url,code);if(direct)return direct;
+  // Si la propia búsqueda de Liverpool redirige el SKU de talla a una ficha
+  // genérica, reutilizarla como imagen de modelo (no como talla comprobada).
+  const redirectedParent=canonical(r.url);
+  if(redirectedParent&&redirectedParent.match(/\/(\d{8,14})$/)?.[1]!==code){
+    const parentCode=redirectedParent.match(/\/(\d{8,14})$/)?.[1];
+    const family=parentCode?productFrom(html,redirectedParent,parentCode):null;
+    if(family)return {...family,status:'candidate',code,liverpoolCode:parentCode,
+      matchType:'liverpool_search_redirect',sizeVerified:false};
+  }
   const candidates=[];
   const raw=decode(html).replace(/\\u002F/gi,'/');
   const re=/(?:https?:\/\/www\.liverpool\.com\.mx)?\/tienda\/pdp\/[a-zA-Z0-9%/_\-]+\/\d{8,14}/g;
   for(const m of raw.matchAll(re)){const url=canonical(m[0]);if(url&&!candidates.includes(url))candidates.push(url);if(candidates.length>=24)break;}
   const exactUrl=candidates.find(url=>url.endsWith('/'+code));
-  const chosen=exactUrl?[exactUrl]:candidates.slice(0,5);
+  // Enlaces ?skuid=... significan que Liverpool ya relacionó esa talla con
+  // el producto padre; no usamos coincidencia numérica aproximada.
+  const withChildParam=[...raw.matchAll(/\/tienda\/pdp\/[a-zA-Z0-9%/_\-]+\/\d{8,14}\?[^"'<>\s]*/g)]
+    .filter(m=>new RegExp('[?&]skuid='+code+'(?:[&#]|$)','i').test(m[0]))
+    .map(m=>canonical(m[0])).filter(Boolean);
+  const chosen=exactUrl?[exactUrl]:[...new Set([...withChildParam,...candidates])].slice(0,5);
   let variantCandidate=null;
   for(const url of chosen){
     const p=await fetch(url,{signal,headers:{Accept:'text/html'}});
     if(!p.ok||!(p.headers.get('content-type')||'').includes('text/html'))continue;
-    const item=productFrom((await p.text()).slice(0,1400000),p.url,code);
+    const body=(await p.text()).slice(0,1400000);
+    const item=productFrom(body,p.url,code);
     if(item?.status==='verified')return item;
     if(item?.status==='candidate'&&!variantCandidate)variantCandidate=item;
+    if(!item&&withChildParam.includes(url)){
+      const parentId=url.match(/\/(\d{8,14})$/)?.[1];
+      const parent=parentId?productFrom(body,p.url,parentId):null;
+      if(parent&&!variantCandidate)variantCandidate={...parent,status:'candidate',code,
+        liverpoolCode:parentId,matchType:'published_skuid_param',sizeVerified:false};
+    }
   }
   return variantCandidate;
 }
