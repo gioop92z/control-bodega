@@ -20,7 +20,7 @@ import { ScanEvidence, listSkuEvidence, listLocalSkuEvidence } from './scan-evid
 import { lookupPublicCatalog, publicSearchUrl, lookupLiverpoolFamily } from './catalog-hybrid.mjs?v=5.6.0';
 import { liverpoolPreview } from './catalog-visual.mjs?v=5.6.0';
 import { catalogCandidate,confirmCatalogCandidate,rejectCatalogCandidate,isRejectedCandidate } from './catalog-relations.mjs?v=5.6.0';
-import { recordRunProduct, runMembers, fetchRunInventory, nearbyRunSuggestions } from './catalog-runs.mjs?v=5.7.0';
+import { recordRunProduct, runMembers, fetchRunInventory, nearbyRunSuggestions } from './catalog-runs.mjs?v=5.7.1';
 
 const sb = createClient(
   vantisBackendConfig.url,
@@ -32,7 +32,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '5.7.0';
+const APP_VERSION = '5.7.1';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 const HISTORY_RESTART_CUTOFF = '2026-10-15T22:15:00.000Z';
 
