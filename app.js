@@ -73,6 +73,28 @@ let floatingReceiveElement=null,floatingReceiveFocus=null,floatingReceiveKeydown
 let operationsCleanup=null;
 let photoEvidenceService=null;
 let catalogCountdownTimer=null;
+const catalogBackgroundQueue=[];
+const catalogBackgroundSeen=new Set();
+let catalogBackgroundTimer=null;
+// Nunca detiene el lector ni modifica stock: precarga solo nuevos SKU sin descripción.
+function prefetchUnknownCatalog(product){
+  if(navigator.onLine===false||!product?.sku)return;
+  const name=String(product.descripcion||'').toLowerCase().trim();
+  const unknown=!name||/^(sku|producto sin|desconocido|pendiente|sin descripci[oó]n)/i.test(name)||name===String(product.sku).toLowerCase();
+  if(!unknown||catalogBackgroundSeen.has(product.sku))return;
+  if(catalogBackgroundQueue.length>=30)return; // evita colas descontroladas en recepciones masivas
+  catalogBackgroundSeen.add(product.sku);
+  if(catalogBackgroundSeen.size>500)catalogBackgroundSeen.clear();
+  catalogBackgroundQueue.push([product.sku,product.upc]);
+  if(!catalogBackgroundTimer)catalogBackgroundTimer=setTimeout(drainUnknownCatalog,1000);
+}
+async function drainUnknownCatalog(){
+  catalogBackgroundTimer=null;
+  const codes=catalogBackgroundQueue.shift();
+  if(codes&&navigator.onLine!==false){try{await lookupPublicCatalog(codes);}catch{}}
+  // Límite conservador: 1 consulta/10 s para respetar el sitio externo.
+  if(catalogBackgroundQueue.length)catalogBackgroundTimer=setTimeout(drainUnknownCatalog,10000);
+}
 
 function cameraEvidenceService(){
   if(photoEvidenceService?.departmentId===S.deptId&&photoEvidenceService?.userId===S.user?.id)return photoEvidenceService;
@@ -474,7 +496,7 @@ function fastReceiveView(){
   continuousCleanup=mountContinuousReceive(panel.querySelector('#continuousReceiveRoot'),current,{
     startScanner,stopScanner,
     onEvidence:(id,code,frame)=>{void evidence.capture(id,code,frame,()=>current.rows.find(row=>row.id===id));},
-    onEvidenceConfirmed:row=>{void evidence.confirm(row);},
+    onEvidenceConfirmed:row=>{void evidence.confirm(row);prefetchUnknownCatalog(row.product);},
     isCurrent:()=>S.view==='home'&&S.deptId===deptId&&continuousQueue===current&&floatingReceiveElement===layer,
     onLegacy:()=>{if(receiveBusy())return;legacyReceiveView();},
     onUnavailable:()=>{if(floatingReceiveElement===layer)legacyReceiveView('Escaneo directo no disponible en el servidor. Usa el registro por lote mientras se activa.');}
