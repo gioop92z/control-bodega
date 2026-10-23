@@ -16,7 +16,7 @@ function save(key,url){
 function exactCodes(codes){
   return [...new Set(codes.map(c=>String(c||'').trim()).filter(c=>/^\d{8,11}$/.test(c)))].slice(0,2);
 }
-function probe(url,limit=3200){
+function probe(url,limit=2100){
   return new Promise(resolve=>{
     if(typeof Image!=='function'){resolve('');return;}
     const img=new Image();
@@ -45,9 +45,9 @@ export async function liverpoolPreview(codes){
     const task=(async()=>{
       // Únicamente CDN de Liverpool; no se adivinan fotos de marcas similares.
       const candidates=CDN_PATHS.flatMap(prefix=>[prefix+code+'.jpg',prefix+code+'_1p.jpg']);
-      // Dos comprobaciones concurrentes. Incluye CDN de imágenes actual (sp459/i/) y legado (ss550).
-      for(let i=0;i<candidates.length;i+=2){
-        const results=await Promise.all(candidates.slice(i,i+2).map(url=>probe(url)));
+      // Cuatro imágenes como máximo por ronda; no bloquear el escáner.
+      for(let i=0;i<candidates.length;i+=4){
+        const results=await Promise.all(candidates.slice(i,i+4).map(url=>probe(url)));
         const url=results.find(Boolean);
         if(url){save(code,url);return {status:'preview',code,imageUrl:url};}
       }
