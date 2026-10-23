@@ -18,7 +18,7 @@ function cached(code){
 function save(code,value){
   try{
     const items=readCache();
-    items[code]={value,expires:Date.now()+(value.status==='verified'?7*864e5:3600e3)};
+    items[code]={value,expires:Date.now()+(value.status==='verified'?7*864e5:value.status==='candidate'?864e5:3600e3)};
     const pairs=Object.entries(items).filter(([,r])=>r?.expires>Date.now()).sort((a,b)=>b[1].expires-a[1].expires).slice(0,MAX);
     localStorage.setItem(KEY,JSON.stringify(Object.fromEntries(pairs)));
   }catch{/* Cuota llena o almacenamiento privado: la búsqueda sigue funcionando. */}
@@ -52,7 +52,7 @@ async function one(code){
           brand:String(data.brand||'').slice(0,70),color:String(data.color||'').slice(0,45),
           imageUrl:data.imageUrl,productUrl:link.href,liverpoolCode:data.liverpoolCode||'',
           source:'liverpool_web_public',sizeVerified:false};
-        if(result.status==='verified')save(code,result);return result;
+        save(code,result);return result;
       }
       if(data.status==='not_found'){const res={status:'not_found',code};save(code,res);return res;}
       return {status:'unavailable',code};
