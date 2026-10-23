@@ -17,7 +17,7 @@ import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?
 import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=5.1.0';
 import { mountOperations } from './operations-v4.mjs?v=5.0.0';
 import { ScanEvidence, listSkuEvidence, listLocalSkuEvidence } from './scan-evidence.mjs?v=5.1.1';
-import { lookupPublicCatalog, publicSearchUrl } from './catalog-hybrid.mjs?v=5.2.0';
+import { lookupPublicCatalog, publicSearchUrl } from './catalog-hybrid.mjs?v=5.2.1';
 
 const sb = createClient(
   vantisBackendConfig.url,
@@ -29,7 +29,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '5.2.0';
+const APP_VERSION = '5.2.1';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 const HISTORY_RESTART_CUTOFF = '2026-10-15T22:15:00.000Z';
 
