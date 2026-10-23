@@ -35,7 +35,7 @@ test('no false photo when CDN cannot provide image',async()=>{
   const calls=setup('NEVER');
   const photo=await liverpoolPreview(['1191087930']);
   assert.equal(photo,null);
-  assert.equal(calls.length,4);
+  assert.equal(calls.length,5);
 });
 test('blocks malformed codes and cannot interpolate arbitrary CDN URLs',async()=>{
   const calls=setup('NEVER');
