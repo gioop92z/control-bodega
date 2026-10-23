@@ -1,0 +1,22 @@
+name: VANTIS catalog verification
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  verify-catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify app JavaScript and scanner syntax
+        run: |
+          node --check app.js
+          node --check scanner.js
+          node --check catalog-hybrid.mjs
+          node --check scan-evidence.mjs
+      - name: Test catalog cache, validation, offline and security
+        run: node --test tests/catalog-hybrid.test.mjs
