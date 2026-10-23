@@ -108,7 +108,8 @@ Deno.serve(async req=>{
     const cached=await sb.from('vantis_catalogo_externo_cache').select('*').eq('codigo',code).gt('vigente_hasta',new Date().toISOString()).maybeSingle();
     if(!cached.error&&cached.data){
       const c=cached.data;
-      if(c.estado==='not_found')return reply({...fallback,cached:true},200,origin);
+      // No confiar indefinidamente en negativos guardados por el buscador anterior.
+      // Los códigos de variante necesitan una nueva comprobación.
       if(c.estado==='verified')return reply({status:'verified',code,title:c.titulo,brand:c.marca,color:c.color,
         imageUrl:c.imagen_url,productUrl:c.producto_url,liverpoolCode:c.codigo_liverpool,source:SOURCE,cached:true,
         sizeVerified:false},200,origin);
@@ -117,13 +118,13 @@ Deno.serve(async req=>{
     const deadline=setTimeout(()=>controller.abort(),7500);
     let result=null;
     try{result=await lookup(code,controller.signal);}finally{clearTimeout(deadline);}
-    const ttl=result?.status==='verified'?7*86400:3600;
+    const ttl=result?.status==='verified'?7*86400:600;
     const persist={codigo:code,estado:result?'verified':'not_found',titulo:result?.title||null,
       marca:result?.brand||null,color:result?.color||null,imagen_url:result?.imageUrl||null,
       producto_url:result?.productUrl||null,codigo_liverpool:result?.liverpoolCode||null,
       origen:SOURCE,consultado_en:new Date().toISOString(),vigente_hasta:new Date(Date.now()+ttl*1000).toISOString()};
     // El caché persistente es opcional: una caída de la tabla no bloquea la consulta.
-    if(!result||result.status==='verified')await sb.from('vantis_catalogo_externo_cache').upsert(persist,{onConflict:'codigo'});
+    if(result?.status==='verified')await sb.from('vantis_catalogo_externo_cache').upsert(persist,{onConflict:'codigo'});
     return reply(result||fallback,200,origin);
   }catch(error){
     console.warn('VANTIS public catalog source unavailable:',String(error?.message||error).slice(0,160));
