@@ -1,0 +1,24 @@
+/* VANTIS 5.2 · ficha verificada separada del stock y del registro visual */
+.catalog-smart{display:flex;gap:14px;align-items:center;margin:16px 0;padding:16px;border:1px solid #eadde7;border-radius:18px;background:#fff;min-width:0;box-shadow:0 5px 18px rgba(52,26,47,.05)}
+.catalog-smart b{color:#332532;font-size:15px}
+.catalog-smart p{margin:4px 0 0;font-size:12px;line-height:1.5;color:#736974}
+.catalog-smart a{display:inline-block;margin-top:9px;color:#a40061;font-weight:700;text-decoration:underline;text-underline-offset:3px;font-size:13px}
+.catalog-smart .catalog-mark{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;background:#f9e9f1;color:#bf006b;flex:none;font-size:21px}
+.catalog-loading{background:linear-gradient(105deg,#fff 10%,#fff5fa 45%,#fff 80%);background-size:210% 100%;animation:catalogPulse 2.6s ease infinite}
+.catalog-loading>div{min-width:0;flex:1}.catalog-loading>strong{color:#aa075d;flex:none;font-size:14px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.catalog-ready{align-items:stretch;border-color:#edd9e2;background:linear-gradient(125deg,#fff,#fff8fb);gap:15px}
+.catalog-photo{width:126px;min-height:132px;flex:none;border-radius:13px;overflow:hidden;display:grid;place-items:center;background:#f4eff3}
+.catalog-photo img{width:100%;height:100%;max-height:176px;object-fit:contain;display:block}
+.catalog-photo.image-missing:after{content:'Imagen no disponible';padding:8px;text-align:center;font-size:12px;color:#777}
+.catalog-meta{min-width:0;flex:1;overflow-wrap:anywhere;display:flex;flex-direction:column;justify-content:center;gap:6px}
+.catalog-tag{color:#a0005b;font-size:10px;font-weight:800;letter-spacing:.055em}
+.catalog-meta h3{font-size:17px;line-height:1.25;margin:0;color:#26212a}
+.catalog-meta p{font-size:13px;margin:0}
+.catalog-meta small{font-size:11px;color:#80737c;line-height:1.4}
+.catalog-meta a{font-size:12px;margin-top:4px}
+.catalog-unavailable{background:#fbf9fb}
+.catalog-unknown>h2{overflow-wrap:anywhere;margin-bottom:8px}
+.catalog-unknown>button{margin:12px 0 0;width:100%}
+@keyframes catalogPulse{0%{background-position:100% 50%}100%{background-position:-100% 50%}}
+@media(max-width:520px){.catalog-smart{padding:13px;gap:11px}.catalog-photo{width:100px;min-height:118px}.catalog-meta h3{font-size:15px}.catalog-meta small{font-size:10px}}
+@media(prefers-reduced-motion:reduce){.catalog-loading{animation:none}}
