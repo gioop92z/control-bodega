@@ -105,3 +105,41 @@ export async function lookupLiverpoolFamily(code,rawUrl){
   }catch{return {status:'unavailable'};}
   finally{clearTimeout(timer);}
 }
+
+
+const MODEL_CACHE='vantis.modelo-alternativas.v1';
+/**
+ * Busca fichas genéricas de Liverpool por modelo/marca después de la
+ * búsqueda exacta. Son opciones para comparar, no fotos confirmadas del SKU.
+ */
+export async function lookupLiverpoolModels(product,department=''){
+ const code=String(product?.sku||'').trim();
+ const name=String(product?.descripcion||'').trim().slice(0,110);
+ const brand=String(product?.marca||'').trim().slice(0,50);
+ const color=String(product?.color||'').trim().slice(0,35);
+ if(!valid(code)||!name||!brand||navigator.onLine===false)return [];
+ const key=[code,name,brand,color,department].join('|');
+ try{
+   const cache=JSON.parse(sessionStorage.getItem(MODEL_CACHE)||'{}');
+   if(cache.key===key&&cache.until>Date.now())return cache.options;
+ }catch{}
+ const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),14500);
+ try{
+   const params=new URLSearchParams({mode:'models',code,name,brand,color,department:String(department).slice(0,60)});
+   const response=await fetch(ENDPOINT+'?'+params.toString(),{method:'GET',signal:ctl.signal,cache:'no-store',
+     headers:{Accept:'application/json'}});
+   if(!response.ok)return [];
+   const result=await response.json();
+   if(result?.code!==code||result.status!=='alternatives'||!Array.isArray(result.alternatives))return [];
+   const options=result.alternatives.filter(p=>{
+     if(!imageAllowed(p?.imageUrl)||!/^\d{8,14}$/.test(String(p?.liverpoolCode||'')))return false;
+     try{const u=new URL(p.productUrl);return u.protocol==='https:'&&u.hostname==='www.liverpool.com.mx'&&u.pathname.startsWith('/tienda/pdp/')&&u.pathname.endsWith('/'+p.liverpoolCode);}
+     catch{return false;}
+   }).slice(0,4).map(p=>({status:'candidate',code,title:String(p.title||'').slice(0,180),
+     brand:String(p.brand||brand).slice(0,70),color:String(p.color||'').slice(0,45),
+     imageUrl:p.imageUrl,productUrl:p.productUrl,liverpoolCode:p.liverpoolCode,
+     source:'liverpool_model_search',sizeVerified:false}));
+   try{sessionStorage.setItem(MODEL_CACHE,JSON.stringify({key,until:Date.now()+10*60000,options}));}catch{}
+   return options;
+ }catch{return [];}finally{clearTimeout(timer);}
+}
