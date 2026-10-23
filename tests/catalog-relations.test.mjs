@@ -30,3 +30,14 @@ test('no vincula un URL ajeno o un código distinto',()=>{
  assert.equal(confirmCatalogCandidate('1180029999',item),false);
  assert.equal(confirmCatalogCandidate('1180029415',{...item,imageUrl:'https://example.org/untrusted.jpg'}),false);
 });
+
+test('SKU 1180031266 muestra automáticamente la ficha genérica 1180031226 sin tocar stock',()=>{
+  mem.clear();
+  const item=catalogCandidate(['1180031266']);
+  assert.equal(item.status,'family_reference');
+  assert.equal(item.liverpoolCode,'1180031226');
+  assert.equal(item.brand,'ELEFANTE');
+  assert.equal(item.title,'Zapato Mary Jane Mila de piel para niña');
+  assert.equal(item.imageUrl,'https://ss405.liverpool.com.mx/xl/1180031226.jpg');
+  assert.equal(item.sizeVerified,false);
+});
