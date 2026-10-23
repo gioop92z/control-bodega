@@ -1,6 +1,6 @@
 // VANTIS: enriquecimiento PUBLICO, independiente del inventario y del flujo del lector.
 const ENDPOINT='https://uphnzyembyrouvqohwys.supabase.co/functions/v1/liverpool-catalogo';
-const KEY='vantis.catalogo-publico.v2';
+const KEY='vantis.catalogo-publico.v3';
 const MAX=160;
 const inflight=new Map();
 const valid=code=>/^[a-zA-Z0-9]{6,20}$/.test(String(code||''));
@@ -18,7 +18,7 @@ function cached(code){
 function save(code,value){
   try{
     const items=readCache();
-    items[code]={value,expires:Date.now()+(value.status==='verified'?7*864e5:value.status==='candidate'?864e5:3600e3)};
+    items[code]={value,expires:Date.now()+(value.status==='verified'?7*864e5:value.status==='candidate'?864e5:300e3)};
     const pairs=Object.entries(items).filter(([,r])=>r?.expires>Date.now()).sort((a,b)=>b[1].expires-a[1].expires).slice(0,MAX);
     localStorage.setItem(KEY,JSON.stringify(Object.fromEntries(pairs)));
   }catch{/* Cuota llena o almacenamiento privado: la búsqueda sigue funcionando. */}
