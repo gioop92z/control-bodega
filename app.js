@@ -20,7 +20,7 @@ import { ScanEvidence, listSkuEvidence, listLocalSkuEvidence } from './scan-evid
 import { lookupPublicCatalog, publicSearchUrl, lookupLiverpoolFamily } from './catalog-hybrid.mjs?v=5.6.0';
 import { liverpoolPreview } from './catalog-visual.mjs?v=5.6.0';
 import { catalogCandidate,confirmCatalogCandidate,rejectCatalogCandidate,isRejectedCandidate } from './catalog-relations.mjs?v=5.6.0';
-import { recordRunProduct, runMembers, fetchRunInventory, nearbyRunSuggestions, storedRun } from './catalog-runs.mjs?v=5.7.0';
+import { recordRunProduct, runMembers, fetchRunInventory, nearbyRunSuggestions } from './catalog-runs.mjs?v=5.7.0';
 
 const sb = createClient(
   vantisBackendConfig.url,
@@ -883,6 +883,69 @@ function startCatalogLookup(codes,current){
   });
 }
 
+async function loadRunForSearch(product,current){
+  if(!product?.sku||!S.deptId||!current())return;
+  const seq=++runLookupSequence,dept=S.deptId,sku=String(product.sku);
+  const active=()=>current()&&seq===runLookupSequence&&S.searchResult?.sku===sku;
+  S.runStatus='loading';
+  const group=runMembers(dept,sku);
+  const known=[sku,...group.confirmed.map(x=>x.sku),...group.probable.map(x=>x.sku)];
+  try{
+    const [inventory,nearby]=await Promise.all([
+      fetchRunInventory(sb,dept,known),
+      nearbyRunSuggestions(sb,dept,{...product,descripcion:
+        (group.ref?.modelTitle&&!unknownNameForRun(product.descripcion))?product.descripcion:
+          group.ref?.modelTitle||product.descripcion})
+    ]);
+    if(!active())return;
+    const bySku=new Map(inventory.rows.map(p=>[String(p.sku),p]));
+    const activeRows=items=>items.filter(item=>bySku.has(item.sku)).map(item=>({
+      ...item,...bySku.get(item.sku),confidence:item.sourceStatus,reason:item.reason
+    }));
+    const knownKeys=new Set(known);
+    const suggestions=nearby.filter(p=>!knownKeys.has(String(p.sku))).slice(0,18);
+    S.runData={
+      family:group.ref?.familyCode||'',title:group.ref?.modelTitle||'',
+      confirmed:activeRows(group.confirmed),probable:activeRows(group.probable),
+      similar:suggestions,
+      current:bySku.get(sku)||product,
+      available:!inventory.error,
+      totalVerified:1+activeRows(group.confirmed).length
+    };
+    S.runStatus=inventory.error?'partial':'ready';
+  }catch{
+    if(!active())return;
+    S.runStatus='error';S.runData=null;
+  }
+  if(active())render();
+}
+function unknownNameForRun(value){
+  return !String(value||'').trim()||/^(?:Producto nuevo|Producto sin|Desconocido|SKU\b|Sin descripci[oó]n)/i.test(String(value).trim());
+}
+function runSectionHtml(){
+  if(S.searchType!=='product'||!S.searchResult)return '';
+  const v=S.runData;
+  if(S.runStatus==='loading'&&!v)return '<section class="vantis-run" aria-live="polite"><div class="vantis-run-header"><span class="vantis-run-icon">≋</span><div><b>Detectando corrida de tallas</b><p>Relacionando SKU, imágenes y familia Liverpool sin modificar stock.</p></div></div></section>';
+  if(!v)return '';
+  const good=v.confirmed||[],maybe=v.probable||[],similar=v.similar||[];
+  const count=good.length+maybe.length+1;
+  const title=v.title||S.searchResult.descripcion;
+  const list=arr=>arr.map(p=>
+    '<button type="button" class="vantis-run-row" data-run-sku="'+esc(p.sku)+'">'+
+    '<span class="vantis-run-size">'+esc(p.talla||'Talla ?')+'</span><span class="vantis-run-sku">SKU '+esc(p.sku)+'</span>'+
+    '<strong>'+esc(p.stock??'—')+' pza'+(Number(p.stock)===1?'':'s')+'</strong></button>').join('');
+  const info=v.family?'<p class="vantis-run-family">Familia Liverpool: <strong>'+esc(v.family)+'</strong></p>':'<p class="vantis-run-family">Familia aún no identificada · buscando coincidencias.</p>';
+  const known=good.length?'<div class="vantis-run-group"><div class="vantis-run-sub">Tallas vinculadas por familia</div>'+list(good)+'</div>':'';
+  const tentative=maybe.length?'<div class="vantis-run-group"><div class="vantis-run-sub">Probables por familia o imagen · revisión recomendada</div>'+list(maybe)+'</div>':'';
+  const suggestions=similar.length?'<div class="vantis-run-group"><div class="vantis-run-sub">SKU similares por modelo · sin vincular</div>'+list(similar)+'</div>':'';
+  return '<section class="vantis-run"><div class="vantis-run-header"><span class="vantis-run-icon">≋</span>'+
+    '<div><b>Corrida inteligente</b><p>'+esc(title)+'</p></div><span class="vantis-run-count">'+count+' SKU</span></div>'+info+
+    '<details '+(good.length||maybe.length?'open':'')+'><summary>Ver tallas y SKU detectados</summary>'+
+    '<div class="vantis-run-group"><div class="vantis-run-sub">SKU consultado · inventario actual</div>'+list([v.current])+'</div>'+known+tentative+suggestions+
+    (!good.length&&!maybe.length&&!similar.length?'<p class="vantis-run-empty">La corrida está en formación. Al escanear otras tallas, VANTIS comparará automáticamente sus familias e imágenes.</p>':'')+
+    '</details><div class="vantis-run-bottom"><span>Las piezas proceden del inventario. Una foto igual sugiere modelo, no demuestra talla.</span>'+
+    '<button type="button" id="runRefresh" class="secondary">Actualizar corrida</button></div></section>';
+}
 function searchResultHtml() {
   if (searchPending) return '<p class="muted" role="status">Consultando artículo y ubicaciones…</p>';
   if (!S.searchResult) return '<div class="empty small-empty"><div class="empty-icon">⌕</div><p>Escanea un código para ver stock y ubicación.</p></div>';
