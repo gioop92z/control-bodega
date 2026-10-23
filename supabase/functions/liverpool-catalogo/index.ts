@@ -46,14 +46,20 @@ function productFrom(html,url,code){
   const id=page.match(/\/(\d{8,14})$/)?.[1]||'';
   const products=structured(html);
   const exact=products.find(p=>[p.sku,p.productID,p.mpn,p.gtin,p.gtin12,p.gtin13,p.gtin14].some(v=>String(v||'').trim()===code));
-  if(id!==code&&!exact)return null; // Prohíbe fotos por semejanza de nombre o marca.
+  // Buscar un SKU hijo explícito dentro de la ficha del producto padre.
+  // La coincidencia es SÓLO una sugerencia: no equivale a talla verificada.
+  const variantFields=html.match(/"(?:skuId|skuID|skuid|sku_id|variantId|childSku|sku)"\s*:\s*"?\d{8,14}/gi)||[];
+  const variantMatched=id!==code&&!exact&&variantFields.some(part=>part.match(/\d{8,14}$/)?.[0]===code);
+  if(id!==code&&!exact&&!variantMatched)return null;
   const p=exact||products[0]||{};
   const brand=typeof p.brand==='string'?p.brand:p.brand?.name||'';
   const imageCandidate=Array.isArray(p.image)?p.image[0]:(typeof p.image==='object'?p.image?.url:p.image);
-  const image=secureImage(imageCandidate||meta(html,'og:image')||meta(html,'twitter:image'));
+  const galleryImages=[...html.matchAll(/https?:\/\/(?:ss|sp)\d+\.liverpool\.com\.mx\/(?:xl|lg|i)\/[^"'\s<>]+/gi)]
+    .map(x=>x[0]).filter(url=>url.includes('/'+id+'.')||url.includes('/'+id+'_'));
+  const image=secureImage(imageCandidate||meta(html,'og:image')||meta(html,'twitter:image')||galleryImages[0]);
   const heading=String(p.name||meta(html,'og:title')||meta(html,'twitter:title')||'').replace(/\s*[|·]\s*Liverpool.*$/i,'').trim();
   if(!heading||!image)return null; // Respuesta incompleta: no inventar coincidencia.
-  return {status:'verified',code,source:SOURCE,matchType:id===code?'liverpool_product_id':'published_identifier',
+  return {status:variantMatched?'candidate':'verified',code,source:SOURCE,matchType:variantMatched?'variant_reference_in_page':id===code?'liverpool_product_id':'published_identifier',
     title:heading.slice(0,180),brand:String(brand).slice(0,70),color:String(p.color||'').slice(0,45),
     imageUrl:image,productUrl:page,liverpoolCode:id,sizeVerified:false};
 }
@@ -68,14 +74,16 @@ async function lookup(code,signal){
   const re=/(?:https?:\/\/www\.liverpool\.com\.mx)?\/tienda\/pdp\/[a-zA-Z0-9%/_\-]+\/\d{8,14}/g;
   for(const m of raw.matchAll(re)){const url=canonical(m[0]);if(url&&!candidates.includes(url))candidates.push(url);if(candidates.length>=24)break;}
   const exactUrl=candidates.find(url=>url.endsWith('/'+code));
-  const chosen=exactUrl?[exactUrl]:candidates.slice(0,2);
+  const chosen=exactUrl?[exactUrl]:candidates.slice(0,5);
+  let variantCandidate=null;
   for(const url of chosen){
     const p=await fetch(url,{signal,headers:{Accept:'text/html'}});
     if(!p.ok||!(p.headers.get('content-type')||'').includes('text/html'))continue;
     const item=productFrom((await p.text()).slice(0,1400000),p.url,code);
-    if(item)return item;
+    if(item?.status==='verified')return item;
+    if(item?.status==='candidate'&&!variantCandidate)variantCandidate=item;
   }
-  return null;
+  return variantCandidate;
 }
 function reply(payload,status=200,origin=''){
   return new Response(JSON.stringify(payload),{status,headers:{'content-type':'application/json; charset=utf-8',
@@ -109,13 +117,13 @@ Deno.serve(async req=>{
     const deadline=setTimeout(()=>controller.abort(),7500);
     let result=null;
     try{result=await lookup(code,controller.signal);}finally{clearTimeout(deadline);}
-    const ttl=result?7*86400:3600;
+    const ttl=result?.status==='verified'?7*86400:3600;
     const persist={codigo:code,estado:result?'verified':'not_found',titulo:result?.title||null,
       marca:result?.brand||null,color:result?.color||null,imagen_url:result?.imageUrl||null,
       producto_url:result?.productUrl||null,codigo_liverpool:result?.liverpoolCode||null,
       origen:SOURCE,consultado_en:new Date().toISOString(),vigente_hasta:new Date(Date.now()+ttl*1000).toISOString()};
     // El caché persistente es opcional: una caída de la tabla no bloquea la consulta.
-    await sb.from('vantis_catalogo_externo_cache').upsert(persist,{onConflict:'codigo'});
+    if(!result||result.status==='verified')await sb.from('vantis_catalogo_externo_cache').upsert(persist,{onConflict:'codigo'});
     return reply(result||fallback,200,origin);
   }catch(error){
     console.warn('VANTIS public catalog source unavailable:',String(error?.message||error).slice(0,160));
