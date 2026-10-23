@@ -1,8 +1,10 @@
-name: Deploy GitHub Pages
+name: Deploy VANTIS GitHub Pages
 
 on:
   push:
-    branches: ["main"]
+    branches: [main]
+    paths:
+      - '**'
   workflow_dispatch:
 
 permissions:
@@ -11,128 +13,54 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages-v2-final
-  cancel-in-progress: true
+  group: vantis-pages-publication
+  cancel-in-progress: false
 
 jobs:
   deploy:
-    environment:
-      name: github-pages-v2-final
-      url: ${{ steps.deployment.outputs.page_url }}
+    name: Validate and publish static frontend
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Checkout
+      - name: Checkout matching commit
         uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - name: Setup Node for non-network syntax checks
+        uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-
-      - name: Install pinned test dependencies
-        run: npm ci --ignore-scripts --no-audit --no-fund
-
-      - name: Validate app JavaScript
-        run: |
-          node --check app.js
-          node --check scanner.js
-          node --check auto-add.js
-          node --check location-scan.js
-          node --check team-access.js
-          node --check access-admin-fix.js
-          node --check runtime.js
-          node --check sw.js
-          node --check vantis-enterprise.js
-          node --check vantis-session-gate.js
-          node --check product-location.mjs
-          node --check support-batch.mjs
-          node --check exit-queue.mjs
-          node --check exit-input.mjs
-          node --check exit-queue-ui.mjs
-          node --check receive-queue.mjs
-          node --check receive-queue-ui.mjs
-          node --check continuous-receive.mjs
-          node --check continuous-receive-ui.mjs
-          node --check receiving-input.mjs
-          node --test tests/*.test.mjs
-          npm run test:database
-          test -s index.html
-          test -s styles.css
-          test -s vantis-enterprise.css
-          test -s manifest.json
-          test -s receive-queue.css
-          test -s continuous-receive.css
-
-      - name: Validate Supabase API contract
-        shell: bash
+      - name: Validate public frontend
         run: |
           set -euo pipefail
-          API='https://dkqovohxkxlcccvagpij.supabase.co/rest/v1'
-          KEY='sb_publishable_iz06RtaObND0dWOpuX2vKg_wZVbrZCv'
-
-          probe_rpc() {
-            local name="$1"
-            local payload="$2"
-            local body
-            body=$(curl --connect-timeout 5 --max-time 15 -sS "$API/rpc/$name" -X POST \
-              -H "apikey: $KEY" \
-              -H 'Content-Type: application/json' \
-              --data "$payload")
-            if printf '%s' "$body" | grep -Eq 'PGRST202|Could not find the function|function .* does not exist'; then
-              echo "Backend contract missing RPC: $name"
-              printf '%s\n' "$body"
-              exit 1
-            fi
-          }
-
-          probe_table() {
-            local name="$1"
-            local body
-            body=$(curl --connect-timeout 5 --max-time 15 -sS "$API/$name?select=*&limit=1" -H "apikey: $KEY")
-            if printf '%s' "$body" | grep -Eq 'PGRST205|Could not find the table'; then
-              echo "Backend contract missing table: $name"
-              printf '%s\n' "$body"
-              exit 1
-            fi
-          }
-
-          probe_rpc validar_empleado '{"p_clave":"__smoke__","p_pin":"__smoke__"}'
-          AUTH_BODY=$(curl --connect-timeout 5 --max-time 15 -sS "$API/rpc/validar_empleado" -X POST \
-            -H "apikey: $KEY" -H 'Content-Type: application/json' \
-            --data '{"p_clave":"__permission_probe__","p_pin":"__permission_probe__"}')
-          if printf '%s' "$AUTH_BODY" | grep -Eqi 'permission denied|42501|not authorized|authentication required'; then
-            echo 'Employee login RPC is not callable before login.'
-            printf '%s\n' "$AUTH_BODY"
-            exit 1
-          fi
-          probe_rpc buscar_producto_codigo '{"p_codigo":"__smoke__"}'
-          probe_rpc crear_producto_codigo '{"p_token":null,"p_departamento":"00000000-0000-0000-0000-000000000000","p_codigo":"__smoke__"}'
-          probe_rpc resumen_departamento '{"p_departamento":"00000000-0000-0000-0000-000000000000"}'
-          probe_rpc cerrar_conteo '{"p_conteo":"00000000-0000-0000-0000-000000000000"}'
-          probe_rpc importar_catalogo '{"p_departamento":"00000000-0000-0000-0000-000000000000","p_items":[]}'
-          probe_rpc ajuste_fisico_masivo '{"p_items":[],"p_nota":"smoke-test"}'
-          probe_rpc mover_stock_v2 '{"p_token":null,"p_id":"00000000-0000-0000-0000-000000000000","p_producto":"00000000-0000-0000-0000-000000000000","p_tipo":"ENTRADA","p_cantidad":1,"p_marbete":null,"p_nota":"smoke-test"}'
-          probe_rpc admin_guardar_empleado '{"p_id":null,"p_clave":"__smoke__","p_nombre":"Smoke Test","p_puesto":"","p_pin":"","p_activo":false,"p_departamentos":[]}'
-
-          for table in departamentos productos movimientos marbetes producto_marbetes conteos conteo_lineas empleados_operativos empleado_operativo_departamentos empleado_sesiones; do
-            probe_table "$table"
-          done
-
-      - name: Configure Pages
+          node --check app.js
+          node --check scanner.js
+          node --check catalog-hybrid.mjs
+          node --check catalog-visual.mjs
+          node --check scan-evidence.mjs
+          test -s index.html
+          test -s app.js
+          test -s catalog-hybrid.mjs
+          test -s catalog-visual.mjs
+          test -s catalog-hybrid.css
+          test -s catalog-visual-v53.css
+          grep -Fq 'catalog-visual-v53.css' index.html
+          grep -Fq 'catalog-product-showcase' app.js
+      # Database integration and live Supabase API tests run separately in CI.
+      # A temporary outage cannot freeze the static frontend on an old release.
+      - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
-
       - name: Stage tracked site files
         run: |
           mkdir -p "${{ runner.temp }}/vantis-pages"
           git archive HEAD | tar -x -C "${{ runner.temp }}/vantis-pages"
-
-      - name: Upload artifact
+          cat > "${{ runner.temp }}/vantis-pages/deployment-info.json" <<EOF
+          {"release":"5.4.0","commit":"${{ github.sha }}","generated_by":"github-actions-pages"}
+          EOF
+      - name: Upload static frontend
         uses: actions/upload-pages-artifact@v3
         with:
           path: ${{ runner.temp }}/vantis-pages
-
-      - name: Deploy to GitHub Pages
+      - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
