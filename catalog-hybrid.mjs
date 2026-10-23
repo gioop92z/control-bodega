@@ -1,6 +1,6 @@
 // VANTIS: enriquecimiento PUBLICO, independiente del inventario y del flujo del lector.
 const ENDPOINT='https://uphnzyembyrouvqohwys.supabase.co/functions/v1/liverpool-catalogo';
-const KEY='vantis.catalogo-publico.v3';
+const KEY='vantis.catalogo-publico.v4';
 const MAX=160;
 const inflight=new Map();
 const valid=code=>/^[a-zA-Z0-9]{6,20}$/.test(String(code||''));
