@@ -132,8 +132,13 @@ async function drainUnknownCatalog(){
       try {
         // Una consulta por pieza. Si existe UPC diferente, se buscará cuando se consulte el artículo.
         const response=await lookupPublicCatalog([product.sku]);
-        if(response?.status==='verified'||response?.status==='candidate')
+        if(response?.status==='verified'||response?.status==='candidate'){
           recordRunProduct(dept,product,response);
+        }else {
+          // Imagen idéntica también permite detectar una corrida probable.
+          const preview=await liverpoolPreview([product.sku]);
+          if(preview?.imageUrl)recordRunProduct(dept,product,preview);
+        }
       }catch{}
     }
   }
@@ -873,7 +878,15 @@ function startCatalogLookup(codes,current){
   }
   render();
   // La imagen con código idéntico se intenta en paralelo, sin bloquear la API ni el escaneo.
-  void liverpoolPreview(codes).then(preview=>{if(!current()||!preview)return;S.externalPreview=preview;render();}).catch(()=>{});
+  void liverpoolPreview(codes).then(preview=>{
+    if(!current()||!preview)return;
+    S.externalPreview=preview;
+    if(S.searchType==='product'&&S.searchResult?.sku){
+      recordRunProduct(S.deptId,S.searchResult,preview);
+      void loadRunForSearch(S.searchResult,current);
+    }
+    render();
+  }).catch(()=>{});
   if(S.externalCandidate?.liverpoolCode){
     const parentCode=S.externalCandidate.liverpoolCode;
     void liverpoolPreview([parentCode]).then(preview=>{
