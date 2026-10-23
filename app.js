@@ -19,7 +19,7 @@ import { mountOperations } from './operations-v4.mjs?v=5.0.0';
 import { ScanEvidence, listSkuEvidence, listLocalSkuEvidence } from './scan-evidence.mjs?v=5.1.1';
 import { lookupPublicCatalog, publicSearchUrl } from './catalog-hybrid.mjs?v=5.4.0';
 import { liverpoolPreview } from './catalog-visual.mjs?v=5.4.0';
-import { catalogCandidate,confirmCatalogCandidate,rejectCatalogCandidate } from './catalog-relations.mjs?v=5.5.0';
+import { catalogCandidate,confirmCatalogCandidate,rejectCatalogCandidate,isRejectedCandidate } from './catalog-relations.mjs?v=5.5.1';
 
 const sb = createClient(
   vantisBackendConfig.url,
@@ -31,7 +31,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '5.5.0';
+const APP_VERSION = '5.5.1';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 const HISTORY_RESTART_CUTOFF = '2026-10-15T22:15:00.000Z';
 
@@ -777,6 +777,7 @@ function startCatalogLookup(codes,current){
     clearInterval(catalogCountdownTimer);catalogCountdownTimer=null;
     S.externalStatus=item.status;S.externalProduct=item.status==='verified'?item:null;
     if(item.status==='verified')S.externalCandidate=null;
+    if(item.status==='candidate'&&!S.externalCandidate&&!isRejectedCandidate(item.code))S.externalCandidate={...item,status:'candidate'};
     render();
     if(item.status==='verified'&&S.searchType==='product')void persistVerifiedDescription(S.searchResult,item,current);
   }).catch(()=>{
