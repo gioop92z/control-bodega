@@ -62,6 +62,38 @@ export function recordRunProduct(dept,product,source=null){
  items[sku]=item;write(dept,items);return item;
 }
 export function storedRun(dept,sku){return read(dept)[safe(sku)]||null;}
+
+/**
+ * Reutiliza una ficha genérica ya documentada en este dispositivo.
+ * Nunca equipara el SKU de talla al código padre ni afirma talla verificada.
+ * Ante dos familias posibles se abstiene para evitar fotos incorrectas.
+ */
+export function knownFamilyCandidate(dept,product){
+ const sku=safe(product?.sku),name=modelName(product?.descripcion);
+ if(!skuOK(sku)||!name||unknownName(name))return null;
+ const brand=normalized(product?.marca),color=normalized(product?.color);
+ const matches=Object.values(read(dept)).filter(row=>{
+   if(!row?.familyCode||!row?.imageUrl||!row?.productUrl||row.sku===sku)return false;
+   if(!['verified','operator_confirmed','family_reference','family'].includes(row.sourceStatus))return false;
+   if(modelName(row.descripcion)!==name)return false;
+   const rowBrand=normalized(row.marca||row.sourceBrand);
+   const rowColor=normalized(row.color||row.sourceColor);
+   return !(brand&&rowBrand&&brand!==rowBrand)&&!(color&&rowColor&&color!==rowColor);
+ });
+ const families=new Map();
+ for(const row of matches) {
+   const id=row.familyCode;
+   if(!families.has(id))families.set(id,row);
+ }
+ if(families.size!==1)return null;
+ const row=[...families.values()][0];
+ return {status:'candidate',code:sku,liverpoolCode:row.familyCode,
+   imageUrl:row.imageUrl,productUrl:row.productUrl,
+   title:row.modelTitle||row.descripcion,brand:row.sourceBrand||row.marca,
+   color:row.sourceColor||row.color,
+   source:'local_family_reference',reason:'documented_sibling',sizeVerified:false};
+}
+
 export function runMembers(dept,sku){
  const all=read(dept),ref=all[safe(sku)];
  if(!ref)return {confirmed:[],probable:[],ref:null};
