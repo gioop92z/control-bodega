@@ -1,0 +1,63 @@
+// VANTIS catálogo visual: imagen pública por código, sin alterar inventario.
+// Imagen preliminar ≠ ficha verificada. No se le adjudica talla/color sin confirmar.
+const CDN_HOSTS=['ss550.liverpool.com.mx','ss251.liverpool.com.mx'];
+const CACHE='vantis.imagenes-publicas.v1';
+const inFlight=new Map();
+function readCache(){
+  try{return JSON.parse(localStorage.getItem(CACHE)||'{}')||{};}catch{return {};}
+}
+function save(key,url){
+  try {
+    const cache=readCache();cache[key]={url,until:Date.now()+3*86400000};
+    const recent=Object.entries(cache).filter(([,v])=>v?.until>Date.now()).slice(-100);
+    localStorage.setItem(CACHE,JSON.stringify(Object.fromEntries(recent)));
+  }catch{}
+}
+function exactCodes(codes){
+  return [...new Set(codes.map(c=>String(c||'').trim()).filter(c=>/^\d{8,11}$/.test(c)))].slice(0,2);
+}
+function probe(url,limit=3200){
+  return new Promise(resolve=>{
+    if(typeof Image!=='function'){resolve('');return;}
+    const img=new Image();
+    let settled=false;
+    const done=success=>{
+      if(settled)return;settled=true;clearTimeout(timer);
+      img.onload=null;img.onerror=null;
+      resolve(success?url:'');
+    };
+    const timer=setTimeout(()=>done(false),limit);
+    img.onload=()=>done(img.naturalWidth>=160&&img.naturalHeight>=120);
+    img.onerror=()=>done(false);
+    img.decoding='async';
+    img.src=url;
+  });
+}
+export async function liverpoolPreview(codes){
+  const values=exactCodes(codes);
+  for(const code of values){
+    const item=readCache()[code];
+    if(item?.until>Date.now()&&item.url)return {status:'preview',code,imageUrl:item.url};
+  }
+  if(globalThis.navigator?.onLine===false)return null;
+  for(const code of values){
+    if(inFlight.has(code)){const v=await inFlight.get(code);if(v)return v;continue;}
+    const task=(async()=>{
+      // Únicamente CDN de Liverpool; no se adivinan fotos de marcas similares.
+      const candidates=CDN_HOSTS.flatMap(host=>[
+        'https://'+host+'/xl/'+code+'.jpg',
+        'https://'+host+'/lg/'+code+'.jpg'
+      ]);
+      // Dos comprobaciones concurrentes, máximo cuatro URLs por código.
+      for(let i=0;i<candidates.length;i+=2){
+        const results=await Promise.all(candidates.slice(i,i+2).map(url=>probe(url)));
+        const url=results.find(Boolean);
+        if(url){save(code,url);return {status:'preview',code,imageUrl:url};}
+      }
+      return null;
+    })();
+    inFlight.set(code,task);
+    try{const value=await task;if(value)return value;}finally{inFlight.delete(code);}
+  }
+  return null;
+}
