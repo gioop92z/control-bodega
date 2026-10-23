@@ -76,17 +76,14 @@ export function runMembers(dept,sku){
   if(brandA&&brandB&&brandA!==brandB)continue;
   const sameFamily=ref.familyCode&&ref.familyCode===other.familyCode;
   const sameImage=imageFingerprint(ref.imageUrl)&&imageFingerprint(ref.imageUrl)===imageFingerprint(other.imageUrl);
-  const knownNames=!unknownName(ref.descripcion)&&!unknownName(other.descripcion);
-  const sameModel=knownNames&&modelName(ref.descripcion)===modelName(other.descripcion);
   if(sameFamily){
    const trusted=['verified','operator_confirmed','family_reference','family'];
    (trusted.includes(ref.sourceStatus)&&trusted.includes(other.sourceStatus)?confirmed:probable).push({...other,reason:'family'});
-  } else if(sameImage&&(sameModel||brandA&&brandA===brandB||(!knownNames&&!brandA&&!brandB))){
-   // Misma foto sola = sugerencia visible, no relación certificada.
+  } else if(sameImage){
+   // Imagen idéntica sin marca/color contradictorios = solo propuesta revisable.
    probable.push({...other,reason:'shared-image'});
   }
  }
- const sorter=(a,b)=>Number.parseFloat(a.talla)||999-(Number.parseFloat(b.talla)||999);
  const ordered=a=>a.sort((x,y)=>(Number.parseFloat(x.talla)||999)-(Number.parseFloat(y.talla)||999)||x.sku.localeCompare(y.sku));
  return {ref,confirmed:ordered(confirmed),probable:ordered(probable)};
 }
