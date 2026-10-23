@@ -18,6 +18,7 @@ jobs:
           node --check scanner.js
           node --check catalog-hybrid.mjs
           node --check catalog-visual.mjs
+          node --check catalog-relations.mjs
           node --check scan-evidence.mjs
       - name: Test catalog cache, validation, offline and security
-        run: node --test tests/catalog-hybrid.test.mjs tests/catalog-visual.test.mjs
+        run: node --test tests/catalog-hybrid.test.mjs tests/catalog-visual.test.mjs tests/catalog-relations.test.mjs tests/catalog-family.test.mjs
