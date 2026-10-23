@@ -770,7 +770,9 @@ function catalogSectionHtml(){
   const image=(preview?.code===item?.liverpoolCode&&preview?.imageUrl)||item?.imageUrl||preview?.imageUrl||'';
   const title=item?.title||(S.searchType==='product'?S.searchResult?.descripcion:'Producto por identificar')||'Producto por identificar';
   const code=String(S.searchType==='product'?S.searchResult?.sku||lastSearchCode:lastSearchCode);
-  const sourceLink=item?.productUrl||publicSearchUrl(code);
+  const searchFamily=S.searchType==='product'?
+    [S.searchResult?.marca||'', 'tenis', /INFANTIL/i.test(deptName())?'niño':''].filter(Boolean).join(' '):code;
+  const sourceLink=item?.productUrl||publicSearchUrl(searchFamily);
   const kind=verified?'COINCIDENCIA EXACTA · LIVERPOOL':confirmed?'IMAGEN GENERAL DEL MODELO · LIVERPOOL':
     candidate?'POSIBLE PRODUCTO · COMPROBAR VARIANTE':image?'IMAGEN POR CÓDIGO · NO VERIFICADA':'FOTO PENDIENTE';
   const loading=state==='loading';
@@ -803,7 +805,7 @@ function catalogSectionHtml(){
     '<div class="catalog-visual-stage'+(image?' has-photo':'')+'"><div class="catalog-halo"></div>'+img+'<span class="catalog-visual-stamp">'+esc(kind)+'</span></div>'+
     '<div class="catalog-showcase-foot"><div><span class="catalog-showcase-code">SKU '+esc(code)+'</span><h3>'+esc(title)+'</h3><p>'+esc(message)+'</p></div>'+timer+'</div>'+
     comparison+actions+modelOptions+linkForm+
-    '<div class="catalog-showcase-actions"><a href="'+esc(sourceLink)+'" target="_blank" rel="noopener noreferrer">Ver ficha en Liverpool ↗</a><small>La foto pública no sustituye el registro visual de escaneo. No modifica stock ni ubicaciones.</small></div></section>';
+    '<div class="catalog-showcase-actions"><a href="'+esc(sourceLink)+'" target="_blank" rel="noopener noreferrer">'+(item?.productUrl?'Ver ficha en Liverpool ↗':'Buscar modelo en Liverpool ↗')+'</a><small>La foto pública no sustituye el registro visual de escaneo. No modifica stock ni ubicaciones.</small></div></section>';
 }
 function selectCatalogModel(index){
   const choice=S.externalAlternatives?.[index];
