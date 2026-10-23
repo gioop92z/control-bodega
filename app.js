@@ -17,6 +17,7 @@ import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?
 import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=5.1.0';
 import { mountOperations } from './operations-v4.mjs?v=5.0.0';
 import { ScanEvidence, listSkuEvidence, listLocalSkuEvidence } from './scan-evidence.mjs?v=5.1.1';
+import { lookupPublicCatalog, publicSearchUrl } from './catalog-hybrid.mjs?v=5.2.0';
 
 const sb = createClient(
   vantisBackendConfig.url,
@@ -28,7 +29,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '5.1.1';
+const APP_VERSION = '5.2.0';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 const HISTORY_RESTART_CUTOFF = '2026-10-15T22:15:00.000Z';
 
@@ -48,6 +49,9 @@ const S = {
   searchType: null,
   evidencePhotos: [],
   evidenceStatus: 'idle',
+  externalStatus: 'idle',
+  externalProduct: null,
+  externalCountdown: 8,
   count: null,
   importHeaders: [],
   importRows: [],
@@ -68,6 +72,7 @@ let continuousCleanup = null;
 let floatingReceiveElement=null,floatingReceiveFocus=null,floatingReceiveKeydown=null;
 let operationsCleanup=null;
 let photoEvidenceService=null;
+let catalogCountdownTimer=null;
 
 function cameraEvidenceService(){
   if(photoEvidenceService?.departmentId===S.deptId&&photoEvidenceService?.userId===S.user?.id)return photoEvidenceService;
@@ -103,6 +108,8 @@ function resetSearchContext() {
   locationAssignment = null;
   locationSaveNotice = null;
   clearEvidenceImages();S.evidenceStatus='idle';
+  clearInterval(catalogCountdownTimer);catalogCountdownTimer=null;
+  S.externalStatus='idle';S.externalProduct=null;
   stopScanner();
 }
 
@@ -629,6 +636,7 @@ function searchView() {
   $('scanSearch').onclick = () => openScanner(doSearch,'UPC, SKU o marbete');
   $('manualSearch').onsubmit = e => { e.preventDefault(); doSearch($('searchCode').value).catch(x=>toast(humanError(x),'error')); };
   $('giveProductLocation')?.addEventListener('click', openProductLocation);
+  $('receiveUnknown')?.addEventListener('click',()=>fastReceiveView());
 }
 
 function searchEvidenceHtml() {
@@ -647,12 +655,45 @@ function searchEvidenceHtml() {
     }).join('')+'</div></section>';
 }
 
+function catalogSectionHtml(){
+  const state=S.externalStatus, item=S.externalProduct;
+  if(state==='idle')return '';
+  if(state==='loading')return '<section class="catalog-smart catalog-loading" aria-live="polite"><span class="catalog-mark">◉</span><div><b>Consultando catálogo Liverpool</b><p>Validando coincidencia exacta de código, sin detener el inventario.</p></div><strong id="catalogCountdown">'+S.externalCountdown+' s</strong></section>';
+  if(state==='verified'&&item){
+    return '<section class="catalog-smart catalog-ready"><div class="catalog-photo"><img loading="lazy" src="'+esc(item.imageUrl)+'" alt="Imagen pública de '+esc(item.title)+'" referrerpolicy="no-referrer" onerror="this.closest(\'.catalog-photo\').classList.add(\'image-missing\');this.remove()"></div><div class="catalog-meta"><span class="catalog-tag">✓ COINCIDENCIA VERIFICADA · LIVERPOOL</span><h3>'+esc(item.title)+'</h3><p>'+esc([item.brand,item.color].filter(Boolean).join(' · '))+'</p><small>Foto del catálogo en línea · talla no verificada. No modifica existencias.</small><a href="'+esc(item.productUrl)+'" target="_blank" rel="noopener noreferrer">Ver ficha original ↗</a></div></section>';
+  }
+  const code=S.searchType==='product'?(S.searchResult?.sku||lastSearchCode):lastSearchCode;
+  const url=publicSearchUrl(code);
+  return '<section class="catalog-smart catalog-unavailable"><span class="catalog-mark">⌕</span><div><b>'+ (state==='offline'?'Sin conexión para consultar Liverpool':state==='not_found'?'Sin coincidencia exacta en Liverpool':'Liverpool no respondió a tiempo')+'</b><p>El inventario funciona normalmente. No se asignarán imágenes de otros modelos.</p><a target="_blank" rel="noopener noreferrer" href="'+esc(url)+'">Buscar manualmente en Liverpool ↗</a></div></section>';
+}
+function startCatalogLookup(codes,current){
+  clearInterval(catalogCountdownTimer);catalogCountdownTimer=null;
+  S.externalProduct=null;S.externalCountdown=8;
+  if(navigator.onLine===false){S.externalStatus='offline';render();return;}
+  S.externalStatus='loading';render();
+  catalogCountdownTimer=setInterval(()=>{
+    if(!current()||S.externalStatus!=='loading'){clearInterval(catalogCountdownTimer);catalogCountdownTimer=null;return;}
+    S.externalCountdown=Math.max(0,S.externalCountdown-1);
+    const label=document.getElementById('catalogCountdown');if(label)label.textContent=S.externalCountdown+' s';
+  },1000);
+  void lookupPublicCatalog(codes).then(item=>{
+    if(!current())return;
+    clearInterval(catalogCountdownTimer);catalogCountdownTimer=null;
+    S.externalStatus=item.status;S.externalProduct=item.status==='verified'?item:null;render();
+  }).catch(()=>{
+    if(!current())return;
+    clearInterval(catalogCountdownTimer);catalogCountdownTimer=null;
+    S.externalStatus='unavailable';render();
+  });
+}
+
 function searchResultHtml() {
   if (searchPending) return '<p class="muted" role="status">Consultando artículo y ubicaciones…</p>';
   if (!S.searchResult) return '<div class="empty small-empty"><div class="empty-icon">⌕</div><p>Escanea un código para ver stock y ubicación.</p></div>';
+  if (S.searchType==='external')return '<div class="catalog-unknown"><div class="tiny">Código consultado</div><h2>'+esc(S.searchResult.code)+'</h2><p class="muted">No aparece en el inventario de este departamento. La consulta pública es solo informativa y no confirma existencias.</p>'+catalogSectionHtml()+'<button id="receiveUnknown" class="secondary" type="button">Registrar escaneando en recepción</button></div>';
   if (S.searchType==='product') {
     const p=S.searchResult;
-    return `<div class="product-head"><div><div class="tiny">SKU ${esc(p.sku)}${p.upc?' · UPC '+esc(p.upc):''}</div><h2>${esc(p.descripcion)}</h2><p class="muted">${esc([p.marca,p.talla,p.color].filter(Boolean).join(' · '))}</p></div><div class="stock-big">${p.stock}<span>piezas</span></div></div>${locationList(S.locations)}${searchEvidenceHtml()}${locationSaveNotice?.productId===p.id?`<div class="success" role="status">✓ ${locationSaveNotice.alreadyAssigned?'El artículo ya estaba asignado a':'Ubicación guardada:'} <b>${esc(locationSaveNotice.code)}</b>.</div>`:''}<div class="product-location-action"><button id="giveProductLocation" class="${S.locations.length?'secondary':'primary'}" type="button">⌖ ${S.locations.length?'Agregar otra ubicación':'Darle ubicación'}</button><p class="tiny">${S.locations.length?'Conserva las ubicaciones actuales.':'Escanea el marbete del cajón, mueble o rack.'}</p></div><div id="productLocationPanel" hidden></div>`;
+    return `<div class="product-head"><div><div class="tiny">SKU ${esc(p.sku)}${p.upc?' · UPC '+esc(p.upc):''}</div><h2>${esc(p.descripcion)}</h2><p class="muted">${esc([p.marca,p.talla,p.color].filter(Boolean).join(' · '))}</p></div><div class="stock-big">${p.stock}<span>piezas</span></div></div>${locationList(S.locations)}${catalogSectionHtml()}${searchEvidenceHtml()}${locationSaveNotice?.productId===p.id?`<div class="success" role="status">✓ ${locationSaveNotice.alreadyAssigned?'El artículo ya estaba asignado a':'Ubicación guardada:'} <b>${esc(locationSaveNotice.code)}</b>.</div>`:''}<div class="product-location-action"><button id="giveProductLocation" class="${S.locations.length?'secondary':'primary'}" type="button">⌖ ${S.locations.length?'Agregar otra ubicación':'Darle ubicación'}</button><p class="tiny">${S.locations.length?'Conserva las ubicaciones actuales.':'Escanea el marbete del cajón, mueble o rack.'}</p></div><div id="productLocationPanel" hidden></div>`;
   }
   const m=S.searchResult;
   return `<div><div class="tiny">Ubicación</div><h2>${esc(m.codigo)}</h2><p><span class="pill">${esc(m.zona)}</span> ${esc(m.descripcion||'')}</p><div>${(m.products||[]).map(p => `<div class="product-row"><div><b>${esc(p.descripcion)}</b><span>SKU ${esc(p.sku)}${p.upc?' · UPC '+esc(p.upc):''}</span></div><strong>${p.qty??'—'}</strong></div>`).join('')||'<p class="muted">No hay productos asignados.</p>'}</div></div>`;
@@ -667,6 +708,8 @@ async function doSearch(code) {
   const request=++searchRequest, deptId=S.deptId;
   const current=()=>request===searchRequest && S.deptId===deptId && S.view==='search';
   locationAssignment=null; locationSaveNotice=null; lastSearchCode=code;
+  clearInterval(catalogCountdownTimer);catalogCountdownTimer=null;
+  S.externalStatus='idle';S.externalProduct=null;
   clearEvidenceImages();S.searchResult=null; S.locations=[]; S.evidenceStatus='idle'; searchPending=true;
   render();
   try {
@@ -676,6 +719,7 @@ async function doSearch(code) {
       const locs=await loadLocations(p.sku,deptId);
       if (!current()) return;
       S.searchType='product'; S.searchResult=p; S.locations=locs; S.evidenceStatus='loading';
+      startCatalogLookup([p.sku,p.upc],current);
       // La búsqueda de stock es independiente de la descarga de imágenes.
       void Promise.allSettled([
         vantisBackendConfig.mode==='LEGACY_PRODUCCION'?Promise.resolve([]):listSkuEvidence(sb,deptId,p.sku),
@@ -700,7 +744,7 @@ async function doSearch(code) {
     }
     const marbete=await locationQuery(sb.from('marbetes').select('codigo,zona,descripcion,created_at').eq('codigo',code).eq('activo',true).eq('departamento_id',deptId).gt('created_at',VISUAL_CLEANUP_CUTOFF).maybeSingle());
     if (!current()) return;
-    if (!marbete) return toast('Código no encontrado.','error');
+    if (!marbete){S.searchType='external';S.searchResult={code};startCatalogLookup([code],current);return;}
     const assignments=await locationQuery(sb.from('producto_marbetes').select('sku,cantidad').eq('marbete_codigo',code));
     const skus=(assignments||[]).map(x=>x.sku);
     let products=[];
