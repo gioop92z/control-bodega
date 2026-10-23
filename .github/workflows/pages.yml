@@ -37,6 +37,7 @@ jobs:
           node --check scanner.js
           node --check catalog-hybrid.mjs
           node --check catalog-visual.mjs
+          node --check catalog-relations.mjs
           node --check scan-evidence.mjs
           test -s index.html
           test -s app.js
