@@ -73,3 +73,35 @@ export async function lookupPublicCatalog(codes){
       results.some(x=>x.status==='offline')?{status:'offline',code:unique[0]}:
       {status:'not_found',code:unique[0]});
 }
+
+export function parseLiverpoolFamilyUrl(value){
+  try{
+    const trimmed=String(value||'').trim();
+    if(/^\d{8,14}$/.test(trimmed))return null; // Se requiere vínculo oficial para localizar el slug exacto.
+    const u=new URL(trimmed);
+    if(u.protocol!=='https:'||u.hostname!=='www.liverpool.com.mx')return null;
+    if(!/^\/tienda\/pdp\/[A-Za-z0-9%_./-]+\/\d{8,14}$/.test(u.pathname))return null;
+    return {url:u.origin+u.pathname,familyCode:u.pathname.match(/\/(\d{8,14})$/)[1]};
+  }catch{return null;}
+}
+export async function lookupLiverpoolFamily(code,rawUrl){
+  const link=parseLiverpoolFamilyUrl(rawUrl);
+  if(!valid(code)||!link)return {status:'invalid_family_link'};
+  if(navigator.onLine===false)return {status:'offline'};
+  const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),8500);
+  try{
+    const res=await fetch(ENDPOINT+'?code='+encodeURIComponent(code)+'&familyUrl='+encodeURIComponent(link.url),{
+      method:'GET',signal:ctl.signal,cache:'no-store',headers:{Accept:'application/json'}});
+    if(!res.ok)return {status:'unavailable'};
+    const data=await res.json();
+    const p=data?.productUrl&&parseLiverpoolFamilyUrl(data.productUrl);
+    if(data.status!=='family'||data.code!==code||p?.familyCode!==link.familyCode)
+      return {status:'unavailable'};
+    if(data.imageUrl&&!imageAllowed(data.imageUrl))return {status:'unavailable'};
+    return {status:'family',code,liverpoolCode:link.familyCode,
+      title:String(data.title||'').slice(0,180),brand:String(data.brand||'').slice(0,70),
+      color:String(data.color||'').slice(0,50),imageUrl:data.imageUrl||'',
+      productUrl:p.url,source:'liverpool_web_public',sizeVerified:false};
+  }catch{return {status:'unavailable'};}
+  finally{clearTimeout(timer);}
+}
