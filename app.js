@@ -635,15 +635,15 @@ function searchEvidenceHtml() {
   if(S.evidenceStatus==='loading')return '<section class="vantis-evidence"><h3>Registro visual</h3><p class="muted">Cargando imágenes privadas de las recepciones…</p></section>';
   if(S.evidenceStatus==='error')return '<section class="vantis-evidence"><h3>Registro visual</h3><p class="muted">Las fotografías todavía no están disponibles desde esta instancia. Las nuevas capturas de cámara se intentarán sincronizar.</p></section>';
   const photos=S.evidencePhotos||[];
-  if(!photos.length)return '<section class="vantis-evidence"><h3>Registro visual</h3><p class="muted">Todavía no hay fotografías de escaneo para este SKU. Las lecturas hechas con lector portátil no generan foto.</p></section>';
+  if(!photos.length)return '<section class="vantis-evidence"><h3>Registro visual</h3><p class="muted">Este SKU todavía no tiene fotografías disponibles aquí. Al registrar piezas desde Recibir mercancía → Cámara, VANTIS conserva automáticamente un fotograma de cada lectura. El lector portátil registra códigos, pero no toma fotografías.</p>'+(vantisBackendConfig.mode==='LEGACY_PRODUCCION'?'<p class="tiny">Las evidencias de cámara del servidor actual solo se conservan en el navegador donde se escanearon; la sincronización en la nube requiere completar la migración.</p>':'')+'</section>';
   return '<section class="vantis-evidence"><h3>Registro visual <small>'+photos.length+' últimas capturas</small></h3>'+
-    '<p class="muted">Fotogramas de lecturas confirmadas; muestran lo que enfocaba la cámara, no necesariamente el producto completo.'+(photos.some(p=>p.local)?' Algunas fotos permanecen únicamente en este dispositivo, pendientes de sincronización.':'')+'</p>'+
+    '<p class="muted">Fotogramas de cámara (pueden mostrar el código sin el producto completo).'+(photos.some(p=>p.pendingLink)?' Hay lecturas con imagen que siguen pendientes de confirmar en el inventario.':'')+(photos.some(p=>p.local)?(vantisBackendConfig.mode==='LEGACY_PRODUCCION'?' Fotos locales: no sincronizadas entre dispositivos.':' Algunas fotos permanecen en este dispositivo, pendientes de sincronización.'):'')+'</p>'
     '<div class="vantis-evidence-grid">'+photos.map(photo=>{
       const when=new Date(photo.capturada_en).toLocaleString('es-MX',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
       return '<figure class="vantis-evidence-item">'+(photo.url?
         '<a href="'+esc(photo.url)+'" target="_blank" rel="noopener noreferrer" aria-label="Abrir evidencia del '+esc(when)+'"><img loading="lazy" src="'+esc(photo.url)+'" alt="Imagen del código escaneado para '+esc(S.searchResult?.sku||'SKU')+'"></a>'
         :'<div class="vantis-evidence-missing">Imagen no disponible</div>')+
-        '<figcaption>'+esc(when)+' <span>· '+esc(photo.codigo_leido)+(photo.local?' · Local':'')+'</span></figcaption></figure>';
+        '<figcaption>'+esc(when)+' <span>· '+esc(photo.codigo_leido)+(photo.local?' · En este dispositivo':'')+(photo.pendingLink?' · Pendiente de confirmar':'')+'</span></figcaption></figure>';
     }).join('')+'</div></section>';
 }
 
@@ -679,7 +679,7 @@ async function doSearch(code) {
       // La búsqueda de stock es independiente de la descarga de imágenes.
       void Promise.allSettled([
         vantisBackendConfig.mode==='LEGACY_PRODUCCION'?Promise.resolve([]):listSkuEvidence(sb,deptId,p.sku),
-        listLocalSkuEvidence(deptId,S.user.id,p.sku)
+        listLocalSkuEvidence(deptId,S.user.id,p.sku,{codes:[p.upc]})
       ]).then(([remote,local])=>{
         if(!current()){
           if(local.status==='fulfilled')local.value.forEach(item=>URL.revokeObjectURL(item.url));
