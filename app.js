@@ -84,6 +84,25 @@ const catalogBackgroundQueue=[];
 const catalogBackgroundSeen=new Set();
 let catalogBackgroundTimer=null;
 let runLookupSequence=0;
+const RUN_QUEUE_KEY='vantis.corridas.pending.v1';
+function persistRunQueue(){
+  try{localStorage.setItem(RUN_QUEUE_KEY,JSON.stringify(catalogBackgroundQueue.slice(0,120)));}catch{}
+}
+function recoverRunQueue(){
+  try{
+    const saved=JSON.parse(localStorage.getItem(RUN_QUEUE_KEY)||'[]');
+    for(const item of (Array.isArray(saved)?saved:[]).slice(0,120)){
+      if(!item?.dept||!/^[a-zA-Z0-9]{6,20}$/.test(String(item.product?.sku||'')))continue;
+      const code=item.dept+':'+item.product.sku;
+      if(catalogBackgroundSeen.has(code))continue;
+      catalogBackgroundSeen.add(code);catalogBackgroundQueue.push(item);
+    }
+    if(catalogBackgroundQueue.length&&!catalogBackgroundTimer)
+      catalogBackgroundTimer=setTimeout(drainUnknownCatalog,2000);
+  }catch{}
+}
+// Recuperar lecturas aunque Safari cierre durante la recepción.
+setTimeout(recoverRunQueue,1500);
 // Nunca detiene el lector ni modifica stock: precarga solo nuevos SKU sin descripción.
 // Tras confirmar cada pieza, aprender su relación de familia SIN bloquear el escáner.
 // La consulta remota se dosifica para respetar el proveedor y no ralentizar recepciones.
@@ -95,12 +114,16 @@ function prefetchUnknownCatalog(product){
   catalogBackgroundSeen.add(dept+':'+sku);
   if(catalogBackgroundSeen.size>2500)catalogBackgroundSeen.clear();
   if(catalogBackgroundQueue.length>=120)return;
-  catalogBackgroundQueue.push({dept,product:{...product}});
+  recordRunProduct(dept,product,catalogCandidate([product.sku,product.upc]));
+  catalogBackgroundQueue.push({dept,product:{sku:product.sku,upc:product.upc,
+    marca:product.marca,color:product.color,talla:product.talla,descripcion:product.descripcion}});
+  persistRunQueue();
   if(!catalogBackgroundTimer)catalogBackgroundTimer=setTimeout(drainUnknownCatalog,1200);
 }
 async function drainUnknownCatalog(){
   catalogBackgroundTimer=null;
   const row=catalogBackgroundQueue.shift();
+  persistRunQueue();
   if(row){
     const {dept,product}=row;
     const known=catalogCandidate([product.sku,product.upc]);
