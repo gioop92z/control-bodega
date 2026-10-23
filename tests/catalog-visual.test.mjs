@@ -21,7 +21,7 @@ function setup(validUrl){
   return calls;
 }
 test('uses exact SKU from Liverpool CDN without needing the remote catalog search',async()=>{
-  const expected='https://ss550.liverpool.com.mx/xl/1191087930.jpg';
+  const expected='https://ss237.liverpool.com.mx/lg/1191087930.jpg';
   const calls=setup(expected);
   const photo=await liverpoolPreview(['1191087930','198961636205']);
   assert.equal(photo.status,'preview');
@@ -35,7 +35,7 @@ test('no false photo when CDN cannot provide image',async()=>{
   const calls=setup('NEVER');
   const photo=await liverpoolPreview(['1191087930']);
   assert.equal(photo,null);
-  assert.equal(calls.length,5);
+  assert.equal(calls.length,7);
 });
 test('blocks malformed codes and cannot interpolate arbitrary CDN URLs',async()=>{
   const calls=setup('NEVER');
