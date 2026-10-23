@@ -935,8 +935,10 @@ async function loadRunForSearch(product,current){
     ]);
     if(!active())return;
     const bySku=new Map(inventory.rows.map(p=>[String(p.sku),p]));
-    const activeRows=items=>items.filter(item=>bySku.has(item.sku)).map(item=>({
-      ...item,...bySku.get(item.sku),confidence:item.sourceStatus,reason:item.reason
+    const activeRows=items=>items.map(item=>({
+      ...item,...(bySku.get(item.sku)||{}),confidence:item.sourceStatus,
+      inventoryConfirmed:bySku.has(item.sku),reason:item.reason,
+      stock:bySku.has(item.sku)?bySku.get(item.sku).stock:null
     }));
     const knownKeys=new Set(known);
     const suggestions=nearby.filter(p=>!knownKeys.has(String(p.sku))).slice(0,18);
@@ -946,7 +948,8 @@ async function loadRunForSearch(product,current){
       similar:suggestions,
       current:bySku.get(sku)||product,
       available:!inventory.error,
-      totalVerified:1+activeRows(group.confirmed).length
+      totalPieces:[bySku.get(sku),...group.confirmed.map(x=>bySku.get(x.sku)),
+        ...group.probable.map(x=>bySku.get(x.sku))].filter(Boolean).reduce((n,p)=>n+(Number(p.stock)||0),0)
     };
     S.runStatus=inventory.error?'partial':'ready';
   }catch{
@@ -966,16 +969,17 @@ function runSectionHtml(){
   const good=v.confirmed||[],maybe=v.probable||[],similar=v.similar||[];
   const count=good.length+maybe.length+1;
   const title=v.title||S.searchResult.descripcion;
+  const quantityLabel=v.available&&count>0?' · '+Number(v.totalPieces||0).toLocaleString('es-MX')+' pzas registradas en estos SKU':'';
   const list=arr=>arr.map(p=>
     '<button type="button" class="vantis-run-row" data-run-sku="'+esc(p.sku)+'">'+
     '<span class="vantis-run-size">'+esc(p.talla||'Talla ?')+'</span><span class="vantis-run-sku">SKU '+esc(p.sku)+'</span>'+
-    '<strong>'+esc(p.stock??'—')+' pza'+(Number(p.stock)===1?'':'s')+'</strong></button>').join('');
+    '<strong>'+(p.stock==null?'Stock no consultado':esc(p.stock)+' pza'+(Number(p.stock)===1?'':'s'))+'</strong></button>').join('');
   const info=v.family?'<p class="vantis-run-family">Familia Liverpool: <strong>'+esc(v.family)+'</strong></p>':'<p class="vantis-run-family">Familia aún no identificada · buscando coincidencias.</p>';
   const known=good.length?'<div class="vantis-run-group"><div class="vantis-run-sub">Tallas vinculadas por familia</div>'+list(good)+'</div>':'';
   const tentative=maybe.length?'<div class="vantis-run-group"><div class="vantis-run-sub">Probables por familia o imagen · revisión recomendada</div>'+list(maybe)+'</div>':'';
   const suggestions=similar.length?'<div class="vantis-run-group"><div class="vantis-run-sub">SKU similares por modelo · sin vincular</div>'+list(similar)+'</div>':'';
   return '<section class="vantis-run"><div class="vantis-run-header"><span class="vantis-run-icon">≋</span>'+
-    '<div><b>Corrida inteligente</b><p>'+esc(title)+'</p></div><span class="vantis-run-count">'+count+' SKU</span></div>'+info+
+    '<div><b>Corrida inteligente</b><p>'+esc(title)+esc(quantityLabel)+'</p></div><span class="vantis-run-count">'+count+' SKU</span></div>'+info+
     '<details '+(good.length||maybe.length?'open':'')+'><summary>Ver tallas y SKU detectados</summary>'+
     '<div class="vantis-run-group"><div class="vantis-run-sub">SKU consultado · inventario actual</div>'+list([v.current])+'</div>'+known+tentative+suggestions+
     (!good.length&&!maybe.length&&!similar.length?'<p class="vantis-run-empty">La corrida está en formación. Al escanear otras tallas, VANTIS comparará automáticamente sus familias e imágenes.</p>':'')+
