@@ -1,6 +1,6 @@
-import {wireReceivingInput} from './receiving-input.mjs?v=3.10.0';
-import {receiptCsv} from './continuous-receive.mjs?v=3.10.0';
-import {captureMethodLabel} from './receiving-audit.mjs';
+import {wireReceivingInput} from './receiving-input.mjs?v=5.8.3';
+import {receiptCsv} from './continuous-receive.mjs?v=5.8.3';
+import {captureMethodLabel} from './receiving-audit.mjs?v=5.8.3';
 
 const esc = value => String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num = value => Number(value).toLocaleString('es-MX');
