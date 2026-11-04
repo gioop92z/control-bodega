@@ -547,3 +547,10 @@
     transition:none!important;
   }
 }
+/* Indicar estado de red real: comprobando y sin conexión nunca aparentan éxito. */
+.continuous-receive .cr-stage #crSync[data-connection="checking"]{color:#77717b!important}
+.continuous-receive .cr-stage #crSync[data-connection="checking"]::before{background:#a9a3ad}
+.continuous-receive .cr-stage #crSync[data-connection="offline"],
+.continuous-receive .cr-stage #crSync[data-connection="pending"]{color:#916329!important}
+.continuous-receive .cr-stage #crSync[data-connection="offline"]::before,
+.continuous-receive .cr-stage #crSync[data-connection="pending"]::before{background:#cd9a44}
