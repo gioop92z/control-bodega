@@ -378,12 +378,12 @@ function wireShell() {
     menu.onclick=()=>setOpen(!panel.classList?.contains?.('open'));
     window.vantisNavController?.abort();
     const controller=new AbortController();
-    document.addEventListener('pointerdown',event=>{
+    document.addEventListener?.('pointerdown',event=>{
       if(document.contains&&!document.contains(menu))return;
       if(!event.target?.closest?.('.vantis-command'))setOpen(false);
     },{signal:controller.signal});
     window.vantisNavController=controller;
-    document.addEventListener('keydown',event=>{
+    document.addEventListener?.('keydown',event=>{
       if(event.key==='Escape')setOpen(false);
     },{signal:controller.signal});
   }
