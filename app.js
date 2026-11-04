@@ -369,9 +369,9 @@ function wireShell() {
     const setOpen=open=>{
       panel.classList?.toggle?.('open',open);
       menu.classList?.toggle?.('open',open);
-      menu.setAttribute('aria-expanded',String(open));
-      menu.setAttribute('aria-label',open?'Cerrar menú de navegación':'Abrir menú de navegación');
-      panel.setAttribute('aria-hidden',String(!open));
+      menu.setAttribute?.('aria-expanded',String(open));
+      menu.setAttribute?.('aria-label',open?'Cerrar menú de navegación':'Abrir menú de navegación');
+      panel.setAttribute?.('aria-hidden',String(!open));
       panel.inert=!open;
     };
     setOpen(false);
@@ -379,8 +379,8 @@ function wireShell() {
     window.vantisNavController?.abort();
     const controller=new AbortController();
     document.addEventListener('pointerdown',event=>{
-      if(!document.contains(menu))return;
-      if(!event.target.closest('.vantis-command'))setOpen(false);
+      if(document.contains&&!document.contains(menu))return;
+      if(!event.target?.closest?.('.vantis-command'))setOpen(false);
     },{signal:controller.signal});
     window.vantisNavController=controller;
     document.addEventListener('keydown',event=>{
