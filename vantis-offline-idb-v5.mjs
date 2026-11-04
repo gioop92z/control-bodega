@@ -57,3 +57,25 @@ export class InventoryJournalMirror{
  async status(){return {available:hasIDB(),error:this.error};}
  async dispose(){await this.flush();}
 }
+
+
+// Lectura de auditoría: recupera sesiones también cuando su diario síncrono
+// fue compactado. No modifica filas ni abre nuevas sesiones.
+export async function listMirroredReceiptRows(prefix){
+ if(!hasIDB())return [];
+ const d=await db();
+ try{
+  return await new Promise((resolve,reject)=>{
+   const items=[],tx=d.transaction(STORE,'readonly'),store=tx.objectStore(STORE);
+   const req=store.openCursor(IDBKeyRange.bound(prefix,prefix+'\uffff'));
+   req.onsuccess=()=>{
+    const c=req.result;
+    if(!c){resolve(items);return;}
+    if(String(c.key).includes('/row/'))items.push({key:String(c.key),row:c.value});
+    c.continue();
+   };
+   req.onerror=()=>reject(req.error||Error('No se pudo consultar el respaldo de auditoría.'));
+   tx.onabort=()=>reject(tx.error||Error('No se pudo consultar el respaldo de auditoría.'));
+  });
+ }finally{d.close();}
+}
