@@ -54,8 +54,10 @@ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const browser=await chromium.launch({headless:true});
 try{
   const page=await browser.newPage({viewport:{width:390,height:844},deviceScaleFactor:2,isMobile:true,hasTouch:true,reducedMotion:'reduce'});
-  const errors=[];
+  const errors=[],failures=[];
   page.on('pageerror',err=>errors.push(err.message));
+  page.on('requestfailed',req=>failures.push({url:req.url(),reason:req.failure()?.errorText}));
+  page.on('response',response=>{if(response.status()>=400)failures.push({status:response.status(),url:response.url()});});
   await page.route('https://esm.sh/**',route=>{
     if(route.request().url().includes('@supabase/supabase-js'))
       return route.fulfill({contentType:'text/javascript',body:'export const createClient=()=>window.__testSb;'});
@@ -68,7 +70,7 @@ try{
   try {
     await page.locator('#clave').waitFor({timeout:10000});
   } catch(error) {
-    console.error('Login UI did not mount:',JSON.stringify({errors,html:(await page.content()).slice(-2500)}));
+    console.error('Login UI did not mount:',JSON.stringify({errors,failures,html:(await page.content()).slice(-2500)}));
     throw error;
   }
   assert.equal(await page.locator('#loginForm input').count(),1);
