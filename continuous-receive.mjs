@@ -1,7 +1,7 @@
 import {parseMarbeteScan, locationQuery} from './product-location.mjs?v=3.9.5';
 import {cleanSupportCode, lookupSupportCodes} from './support-batch.mjs?v=3.8.0';
 import {LegacyReceiptApi} from './legacy-receipt-api.mjs?v=3.10.1';
-import {InventoryJournalMirror} from './vantis-offline-idb-v5.mjs';
+import {InventoryJournalMirror} from './vantis-offline-idb-v5.mjs?v=5.8.3';
 import {scanMetric,startMetric,serverMetric} from './vantis-telemetry-v5.mjs';
 
 const message = error => String(error?.message || error || 'No se pudo guardar.');
