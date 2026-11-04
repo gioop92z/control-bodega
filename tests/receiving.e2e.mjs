@@ -108,8 +108,21 @@ try {
   // Continuous camera callback is shared by marbetes, QR and products.
   await page.locator('#crCameraButton').click();await page.waitForFunction(()=>!!window.__scanner);
   assert.equal(await page.evaluate(()=>window.__scanner.options.qrEnabled),true);
-  for(let i=0;i<3;i++)await page.evaluate(()=>window.__scanner.cb('0200000000001'));
+  for(let i=0;i<3;i++)await page.evaluate(()=>window.__scanner.cb('0200000000001',new Blob(['test-camera-frame'],{type:'image/jpeg'})));
   await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='10');
+  // Camera evidence must be linked to each actual receipt, not the Liverpool catalog.
+  await page.waitForFunction(async()=>{
+    const {listLocalSkuEvidence}=await import('./scan-evidence.mjs?v=5.8.3');
+    const photos=await listLocalSkuEvidence('dept1','test-user','0012345678',{codes:['0200000000001']});
+    const valid=photos.length>=3;photos.forEach(photo=>URL.revokeObjectURL(photo.url));
+    return valid;
+  },null,{timeout:10000});
+  const audit=await page.evaluate(async()=>{
+    const {listLocalSkuAudit}=await import('./receiving-audit.mjs?v=5.8.3');
+    return listLocalSkuAudit('dept1','test-user','0012345678',{codes:['0200000000001'],limit:25});
+  });
+  assert.ok(audit.some(row=>row.metodo==='camera'&&row.evidencia==='local'),'camera receipts preserve photos and source');
+  assert.ok(audit.some(row=>row.metodo==='scanner'),'HID receipts preserve reader origin');
   assert.equal(await page.evaluate(()=>window.__cameraOpens),1);
   await page.evaluate(()=>window.__scanner.cb('{"marbete":"ZAP-402-003"}'));
   await page.locator('#crConfirmSwitch').click();await page.waitForFunction(()=>document.getElementById('crLocation').textContent==='402-003'&&document.getElementById('crLocationLabel').textContent.toLowerCase()==='marbete activo');
@@ -177,6 +190,13 @@ try {
   await page.locator('#crScanForm').evaluate(form=>form.requestSubmit());
   await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='1,612');
   assert.equal(await page.evaluate(()=>window.__receiptFixture.products.find(x=>x.sku==='MANUAL-123')?.stock),1);
+  const manualAudit=await page.evaluate(async()=>{
+    const {listLocalSkuAudit}=await import('./receiving-audit.mjs?v=5.8.3');
+    return listLocalSkuAudit('dept1','test-user','MANUAL-123');
+  });
+  assert.equal(manualAudit.length,1);
+  assert.equal(manualAudit[0].metodo,'manual');
+  assert.match(manualAudit[0].operador,/Empleado/);
   // Source can deploy before the additive server migration without breaking
   // the previous receiving operation or pretending continuous saving works.
   // Simula otro operador con diario local aislado; nunca borra el respaldo de 472918.
