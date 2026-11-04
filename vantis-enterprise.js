@@ -159,7 +159,7 @@ async function loadMetrics(box,dept){
 }
 
 function visibleView(){
-  return document.querySelector('.bottom-nav [data-view].active')?.dataset.view||
+  return document.querySelector('.vantis-command [data-view].active')?.dataset.view||
     (document.getElementById('manualMove')?'move':null)||
     (document.getElementById('countArea')?'count':null)||
     (document.getElementById('importBody')?'import':null)||'home';
