@@ -159,13 +159,13 @@ async function loadMetrics(box,dept){
 }
 
 function visibleView(){
-  return document.querySelector('.bottom-nav [data-view].active')?.dataset.view||
+  return document.querySelector('#vcPanel [data-view].vc-active')?.dataset.view||
     (document.getElementById('manualMove')?'move':null)||
     (document.getElementById('countArea')?'count':null)||
     (document.getElementById('importBody')?'import':null)||'home';
 }
 
-function mainViews(){return MAIN_ORDER.filter(v=>document.querySelector(`.bottom-nav [data-view="${v}"]`));}
+function mainViews(){return MAIN_ORDER.filter(v=>document.querySelector(`#vcPanel [data-view="${v}"]`));}
 function directionFor(from,to){
   const order=[...MAIN_ORDER,'move','count','import'];
   const a=order.indexOf(from),b=order.indexOf(to);
@@ -207,10 +207,11 @@ function navigateMain(step){
   const i=views.indexOf(current);
   const next=i>=0?views[i+step]:null;
   if(!next)return;
-  const button=document.querySelector(`.bottom-nav [data-view="${next}"]`);
+  if(document.querySelector('#vcTrigger[aria-expanded="true"],#vantisReceiveFloat,#scanner,.vantis-session-gate'))return;
+  const button=document.querySelector(`#vcPanel [data-view="${next}"]`);
   if(button&&typeof button.onclick==='function')perform(button.onclick,current,next,button);
 }
-function gestureBlocked(target){return !(target instanceof Element)||Boolean(target.closest('button,input,textarea,select,label,.table-scroll,.tabs-row,.scanner-box,.modal,.nova-slide-container,.action-grid,.quick-row'))}
+function gestureBlocked(target){return !(target instanceof Element)||Boolean(target.closest('button,input,textarea,select,label,.table-scroll,.tabs-row,.scanner-box,.modal,.action-grid,.quick-row,.vc-dock,#vantisReceiveFloat,#scanner,.vantis-session-gate,[role="dialog"]'))}
 function swipeVisual(dx){
   const p=Math.max(-1,Math.min(1,dx/180));
   document.documentElement.style.setProperty('--vantis-swipe',String(p));
@@ -240,16 +241,6 @@ document.addEventListener('touchend',event=>{
   if(Math.abs(dx)>58&&Math.abs(dx)>Math.abs(dy)*1.25&&(Math.abs(dx)>86||velocity>.42))navigateMain(dx<0?1:-1);
 },{passive:true});
 
-function syncPosition(){
-  const views=mainViews();
-  if(!views.length)return;
-  let indicator=document.getElementById('vantisPosition');
-  if(!indicator){indicator=document.createElement('div');indicator.id='vantisPosition';indicator.className='vantis-position';document.body.appendChild(indicator);}
-  const current=visibleView();
-  indicator.innerHTML=views.map(v=>`<i class="${v===current?'active':''}"></i>`).join('');
-  indicator.hidden=!document.querySelector('.app-shell')||!views.includes(current);
-}
-
 function decorate(){
   decorateQueued=false;
   document.title=`${BRAND} · Operación de Inventario`;
@@ -257,7 +248,6 @@ function decorate(){
   tuneLogin();
   tuneHeader();
   tuneHome();
-  syncPosition();
 }
 function scheduleDecorate(){if(decorateQueued)return;decorateQueued=true;requestAnimationFrame(decorate);}
 function start(){
