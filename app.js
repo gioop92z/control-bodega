@@ -33,7 +33,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '5.8.3';
+const APP_VERSION = '5.9.0';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 const HISTORY_RESTART_CUTOFF = '2026-10-15T22:15:00.000Z';
 
@@ -331,7 +331,12 @@ function deptName() {
 function nav() {
   const items = [['home','Inicio','⌂'],['search','Buscar','⌕'],['inventory','Inventario','▦']];
   if (S.admin) items.push(['history','Historial','☷'],['admin','Ajustes','⚙']);
-  return `<nav class="bottom-nav">${items.map(([v,l,i]) => `<button data-view="${v}" class="${S.view===v?'active':''}"><span>${i}</span>${l}</button>`).join('')}</nav>`;
+  return `<nav class="vantis-command" aria-label="Navegación principal">
+    <div id="vantisCommandPanel" class="vantis-command-panel" aria-label="Secciones" aria-hidden="true">
+      ${items.map(([v,l,i]) => `<button type="button" data-view="${v}" class="vantis-command-item ${S.view===v?'active':''}" ${S.view===v?'aria-current="page"':''}><span aria-hidden="true">${i}</span><b>${l}</b></button>`).join('')}
+    </div>
+    <button type="button" id="vantisCommandToggle" class="vantis-command-toggle" aria-label="Abrir menú de navegación" aria-controls="vantisCommandPanel" aria-expanded="false"><span class="vantis-command-symbol" aria-hidden="true">✣</span><span>Menú</span></button>
+  </nav>`;
 }
 
 function header() {
@@ -358,6 +363,30 @@ function shell(body) {
 }
 
 function wireShell() {
+  const menu=document.getElementById('vantisCommandToggle');
+  const panel=document.getElementById('vantisCommandPanel');
+  if(menu&&panel){
+    const setOpen=open=>{
+      panel.classList.toggle('open',open);
+      menu.classList.toggle('open',open);
+      menu.setAttribute('aria-expanded',String(open));
+      menu.setAttribute('aria-label',open?'Cerrar menú de navegación':'Abrir menú de navegación');
+      panel.setAttribute('aria-hidden',String(!open));
+      panel.inert=!open;
+    };
+    setOpen(false);
+    menu.onclick=()=>setOpen(!panel.classList.contains('open'));
+    window.vantisNavController?.abort();
+    const controller=new AbortController();
+    document.addEventListener('pointerdown',event=>{
+      if(!document.contains(menu))return;
+      if(!event.target.closest('.vantis-command'))setOpen(false);
+    },{signal:controller.signal});
+    window.vantisNavController=controller;
+    document.addEventListener('keydown',event=>{
+      if(event.key==='Escape')setOpen(false);
+    },{signal:controller.signal});
+  }
   document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => {
     if (exitBusy() || receiveBusy()) return;
     resetSearchContext();
@@ -418,7 +447,7 @@ function kpi(label,val,cls='') { return `<div class="kpi ${cls}"><span>${label}<
 async function homeView() {
   shell(`
     <section class="hero">
-      <div><div class="eyebrow">${esc(deptName())}</div><h1>¿Qué necesitas hacer?</h1><p class="muted">Elige una acción. La app te guía paso a paso.</p></div>
+      <div><div class="eyebrow">${esc(deptName())}</div><h1>Centro de operaciones</h1><p class="muted">Inventario, movimientos y conteos en una sola vista.</p></div>
       <div class="live-badge" id="connectionState" role="status"><i></i> Comprobando red</div>
     </section>
     <section class="action-grid">
