@@ -115,6 +115,7 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     const unknown=queue.rows.filter(row=>row.kind==='receive'&&row.status==='queued'&&/pendiente de alta|pendiente de confirmar|SKU pendiente/i.test(row.error||'')).length;
     $('crSync').textContent=(queue.backend==='checking'?'Comprobando servidor · ':!queue.online()?'Sin conexión de red · ':queue.backend==='offline'?'Servidor sin respuesta · ':'')+num(report.confirmed)+' confirmados · '+num(report.pending)+' pendientes'+(unknown?' · '+num(unknown)+' SKUs por catalogar':'')+(report.failed?' · '+num(report.failed)+' fallidos':'');
     $('crSync').className=report.pending?'cr-pending-text':'cr-confirmed-text';
+    $('crSync').dataset.connection=queue.backend==='checking'?'checking':(!queue.online()||queue.backend==='offline')?'offline':report.pending?'pending':'online';
     $('crError').hidden=!(queue.error||queue.storageError);$('crError').textContent=queue.storageError||queue.error;
     $('crNotice').textContent=notice;
     const last=queue.rows.at(-1);
