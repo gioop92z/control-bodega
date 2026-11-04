@@ -33,7 +33,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '5.10.0';
+const APP_VERSION = '5.10.1';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 const HISTORY_RESTART_CUTOFF = '2026-10-15T22:15:00.000Z';
 
@@ -238,9 +238,12 @@ async function boot() {
   const { data: { user }, error } = await sb.auth.getUser();
   if (error || !user) return renderLogin();
   const role = roleFromUser(user);
-  if (!role) {
-    await sb.auth.signOut();
-    return renderLogin('Este acceso ya no está habilitado.');
+  // Every operational session must carry its own employee identification.
+  // Never let an existing administrator session bypass the employee-only entry.
+  const employee = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('nova.employeeNumber') : null;
+  if (role !== 'seller' || !/^\d{4,12}$/.test(String(employee || ''))) {
+    if (role !== 'seller') await sb.auth.signOut();
+    return renderLogin();
   }
   S.user = user;
   applyRole(role);
@@ -268,16 +271,14 @@ function renderLogin(err='') {
         <div class="brandmark"><span>CI</span></div>
         <div class="eyebrow">Bodega inteligente · v${APP_VERSION}</div>
         <h1>Control de Inventario</h1>
-        <p class="muted">Identifícate para comenzar tu jornada de trabajo.</p>
+        <p class="muted">Ingresa tu número de empleado para comenzar.</p>
         <form id="loginForm" class="stack">
           <label for="clave">Número de empleado</label>
-          <input id="clave" autocomplete="username" inputmode="numeric" placeholder="Ingresa tu número de empleado" required>
-          <label for="pin">Código de seguridad</label>
-          <input id="pin" type="password" autocomplete="current-password" inputmode="numeric" placeholder="Código de acceso" required>
+          <input id="clave" name="employeeNumber" autocomplete="off" inputmode="numeric" enterkeyhint="go" maxlength="12" pattern="[0-9]{4,12}" placeholder="Ej. 16647310" required>
           <div id="loginMsg">${err ? `<div class="error">${esc(err)}</div>` : ''}</div>
           <button class="primary" type="submit">Entrar</button>
         </form>
-        <p class="tiny center">Acceso seguro · Información separada por departamento</p>
+        <p class="tiny center">Tu número quedará asociado a los movimientos de esta sesión.</p>
       </section>
     </main>`;
   $('loginForm').onsubmit = doLogin;
@@ -285,38 +286,41 @@ function renderLogin(err='') {
 
 async function doLogin(e) {
   e.preventDefault();
-  const button = e.submitter;
-  const clave = $('clave').value.trim();
-  const pin = $('pin').value.trim();
-  $('loginMsg').innerHTML = '';
+  const button = e.submitter || $('loginForm')?.querySelector('button[type="submit"]');
+  const numero = String($('clave')?.value || '').replace(/\s+/g, '');
+  const message = $('loginMsg');
+  message.innerHTML = '';
 
-  if (!['99','10'].includes(clave)) {
-    $('loginMsg').innerHTML = '<div class="error">Número de empleado no habilitado para iniciar sesión.</div>';
+  if (!/^\d{4,12}$/.test(numero)) {
+    message.innerHTML = '<div class="error">Introduce un número de empleado válido (4 a 12 dígitos).</div>';
     return;
   }
-  if (!pin) {
-    $('loginMsg').innerHTML = '<div class="error">Introduce tu código de seguridad.</div>';
-    return;
-  }
-  if (clave === '10' && pin !== '1010') {
-    $('loginMsg').innerHTML = '<div class="error">Clave o PIN incorrectos.</div>';
+  if (!navigator.onLine) {
+    message.innerHTML = '<div class="error">Necesitas conexión para abrir una sesión operativa.</div>';
     return;
   }
 
-  button.disabled = true;
-  button.textContent = 'Validando…';
+  if (button) { button.disabled = true; button.textContent = 'Entrando…'; }
   try {
     cleanupLegacyAccess();
-    await sb.auth.signOut();
-    const email = `${clave}@bodega.local`;
-    const password = clave === '10' ? 'bodega-10-1010' : `bodega-99-${pin}`;
-    const r = await sb.auth.signInWithPassword({ email, password });
-    if (r.error) throw Error('Clave o PIN incorrectos.');
+    // Operational access is ALWAYS the server-limited seller account.
+    // The employee number identifies the operator; it is not an administrator credential.
+    const current = await sb.auth.getUser();
+    if (String(current.data?.user?.email || '').toLowerCase() !== '10@bodega.local') {
+      await sb.auth.signOut();
+      const result = await sb.auth.signInWithPassword({
+        email: '10@bodega.local', password: 'bodega-10-1010'
+      });
+      if (result.error) throw Error('No se pudo iniciar la sesión operativa.');
+    }
+    sessionStorage.setItem('nova.employeeNumber', numero);
+    sessionStorage.removeItem('vantis.session.ready');
+    sessionStorage.removeItem('vantis.session.department');
+    sessionStorage.removeItem('vantis.session.role');
     location.reload();
-  } catch (x) {
-    $('loginMsg').innerHTML = `<div class="error">${esc(humanError(x))}</div>`;
-    button.disabled = false;
-    button.textContent = 'Entrar';
+  } catch (error) {
+    message.innerHTML = '<div class="error">' + esc(humanError(error)) + '</div>';
+    if (button) { button.disabled = false; button.textContent = 'Entrar'; }
   }
 }
 
@@ -395,6 +399,10 @@ function wireShell() {
     if (exitBusy() || receiveBusy()) return;
     resetSearchContext();
     cleanupLegacyAccess();
+    sessionStorage.removeItem('nova.employeeNumber');
+    sessionStorage.removeItem('vantis.session.ready');
+    sessionStorage.removeItem('vantis.session.department');
+    sessionStorage.removeItem('vantis.session.role');
     await sb.auth.signOut();
     location.reload();
   };
