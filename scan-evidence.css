@@ -13,3 +13,14 @@
 .scanner-evidence-note{display:block;padding:5px 10px;font-size:11px;line-height:1.4;color:inherit;opacity:.75}
 .cr-photo-status{font-size:11px!important;line-height:1.4;min-height:0!important;color:#ffdcdb!important;margin:3px 0!important}
 @media (max-width:480px){.vantis-evidence-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.vantis-evidence-item img,.vantis-evidence-missing{height:128px}}
+
+/* Auditoría por pieza: mismo lenguaje visual Liverpool que el resto de VANTIS. */
+.vantis-evidence-item{position:relative;display:flex;flex-direction:column;gap:8px;min-width:0;box-shadow:none!important;border-color:#e7e2e6!important;padding:10px!important}
+.vantis-evidence-method{display:inline-flex;align-self:flex-start;padding:4px 9px;border-radius:7px;background:#f3f1f3;color:#574958;font-size:11px;font-weight:750}
+.vantis-evidence-method.camera{background:#fceaf4;color:#9e075c}
+.vantis-evidence-method.manual{background:#fff1dd;color:#8b5508}
+.vantis-evidence-method.scanner{background:#e8f4ef;color:#1c674e}
+.vantis-evidence-meta{display:flex;flex-direction:column;gap:3px;font-size:11px;line-height:1.5;color:#6c606d;overflow-wrap:anywhere}
+.vantis-evidence-meta strong{font-size:12px;color:#2f2630;font-weight:700}
+.vantis-evidence-item .vantis-evidence-missing{font-size:11px;text-align:center;padding:14px;border-radius:8px;min-height:96px;height:auto}
+@media(max-width:480px){.vantis-evidence-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.vantis-evidence-item{padding:8px!important}}

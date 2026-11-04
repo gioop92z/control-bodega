@@ -1,7 +1,7 @@
 import {parseMarbeteScan, locationQuery} from './product-location.mjs?v=3.9.5';
 import {cleanSupportCode, lookupSupportCodes} from './support-batch.mjs?v=3.8.0';
 import {LegacyReceiptApi} from './legacy-receipt-api.mjs?v=3.10.1';
-import {InventoryJournalMirror} from './vantis-offline-idb-v5.mjs';
+import {InventoryJournalMirror} from './vantis-offline-idb-v5.mjs?v=5.8.3';
 import {scanMetric,startMetric,serverMetric} from './vantis-telemetry-v5.mjs';
 
 const message = error => String(error?.message || error || 'No se pudo guardar.');
@@ -210,7 +210,7 @@ export class ContinuousReceive {
     }
     this.changed();
   }
-  scan(raw, {eventId} = {}) {
+  scan(raw, {eventId, source='unknown'} = {}) {
     if (!this.canScan) throw Error(this.storageError || (this.state.pendingSwitch ? 'Confirma o cancela el cambio de marbete antes de escanear.' : this.error || 'Espera a que el lector esté listo.'));
     const code = String(raw ?? '').trim(), label = canonical(code);
     if (label) {
@@ -229,9 +229,18 @@ export class ContinuousReceive {
     if (eventId && this.rows.some(row => row.id === id)) return {type:'duplicate-event',id};
     const row = {id,sessionId:this.state.id,sequence:++this.nextSequence,kind:'receive',
       code:productCode,quantity:1,location:location?.code||null,visitId:location?.visitId||null,unlocatedApproved:false,
-      capturedAt:new Date(this.now()).toISOString(),status:'queued',attempts:0,error:'',product:null,payload:null};
+      capturedAt:new Date(this.now()).toISOString(),status:'queued',attempts:0,error:'',product:null,payload:null,
+      captureMethod:['camera','manual','scanner'].includes(source)?source:'unknown',operator:this.actor,
+      evidenceStatus:source==='camera'?'pending':'none'};
     if (!this.saveRow(row)) { this.nextSequence--; throw Error(this.storageError); }
     this.rows.push(row); scanMetric(); this.changed(); this.schedule(25); return {type:'piece',id};
+  }
+  markEvidence(id,status) {
+    const row=this.rows.find(item=>item.id===id&&item.kind==='receive');
+    if(!row||!['local','failed','synced'].includes(status))return false;
+    const updated={...row,evidenceStatus:status};
+    if(!this.saveRow(updated))return false;
+    Object.assign(row,updated);this.changed();return true;
   }
   setCandidate(code) {
     const candidate={code,visitId:this.makeId()};
@@ -377,9 +386,15 @@ export class ContinuousReceive {
     }
   }
   async send(row) {
+    // El servidor guarda p_operador en la nota del movimiento existente. Añadir
+    // una marca no destructiva permite ver el origen desde otros dispositivos
+    // sin cambiar firma RPC ni volver a enviar una lectura incierta.
+    const method=['camera','manual','scanner'].includes(row.captureMethod)?row.captureMethod:null;
+    const suffix=row.kind==='receive'&&method?' | ORIGEN='+method:'';
+    const auditOperator=suffix?String(this.actor).slice(0,120-suffix.length)+suffix:this.actor;
     if (!row.payload) row.payload = {
       p_id:row.id,p_sesion:this.state.id,p_departamento:this.deptId,p_producto:row.product.id,
-      p_marbete:row.location,p_operador:this.actor,p_leida_en:row.capturedAt,p_reversa:row.reverses || null
+      p_marbete:row.location,p_operador:auditOperator,p_leida_en:row.capturedAt,p_reversa:row.reverses || null
     };
     // Persist transport choice before sending. If the migration is installed
     // mid-session, old uncertain writes must only be RECONCILED, never sent
@@ -453,6 +468,7 @@ export class ContinuousReceive {
       .map(row=>({id:row.id,sequence:row.sequence,code:row.code,sku:row.product?.sku||row.code,
         descripcion:row.product?.descripcion||'',marbete:row.location||null,
         status:row.status,error:row.error||'',capturedAt:row.capturedAt,attempts:row.attempts,
+        captureMethod:row.captureMethod||'unknown',operator:row.operator||this.actor,
         canSync:Boolean(row.location||row.unlocatedApproved)}));
   }
   finish() {
@@ -502,9 +518,10 @@ export function receiptCsv(report) {
     ['Movimientos confirmados',report.confirmed],['Pendientes',report.pending],['Fallidos',report.failed],[],
     ['Marbete','Piezas netas','Confirmados','Pendientes','Fallidos'],
     ...report.locations.map(row=>[row.marbete||'SIN UBICACIÓN',row.pieces,row.confirmed,row.pending,row.failed]),[],
-    ['Movimiento','Tipo','Reversa de','Código leído','SKU','Descripción','Cantidad','Marbete','Estado','Leído','Guardado','Error'],
+    ['Movimiento','Tipo','Reversa de','Código leído','SKU','Descripción','Cantidad','Marbete','Estado','Leído','Guardado','Error','Método','Operador','Evidencia'],
     ...report.rows.map(row=>[row.id,row.kind,row.reverses,row.code,row.product?.sku,row.product?.descripcion,
-      row.kind==='undo'?-1:1,row.location,row.status,row.capturedAt,row.receipt?.stored_at,row.error])
+      row.kind==='undo'?-1:1,row.location,row.status,row.capturedAt,row.receipt?.stored_at,row.error,
+      row.captureMethod||'unknown',row.operator||report.actor,row.evidenceStatus||'unknown'])
   ];
   return '\uFEFF' + lines.map(line=>line.map(cell).join(',')).join('\r\n');
 }

@@ -4,17 +4,23 @@
 // emit the same frame twice.
 export function wireReceivingInput({input,active,onCode,onError,onActivity=()=>{}}) {
   let timer = null, lastAt = 0, rapid = false, size = 0, blockedFrame = false;
+  let firstAt = 0, samples = 0, manualMode = false;
   const editable = node => node?.closest?.('input,textarea,select,[contenteditable="true"]');
-  const clear = () => {clearTimeout(timer);timer=null;lastAt=0;rapid=false;size=0;};
+  const clear = () => {clearTimeout(timer);timer=null;lastAt=0;rapid=false;size=0;firstAt=0;samples=0;};
   const focus = () => {
     if (active() && !editable(document.activeElement)) input.focus({preventScroll:true});
   };
-  function flush() {
-    const code = input.value.trim(); clear(); input.value = '';
+  function flush(forceSource=null) {
+    const code = input.value.trim();
+    const duration=firstAt?performance.now()-firstAt:0;
+    // El lector HID se reconoce por su ráfaga; el teclado manual se marca
+    // por el botón Escribir, por pegado o por tecleo humano lento.
+    const source=forceSource||(manualMode||(samples>=4&&duration>(samples-1)*85)?'manual':'scanner');
+    clear();manualMode=false;input.value = '';
     if (!code) return;
     if (!active()) {onError(Error('Lectura no aceptada. Revisa el estado de recepción antes de continuar.'));return;}
     onActivity();
-    try {onCode(code);} catch (error) {onError(error);}
+    try {onCode(code,{source});} catch (error) {onError(error);}
     queueMicrotask(focus);
   }
   function changed(event={}) {
@@ -22,6 +28,8 @@ export function wireReceivingInput({input,active,onCode,onError,onActivity=()=>{
     const value = input.value, now = performance.now();
     if (!value) {clear();return;}
     rapid = value.length >= 4 && size === 0 || (value.length > size && now-lastAt < 65);
+    if(!firstAt)firstAt=now;
+    samples++;
     lastAt = now; size = value.length; clearTimeout(timer);
     if (rapid && size >= 4) timer = setTimeout(flush,180);
   }
@@ -51,7 +59,7 @@ export function wireReceivingInput({input,active,onCode,onError,onActivity=()=>{
     const text = event.clipboardData?.getData('text/plain'); if (!text) return;
     event.preventDefault();clear();input.value='';
     if (/[\r\n]/.test(text.trim())) {onError(Error('Escanea una pieza por lectura. Para listas usa Recepción por lote.'));return;}
-    input.value=text;flush();
+    input.value=text;flush('manual');
   }
   function blur() {queueMicrotask(focus);}
   input.addEventListener('input',changed);
@@ -60,7 +68,7 @@ export function wireReceivingInput({input,active,onCode,onError,onActivity=()=>{
   window.addEventListener('focus',focus);
   document.addEventListener('pointerup',blur);
   focus();
-  return {flush,focus(){if(active())input.focus({preventScroll:true});},destroy(){
+  return {flush,manual(){manualMode=true;clear();},focus(){if(active())input.focus({preventScroll:true});},destroy(){
     clear();input.removeEventListener('input',changed);document.removeEventListener('keydown',key,true);
     document.removeEventListener('paste',paste,true);window.removeEventListener('focus',focus);document.removeEventListener('pointerup',blur);
   }};

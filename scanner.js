@@ -129,17 +129,28 @@ export async function startScanner(cb, label = 'código', options = {}) {
         (sourceWidth-cropWidth)/2,(sourceHeight-cropHeight)/2,cropWidth,cropHeight,
         0,0,canvas.width,canvas.height);
       return new Promise(resolve=>{
-        canvas.toBlob(blob=>{
-          if(blob?.size>0&&blob.size<=204800){resolve(blob);return;}
-          // Las escenas con mucho detalle pueden superar el límite local.
-          // Comprimir el mismo fotograma, sin volver a acceder a la cámara
-          // ni bloquear el siguiente escaneo.
-          const reduced=document.createElement('canvas');
-          reduced.width=Math.max(1,Math.round(canvas.width*.75));
-          reduced.height=Math.max(1,Math.round(canvas.height*.75));
-          reduced.getContext('2d',{alpha:false})?.drawImage(canvas,0,0,reduced.width,reduced.height);
-          reduced.toBlob(smaller=>resolve(smaller?.size>0&&smaller.size<=204800?smaller:null),'image/jpeg',.38);
-        },'image/jpeg',.48);
+        // Safari puede no completar toBlob en ciertos fotogramas. No dejar
+        // evidencia pendiente indefinidamente ni bloquear la siguiente lectura.
+        let settled=false;
+        const complete=blob=>{
+          if(settled)return;
+          settled=true;clearTimeout(watchdog);
+          resolve(blob?.size>0&&blob.size<=204800?blob:null);
+        };
+        const watchdog=setTimeout(()=>complete(null),1500);
+        try{
+          canvas.toBlob(blob=>{
+            if(settled)return;
+            if(blob?.size>0&&blob.size<=204800){complete(blob);return;}
+            try{
+              const reduced=document.createElement('canvas');
+              reduced.width=Math.max(1,Math.round(canvas.width*.75));
+              reduced.height=Math.max(1,Math.round(canvas.height*.75));
+              reduced.getContext('2d',{alpha:false})?.drawImage(canvas,0,0,reduced.width,reduced.height);
+              reduced.toBlob(smaller=>complete(smaller),'image/jpeg',.38);
+            }catch{complete(null);}
+          },'image/jpeg',.48);
+        }catch{complete(null);}
       });
     }catch(error){console.warn('VANTIS: fotograma no disponible',error);return Promise.resolve(null);}
   }
