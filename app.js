@@ -33,7 +33,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '5.9.0';
+const APP_VERSION = '5.10.0';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 const HISTORY_RESTART_CUTOFF = '2026-10-15T22:15:00.000Z';
 
@@ -268,16 +268,12 @@ function renderLogin(err='') {
         <div class="brandmark"><span>CI</span></div>
         <div class="eyebrow">Bodega inteligente · v${APP_VERSION}</div>
         <h1>Control de Inventario</h1>
-        <p class="muted">Dos accesos. Menos pasos. Inventario en tiempo real.</p>
-        <div class="login-accesses">
-          <div><b>Administrador</b><span>Configuración, importaciones e historial</span></div>
-          <div><b>Vendedor general</b><span>Entradas, salidas, búsqueda y conteos</span></div>
-        </div>
+        <p class="muted">Identifícate para comenzar tu jornada de trabajo.</p>
         <form id="loginForm" class="stack">
-          <label>Clave</label>
-          <input id="clave" autocomplete="username" inputmode="numeric" maxlength="2" placeholder="99 o 10">
-          <label>PIN</label>
-          <input id="pin" type="password" autocomplete="current-password" inputmode="numeric" placeholder="Tu PIN">
+          <label for="clave">Número de empleado</label>
+          <input id="clave" autocomplete="username" inputmode="numeric" placeholder="Ingresa tu número de empleado" required>
+          <label for="pin">Código de seguridad</label>
+          <input id="pin" type="password" autocomplete="current-password" inputmode="numeric" placeholder="Código de acceso" required>
           <div id="loginMsg">${err ? `<div class="error">${esc(err)}</div>` : ''}</div>
           <button class="primary" type="submit">Entrar</button>
         </form>
@@ -295,11 +291,11 @@ async function doLogin(e) {
   $('loginMsg').innerHTML = '';
 
   if (!['99','10'].includes(clave)) {
-    $('loginMsg').innerHTML = '<div class="error">Solo existen los accesos 99 (Administrador) y 10 (Vendedor general).</div>';
+    $('loginMsg').innerHTML = '<div class="error">Número de empleado no habilitado para iniciar sesión.</div>';
     return;
   }
   if (!pin) {
-    $('loginMsg').innerHTML = '<div class="error">Escribe tu PIN.</div>';
+    $('loginMsg').innerHTML = '<div class="error">Introduce tu código de seguridad.</div>';
     return;
   }
   if (clave === '10' && pin !== '1010') {
