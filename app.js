@@ -361,7 +361,7 @@ function commandOpen(open,restoreFocus=false) {
   if(open)panel.querySelector('button')?.focus({preventScroll:true});
   else if(restoreFocus)trigger.focus({preventScroll:true});
 }
-document.addEventListener('keydown',event=>{
+document.addEventListener?.('keydown',event=>{
   if(event.key==='Escape'&&document.getElementById('vcTrigger')?.getAttribute('aria-expanded')==='true'){
     event.preventDefault();commandOpen(false,true);
   }
