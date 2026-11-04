@@ -41,3 +41,32 @@ export async function listLocalSkuAudit(departmentId,userId,sku,{codes=[],limit=
   }catch{}
   return [...rows.values()].sort((a,b)=>String(b.capturada_en||'').localeCompare(String(a.capturada_en||''))).slice(0,limit);
 }
+
+
+// Consulta solo movimientos confirmados que ya registra VANTIS en el servidor.
+// Las notas nuevas incluyen un marcador legible; lecturas antiguas sin marca
+// se muestran como origen desconocido, nunca se inventa "manual".
+export function auditFromMovement(movement){
+  const note=String(movement?.nota||'');
+  if(!/RECEPCI[ÓO]N CONTINUA/i.test(note))return null;
+  const found=note.match(/\|\s*ORIGEN=(camera|manual|scanner)(?=$|\s|·)/i);
+  const method=found?found[1].toLowerCase():'unknown';
+  const operator=note.split(/\s*·\s*/).slice(2).join(' · ')
+    .replace(/\s*\|\s*ORIGEN=(?:camera|manual|scanner)(?:\s*·.*)?$/i,'').trim();
+  return {
+    evento_id:movement.id,capturada_en:movement.created_at,
+    codigo_leido:movement.sku,sku:movement.sku,
+    operador:operator||'No identificado',metodo:method,estado:'confirmed',
+    marbete:movement.marbete_codigo||'',evidencia:'unknown',servidor:true
+  };
+}
+
+export async function listServerSkuAudit(sb,departmentId,sku,{limit=16}={}){
+  if(!sb||!departmentId||!sku)return [];
+  const response=await sb.from('movimientos')
+    .select('id,sku,nota,created_at,marbete_codigo,tipo')
+    .eq('departamento_id',departmentId).eq('sku',sku).eq('tipo','ENTRADA')
+    .order('created_at',{ascending:false}).limit(limit);
+  if(response.error)throw response.error;
+  return (response.data||[]).map(auditFromMovement).filter(Boolean);
+}
