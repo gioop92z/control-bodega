@@ -51,17 +51,26 @@ export class ScanEvidence {
     console.warn('VANTIS · evidencia:',message);
   }
   async capture(eventId,code,frame,getRow=()=>null) {
-    if(!UUID.test(String(eventId||'')))return;
+    if(!UUID.test(String(eventId||'')))return 'failed';
     try {
       const blob=await Promise.resolve(frame);
       if(!(blob instanceof Blob)||blob.size===0)throw Error('Fotograma no disponible; coloca el código dentro de la guía de cámara.');
       if(blob.size>204800)throw Error('Fotograma demasiado grande; se conserva el movimiento, no la imagen.');
-      const record={id:eventId,departmentId:this.departmentId,userId:this.userId,code:String(code).slice(0,120),
-        blob,sku:'',capturedAt:new Date().toISOString()};
-      await put(record);
       const row=getRow();
-      if(row?.status==='confirmed') await this.confirm(row);
-    } catch(error) {this.issue('La lectura se guardó sin imagen: '+errorText(error));}
+      const record={id:eventId,departmentId:this.departmentId,userId:this.userId,code:String(code).slice(0,120),
+        blob,sku:row?.status==='confirmed'?row.product?.sku||'':'',
+        capturedAt:row?.capturedAt||new Date().toISOString(),operador:row?.operator||'',
+        sessionId:row?.sessionId||''};
+      await put(record);
+      // Una respuesta del servidor puede preceder al guardado del fotograma.
+      // Volver a leer la fila evita perder su vínculo por esa carrera.
+      const latest=getRow();
+      if(latest?.status==='confirmed')await this.confirm(latest);
+      return 'local';
+    } catch(error) {
+      this.issue('La lectura quedó registrada sin fotografía: '+errorText(error));
+      return 'failed';
+    }
   }
   async confirm(row) {
     if(row?.kind!=='receive'||row?.status!=='confirmed'||!row.product?.sku)return;
@@ -122,7 +131,7 @@ export async function listLocalSkuEvidence(departmentId,userId,sku,{limit=6,code
   )).sort((a,b)=>String(b.capturedAt).localeCompare(String(a.capturedAt))).slice(0,limit);
   return rows.map(row=>({
     evento_id:row.id,capturada_en:row.capturedAt,codigo_leido:row.code,
-    url:URL.createObjectURL(row.blob),local:true,pendingLink:!row.sku
+    url:URL.createObjectURL(row.blob),local:true,pendingLink:!row.sku,operador:row.operador||'',sesion:row.sessionId||''
   }));
 }
 
