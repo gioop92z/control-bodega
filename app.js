@@ -17,7 +17,7 @@ import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?
 import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=5.8.3';
 import { mountOperations } from './operations-v4.mjs?v=5.0.0';
 import { ScanEvidence, listSkuEvidence, listLocalSkuEvidence } from './scan-evidence.mjs?v=5.8.3';
-import {listLocalSkuAudit,captureMethodLabel} from './receiving-audit.mjs?v=5.8.3';
+import {listLocalSkuAudit,listServerSkuAudit,captureMethodLabel} from './receiving-audit.mjs?v=5.8.3';
 import { lookupPublicCatalog, publicSearchUrl, lookupLiverpoolFamily, lookupLiverpoolModels } from './catalog-hybrid.mjs?v=5.8.0';
 import { liverpoolPreview } from './catalog-visual.mjs?v=5.6.0';
 import { catalogCandidate,confirmCatalogCandidate,rejectCatalogCandidate,isRejectedCandidate } from './catalog-relations.mjs?v=5.6.0';
@@ -743,11 +743,11 @@ function searchEvidenceHtml() {
     }))
   ].sort((a,b)=>String(b.row.capturada_en||'').localeCompare(String(a.row.capturada_en||''))).slice(0,16);
   const note=vantisBackendConfig.mode==='LEGACY_PRODUCCION'
-    ? 'Auditoría y fotos disponibles en este dispositivo. La sincronización entre equipos todavía no está habilitada para producción.'
+    ? 'El origen de las nuevas entradas confirmadas se consulta en el servidor. Las fotos de producción permanecen en el dispositivo que realizó la captura.'
     : 'Las fotos locales pendientes pueden sincronizarse cuando el servidor confirme el movimiento.';
   if(!items.length)return '<section class="vantis-evidence"><h3>Registro visual y auditoría</h3><p class="muted">'+
     (S.evidenceStatus==='error'?'No se pudo consultar el historial local. Conserva los datos de este navegador y vuelve a intentarlo.':
-      'No hay lecturas auditadas de este SKU en este dispositivo. Las entradas anteriores a esta actualización pueden no tener método registrado.')+
+      'No hay lecturas auditadas recientes de este SKU. Las entradas anteriores a esta actualización pueden no tener método registrado.')+
     '</p><p class="tiny">'+esc(note)+'</p></section>';
   return '<section class="vantis-evidence"><h3>Registro visual y auditoría <small>'+items.length+' registros recientes</small></h3>'+
     '<p class="muted">Cada registro corresponde a una lectura, no a una imagen de catálogo. '+esc(note)+'</p>'+
@@ -762,7 +762,7 @@ function searchEvidenceHtml() {
           row.metodo==='camera'?(row.evidencia==='pending'?'Foto pendiente':row.evidencia==='failed'?'Foto no disponible':'Sin foto recuperable'):'Sin evidencia fotográfica')+'</div>';
       return '<article class="vantis-evidence-item"><span class="vantis-evidence-method '+esc(row.metodo)+'">'+esc(method)+'</span>'+picture+
         '<div class="vantis-evidence-meta"><strong>'+esc(when)+'</strong><span>Responsable: '+esc(row.operador||'No identificado')+'</span>'+
-        '<span>Código: '+esc(row.codigo_leido||'—')+'</span><span>Marbete: '+esc(row.marbete||'Sin ubicación')+'</span>'+
+        '<span>'+(row.servidor?'SKU: ':'Código leído: ')+esc(row.codigo_leido||'—')+'</span><span>Marbete: '+esc(row.marbete||'Sin ubicación')+'</span>'+
         '<span>Estado: '+esc(row.estado||'No disponible')+'</span></div></article>';
     }).join('')+'</div></section>';
 }
@@ -1090,8 +1090,9 @@ async function doSearch(code) {
       void Promise.allSettled([
         vantisBackendConfig.mode==='LEGACY_PRODUCCION'?Promise.resolve([]):listSkuEvidence(sb,deptId,p.sku,{limit:16}),
         listLocalSkuEvidence(deptId,S.user.id,p.sku,{codes:[p.upc],limit:16}),
-        listLocalSkuAudit(deptId,S.user.id,p.sku,{codes:[p.upc],limit:16})
-      ]).then(([remote,local,audit])=>{
+        listLocalSkuAudit(deptId,S.user.id,p.sku,{codes:[p.upc],limit:16}),
+        listServerSkuAudit(sb,deptId,p.sku,{limit:16})
+      ]).then(([remote,local,audit,serverAudit])=>{
         if(!current()){
           if(local.status==='fulfilled')local.value.forEach(item=>URL.revokeObjectURL(item.url));
           return;
@@ -1104,8 +1105,12 @@ async function doSearch(code) {
           if(cloudIds.has(item.evento_id)){URL.revokeObjectURL(item.url);return false;}
           return true;
         })].sort((a,b)=>String(b.capturada_en).localeCompare(String(a.capturada_en))).slice(0,16);
-        S.evidenceAudit=audit.status==='fulfilled'?audit.value:[];
-        S.evidenceStatus=(local.status==='rejected'&&audit.status==='rejected')?'error':'ready';
+        const localAudit=audit.status==='fulfilled'?audit.value:[];
+        const serverRows=serverAudit.status==='fulfilled'?serverAudit.value:[];
+        const localIds=new Set(localAudit.map(row=>row.evento_id));
+        S.evidenceAudit=[...localAudit,...serverRows.filter(row=>!localIds.has(row.evento_id))]
+          .sort((a,b)=>String(b.capturada_en||'').localeCompare(String(a.capturada_en||''))).slice(0,16);
+        S.evidenceStatus=(local.status==='rejected'&&audit.status==='rejected'&&serverAudit.status==='rejected')?'error':'ready';
         render();
       });
       return;
