@@ -9,7 +9,10 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 function role(){
-  const t=document.querySelector('.access-label')?.textContent||'';
+  const label=document.querySelector('.access-label');
+  const tagged=label?.dataset?.accessRole;
+  if(tagged==='admin'||tagged==='seller')return tagged;
+  const t=label?.textContent||'';
   if(/Administrador|acceso\s*99/i.test(t))return 'admin';
   if(/Vendedor general|Vendedor|acceso\s*10/i.test(t))return 'seller';
   return null;
@@ -37,7 +40,7 @@ function styles(){
 function chip(){
   const a=document.querySelector('.access-label'),r=role(),n=emp();if(!a||!r||!n)return;
   let c=$('vantisSessionChip');if(!c){c=document.createElement('span');c.id='vantisSessionChip';c.className='vantis-session-chip';a.appendChild(c)}
-  c.textContent=r==='admin'?'Jefe '+n:'Emp. '+n;
+  c.textContent='Emp. '+n;
 }
 function finish(g,r,d){
   sessionStorage.setItem(ROLE,r);sessionStorage.setItem(DEPT,d);sessionStorage.setItem(READY,'1');
@@ -45,9 +48,9 @@ function finish(g,r,d){
   g.remove();document.documentElement.classList.remove('vantis-session-pending');requestAnimationFrame(chip);
 }
 function departmentStep(g,r){
-  const ds=depts(),n=emp(),current=localStorage.getItem('inv.dept')||'',who=r==='admin'?'Jefe':'Vendedor';
+  const ds=depts(),n=emp(),current=localStorage.getItem('inv.dept')||'',who='Empleado';
   if(!ds.length){
-    g.innerHTML='<section class="vantis-session-card"><div class="eyebrow">VANTIS · DEPARTAMENTO</div><div class="vantis-session-steps"><i class="on"></i><i class="on"></i></div><h2>No hay departamentos activos</h2><div class="vantis-who"><div><small>'+who+' identificado</small><b>Gafete '+esc(n)+'</b></div></div><p>'+(r==='admin'?'Puedes continuar para crear o activar un departamento desde Ajustes.':'Pide a un administrador que active un departamento antes de trabajar.')+'</p><div class="vantis-session-actions">'+(r==='admin'?'<button id="vantisNoDept" class="primary" type="button">Entrar a Ajustes</button>':'<button id="vantisNoDeptLogout" class="secondary" type="button">Cerrar sesión</button>')+'</div></section>';
+    g.innerHTML='<section class="vantis-session-card"><div class="eyebrow">VANTIS · DEPARTAMENTO</div><div class="vantis-session-steps"><i class="on"></i><i class="on"></i></div><h2>No hay departamentos activos</h2><div class="vantis-who"><div><small>'+who+' identificado</small><b>Gafete '+esc(n)+'</b></div></div><p>'+(r==='admin'?'Puedes continuar a la configuración de departamentos.':'Solicita que habiliten un departamento antes de trabajar.')+'</p><div class="vantis-session-actions">'+(r==='admin'?'<button id="vantisNoDept" class="primary" type="button">Entrar a Ajustes</button>':'<button id="vantisNoDeptLogout" class="secondary" type="button">Cerrar sesión</button>')+'</div></section>';
     $('vantisNoDept')?.addEventListener('click',()=>finish(g,r,'__none__'));$('vantisNoDeptLogout')?.addEventListener('click',()=>$('logout')?.click());return;
   }
   const opts=ds.map(d=>'<button type="button" class="vantis-dept '+(d.id===current?'current':'')+'" data-vantis-dept="'+esc(d.id)+'"><span><b>'+esc(d.name)+'</b><small>'+(d.id===current?'Último departamento usado':'Seleccionar para esta sesión')+'</small></span><strong>›</strong></button>').join('');
@@ -56,7 +59,7 @@ function departmentStep(g,r){
   document.querySelectorAll('[data-vantis-dept]').forEach(b=>b.onclick=()=>finish(g,r,b.dataset.vantisDept));
 }
 function identityStep(g,r){
-  g.innerHTML='<section class="vantis-session-card"><div class="eyebrow">VANTIS · IDENTIFICACIÓN</div><div class="vantis-session-steps"><i class="on"></i><i></i></div><h2>Identifica tu gafete</h2><p>Identifica al '+(r==='admin'?'jefe':'vendedor')+' que está entrando. Después elegirás el departamento de trabajo.</p><label>Número de empleado / gafete</label><input id="vantisBadge" autocomplete="off" inputmode="numeric" placeholder="Escanea o escribe tu número"><div class="vantis-session-actions"><button id="vantisScanBadge" class="secondary" type="button">▣ Escanear gafete</button><button id="vantisBadgeNext" class="primary" type="button">Continuar</button></div><small>El PIN del administrador sigue siendo privado; el gafete solo identifica quién abrió la sesión.</small></section>';
+  g.innerHTML='<section class="vantis-session-card"><div class="eyebrow">VANTIS · IDENTIFICACIÓN</div><div class="vantis-session-steps"><i class="on"></i><i></i></div><h2>Identifica tu gafete</h2><p>Ingresa tu número de empleado para identificar tus movimientos. Después elegirás el departamento.</p><label>Número de empleado / gafete</label><input id="vantisBadge" autocomplete="off" inputmode="numeric" placeholder="Escanea o escribe tu número"><div class="vantis-session-actions"><button id="vantisScanBadge" class="secondary" type="button">▣ Escanear gafete</button><button id="vantisBadgeNext" class="primary" type="button">Continuar</button></div><small>Tu número identifica los movimientos. La sesión mantiene sus permisos de seguridad.</small></section>';
   const i=$('vantisBadge'),go=v=>{if(!saveEmp(v)){i.focus();return}departmentStep(g,r)};
   $('vantisBadgeNext').onclick=()=>go(i.value);$('vantisScanBadge').onclick=()=>startScanner(v=>{stopScanner();go(v)},r==='admin'?'gafete de jefe':'gafete de vendedor').catch(()=>i.focus());setTimeout(()=>i.focus(),50);
 }
