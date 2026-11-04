@@ -386,9 +386,15 @@ export class ContinuousReceive {
     }
   }
   async send(row) {
+    // El servidor guarda p_operador en la nota del movimiento existente. Añadir
+    // una marca no destructiva permite ver el origen desde otros dispositivos
+    // sin cambiar firma RPC ni volver a enviar una lectura incierta.
+    const method=['camera','manual','scanner'].includes(row.captureMethod)?row.captureMethod:null;
+    const suffix=row.kind==='receive'&&method?' | ORIGEN='+method:'';
+    const auditOperator=suffix?String(this.actor).slice(0,120-suffix.length)+suffix:this.actor;
     if (!row.payload) row.payload = {
       p_id:row.id,p_sesion:this.state.id,p_departamento:this.deptId,p_producto:row.product.id,
-      p_marbete:row.location,p_operador:this.actor,p_leida_en:row.capturedAt,p_reversa:row.reverses || null
+      p_marbete:row.location,p_operador:auditOperator,p_leida_en:row.capturedAt,p_reversa:row.reverses || null
     };
     // Persist transport choice before sending. If the migration is installed
     // mid-session, old uncertain writes must only be RECONCILED, never sent
