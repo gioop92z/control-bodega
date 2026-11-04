@@ -37,7 +37,7 @@ function harness(overrides={}) {
     navigator:{onLine:true,vibrate(){}},localStorage:{getItem(){return null},setItem(){},removeItem(){}},
     document:{getElementById:id=>nodes.get(id)||null,querySelectorAll:()=>[],createElement:()=>new Element(),body:new Element()},
     window:{},startScanner:async callback=>{scanner.calls++;if(scanner.error)throw scanner.error;scanner.callback=callback},stopScanner:()=>{scanner.callback=null},
-    setTimeout:(callback,ms)=>setTimeout(callback,ms).unref(),clearTimeout
+    setTimeout:(callback,ms)=>setTimeout(callback,ms).unref(),clearTimeout,clearInterval
   };
   const source=readFileSync(new URL('../app.js',import.meta.url),'utf8').replace(/^import .*;\s*$/gm,'').replace(/\nboot\(\);\s*$/,'');
   vm.runInNewContext(source+`\nglobalThis.api={S,doSearch,render,openProductLocation,validateProductMarbete,saveProductLocation,registerProductLocationMarbete,resetSearchContext,get assignment(){return locationAssignment}};`,sandbox);
