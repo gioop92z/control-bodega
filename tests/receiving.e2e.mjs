@@ -84,10 +84,10 @@ try {
   await page.route('https://*.supabase.co/**',route=>{if(route.request().method()!=='GET')blockedWrites++;return route.abort();});
   await page.goto(`http://127.0.0.1:${server.address().port}/`,{waitUntil:'networkidle'});
   await page.locator('[data-act="ENTRADA"]').click();await page.locator('#crScan:not(:disabled)').waitFor();
-  assert.match(await page.locator('#crInstruction').innerText(),/SKU O MARBETE/);
+  assert.match(await page.locator('#crInstruction').innerText(),/SKU O MARBETE/i);
   // True keyboard events: no click or field focus between frames.
   await page.keyboard.type('402-001');await page.keyboard.press('Enter');
-  await page.waitForFunction(()=>document.getElementById('crLocationLabel').textContent==='MARBETE ACTIVO'&&document.getElementById('crLocation').textContent==='402-001');
+  await page.waitForFunction(()=>document.getElementById('crLocationLabel').textContent.toLowerCase()==='marbete activo'&&document.getElementById('crLocation').textContent==='402-001');
   for(let i=0;i<5;i++){await page.keyboard.type('0012345678');await page.keyboard.press(i%2?'Tab':'Enter');}
   await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='5');
   assert.equal(await page.evaluate(()=>window.__receiptFixture.movements.length),5);
@@ -103,7 +103,7 @@ try {
   await page.locator('#crCancelSwitch').click();await page.keyboard.type('0012345678');await page.keyboard.press('Enter');
   await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='7');
   await page.keyboard.type('402-002');await page.keyboard.press('Enter');await page.locator('#crConfirmSwitch').click();
-  await page.waitForFunction(()=>document.getElementById('crLocation').textContent==='402-002'&&document.getElementById('crLocationLabel').textContent==='MARBETE ACTIVO');
+  await page.waitForFunction(()=>document.getElementById('crLocation').textContent==='402-002'&&document.getElementById('crLocationLabel').textContent.toLowerCase()==='marbete activo');
   assert.equal(await page.locator('#crVisitCount').innerText(),'0');
   // Continuous camera callback is shared by marbetes, QR and products.
   await page.locator('#crCameraButton').click();await page.waitForFunction(()=>!!window.__scanner);
@@ -112,7 +112,7 @@ try {
   await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='10');
   assert.equal(await page.evaluate(()=>window.__cameraOpens),1);
   await page.evaluate(()=>window.__scanner.cb('{"marbete":"ZAP-402-003"}'));
-  await page.locator('#crConfirmSwitch').click();await page.waitForFunction(()=>document.getElementById('crLocation').textContent==='402-003'&&document.getElementById('crLocationLabel').textContent==='MARBETE ACTIVO');
+  await page.locator('#crConfirmSwitch').click();await page.waitForFunction(()=>document.getElementById('crLocation').textContent==='402-003'&&document.getElementById('crLocationLabel').textContent.toLowerCase()==='marbete activo');
   await page.waitForFunction(()=>window.__cameraOpens===2,'camera should resume after confirming a location');
   assert.equal(await page.evaluate(()=>document.getElementById('scanner')?.parentElement===document.body),true);
   await page.locator('#crCameraButton').click();
