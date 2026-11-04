@@ -126,6 +126,7 @@ try{
   assert.equal(await page.locator('#exitCount').innerText(),'4 piezas');
   await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'/tmp/vantis-fast-exit-mobile.png',fullPage:true});
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));
+  await page.locator('#vantisCommandToggle').click();
   await page.locator('[data-view="home"]').click();await page.locator('[data-act="SALIDA"]').click();
   assert.equal(await page.locator('#exitCount').innerText(),'4 piezas');
   await page.reload({waitUntil:'networkidle'});await page.locator('[data-act="SALIDA"]').click();
