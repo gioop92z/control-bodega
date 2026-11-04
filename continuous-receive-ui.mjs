@@ -12,11 +12,11 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
   const current=()=>!destroyed && root.isConnected && isCurrent();
   const ready=()=>current() && queue.canScan;
   root.innerHTML=`<section class="continuous-receive" aria-label="Recibir mercancía">
-    <div class="cr-heading"><div><span class="cr-brand">VANTIS <i>|</i> ESCANEO ACTIVO</span><span class="cr-department">${esc(queue.actor)}</span></div><button id="crFinish" type="button" class="ghost">Finalizar recepción</button></div>
-    <section class="cr-stage"><span id="crLocationLabel" class="cr-kicker">MARBETE ACTIVO</span><strong id="crLocation" class="cr-location">—</strong><h1 id="crInstruction">ESCANEA UN SKU O UN MARBETE</h1><p id="crLocationState"></p>
-      <div class="cr-counters"><div><strong id="crVisitCount">0</strong><span>PIEZAS EN ESTE MARBETE</span></div><div><strong id="crTotalCount">0</strong><span>TOTAL CONFIRMADO EN SESIÓN</span></div></div>
-      <form id="crScanForm" autocomplete="off"><label class="sr-only" for="crScan">Lectura del escáner portátil, marbete, SKU o UPC</label><input id="crScan" type="text" inputmode="text" enterkeyhint="done" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Escanea o escribe marbete, SKU o UPC" aria-describedby="crSync"><button id="crKeyboard" class="ghost" type="button" aria-label="Abrir teclado para escribir un código">⌨ Escribir</button></form>
-      <div class="cr-indicators"><span id="crDevice">Captura preparada para lector portátil</span><span id="crSync" role="status" aria-live="polite">Comprobando servidor…</span><button id="crCameraButton" type="button" class="secondary">Cámara</button></div><p id="crPhotoStatus" class="cr-photo-status" role="status" aria-live="polite"></p>
+    <div class="cr-heading"><div><span class="cr-brand">VANTIS <i>·</i> Escaneo activo</span><span class="cr-department">${esc(queue.actor)}</span></div><button id="crFinish" type="button" class="ghost">Finalizar</button></div>
+    <section class="cr-stage"><span id="crLocationLabel" class="cr-kicker">Ubicación opcional</span><strong id="crLocation" class="cr-location">Sin asignar</strong><h1 id="crInstruction">Escanea un SKU o marbete</h1><p id="crLocationState"></p>
+      <div class="cr-counters"><div><strong id="crVisitCount">0</strong><span>Piezas en marbete</span></div><div><strong id="crTotalCount">0</strong><span>Confirmadas en sesión</span></div></div>
+      <form id="crScanForm" autocomplete="off"><label class="sr-only" for="crScan">Lectura del escáner portátil, marbete, SKU o UPC</label><input id="crScan" type="text" inputmode="text" enterkeyhint="done" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Escanea SKU, UPC o marbete" aria-describedby="crSync"><button id="crKeyboard" class="ghost" type="button" aria-label="Abrir teclado para escribir un código">Escribir</button></form>
+      <div class="cr-indicators"><span id="crDevice">Lector portátil listo</span><span id="crSync" role="status" aria-live="polite">Comprobando servidor…</span><button id="crCameraButton" type="button" class="secondary">Cámara</button></div><p id="crPhotoStatus" class="cr-photo-status" role="status" aria-live="polite"></p>
     </section>
     <div id="crFeedback" class="cr-feedback" role="status" aria-live="polite" hidden></div>
     <section id="crPendingReview" class="cr-pending-review" aria-label="Lecturas pendientes" hidden>
@@ -27,7 +27,7 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     </section>
     <div id="crPendingLocation" class="cr-pending-location" hidden><div><b id="crPendingLocationCount">0 piezas esperando ubicación</b><small>Escanea un marbete y se vincularán automáticamente, o guárdalas sin ubicación.</small></div><button id="crSaveWithoutLocation" type="button" class="secondary">Registrar sin marbete</button></div>
     <div id="crError" class="cr-error" role="alert" hidden></div><div id="crNotice" class="cr-notice" role="status" aria-live="polite"></div>
-    <section id="crLast" class="cr-last" aria-live="polite"><span>ÚLTIMA LECTURA</span><strong>Listo para comenzar</strong><small>El contador aumenta al recibir confirmación real del servidor.</small></section>
+    <section id="crLast" class="cr-last" aria-live="polite"><span>Última lectura</span><strong>Listo para comenzar</strong><small>El contador aumenta al recibir confirmación real del servidor.</small></section>
     <section class="cr-history"><div class="cr-section-title"><h2>Últimos registros</h2><button id="crUndo" type="button" class="ghost">Deshacer último registro</button></div><div id="crRows"></div></section>
     <div class="cr-tools"><button id="crRetry" type="button" class="secondary">Sincronizar ahora</button><button id="crRetryFailed" type="button" class="ghost" hidden>Reintentar fallidos</button><button id="crLegacy" type="button" class="ghost">Recepción por lote</button></div>
     <section id="crSwitch" class="cr-overlay" role="dialog" aria-modal="true" aria-labelledby="crSwitchTitle" hidden><div class="cr-dialog"><span class="cr-kicker">NUEVA UBICACIÓN DETECTADA</span><h2 id="crSwitchTitle">¿CAMBIAR DE MARBETE?</h2><p>Marbete actual: <b id="crOld"></b></p><p>Nuevo marbete: <b id="crNew"></b></p><button id="crConfirmSwitch" type="button" class="primary">Confirmar cambio</button><button id="crCancelSwitch" type="button" class="secondary">Cancelar y continuar en el anterior</button></div></section>
@@ -99,9 +99,9 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     $('crSummaryRetry').hidden=!pendingRows.length;
     $('crSummaryRetry').disabled=!queue.owned||queue.busy||Boolean(queue.storageError);
     $('crPendingRetry').disabled=!queue.owned||queue.busy||Boolean(queue.storageError);
-    $('crLocationLabel').textContent=pending?'MARBETE POR VALIDAR':active?'MARBETE ACTIVO':'UBICACIÓN OPCIONAL';
-    $('crLocation').textContent=active?short(active.code):'—';
-    $('crInstruction').textContent=active?'ESCANEA LA SIGUIENTE PIEZA':'ESCANEA SKU O MARBETE PARA COMENZAR';
+    $('crLocationLabel').textContent=pending?'Marbete por validar':active?'Marbete activo':'Ubicación opcional';
+    $('crLocation').textContent=active?short(active.code):'Sin asignar';
+    $('crInstruction').textContent=active?'Escanea la siguiente pieza':'Escanea un SKU o marbete';
     $('crLocationState').textContent=queue.compatibility
       ? 'Cada lectura confirma una pieza en el historial. Si la red falla, queda protegida para revisión.'
       : pending?'Las lecturas quedarán pendientes hasta validar esta ubicación.':active?'Cada lectura registra una unidad en esta ubicación.':'Empieza por el SKU o el cajón. Si el SKU va primero, se conserva hasta asignarle ubicación o registrarlo sin marbete.';
@@ -110,7 +110,7 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     $('crPendingLocationCount').textContent=num(report.awaitingLocation)+' pieza'+(report.awaitingLocation===1?'':'s')+' esperando ubicación';
     $('crSaveWithoutLocation').disabled=!ready()||!report.awaitingLocation;
     $('crScan').disabled=!ready();
-    $('crDevice').textContent=camera?'Cámara activa · QR y barras':opening?'Abriendo cámara…':lastSignal?'Lector portátil · última señal '+lastSignal:'Captura preparada para lector portátil';
+    $('crDevice').textContent=camera?'Cámara activa · QR y barras':opening?'Abriendo cámara…':lastSignal?'Lector portátil · última señal '+lastSignal:'Lector portátil listo';
     $('crCameraButton').textContent=camera?'Cerrar cámara':'Cámara';$('crCameraButton').disabled=opening||(!ready()&&!camera);
     const unknown=queue.rows.filter(row=>row.kind==='receive'&&row.status==='queued'&&/pendiente de alta|pendiente de confirmar|SKU pendiente/i.test(row.error||'')).length;
     $('crSync').textContent=(queue.backend==='checking'?'Comprobando servidor · ':!queue.online()?'Sin conexión de red · ':queue.backend==='offline'?'Servidor sin respuesta · ':'')+num(report.confirmed)+' confirmados · '+num(report.pending)+' pendientes'+(unknown?' · '+num(unknown)+' SKUs por catalogar':'')+(report.failed?' · '+num(report.failed)+' fallidos':'');
@@ -118,7 +118,7 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     $('crError').hidden=!(queue.error||queue.storageError);$('crError').textContent=queue.storageError||queue.error;
     $('crNotice').textContent=notice;
     const last=queue.rows.at(-1);
-    if(last){const markup='<span>ÚLTIMA LECTURA '+(last.kind==='undo'?'· COMPENSACIÓN':'')+'</span><strong>'+esc(last.product?.descripcion||last.code)+'</strong><small>SKU '+esc(last.product?.sku||last.code)+' · '+esc(short(last.location)||'SIN UBICACIÓN')+'</small>'+stamp(last)+(last.error?'<small>'+esc(last.error)+'</small>':'');
+    if(last){const markup='<span>Última lectura '+(last.kind==='undo'?'· COMPENSACIÓN':'')+'</span><strong>'+esc(last.product?.descripcion||last.code)+'</strong><small>SKU '+esc(last.product?.sku||last.code)+' · '+esc(short(last.location)||'SIN UBICACIÓN')+'</small>'+stamp(last)+(last.error?'<small>'+esc(last.error)+'</small>':'');
       if(markup!==lastRowMarkup){$('crLast').innerHTML=markup;lastRowMarkup=markup;}
     }
     const rowsMarkup=queue.rows.length?queue.rows.slice(-8).reverse().map(row=>'<article class="cr-row"><div><b>'+esc(row.product?.descripcion||row.code)+'</b><small>'+esc(row.product?.sku||row.code)+' · '+esc(short(row.location)||'SIN UBICACIÓN')+(row.kind==='undo'?' · Deshacer':'')+'</small>'+(row.error?'<small class="txt-red">'+esc(row.error)+'</small>':'')+'</div><div><strong>'+(row.kind==='undo'?'−1':'+1')+'</strong>'+stamp(row)+'</div></article>').join(''):'<p class="muted">Aquí aparecerán las piezas escaneadas.</p>';
