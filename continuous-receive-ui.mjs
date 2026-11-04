@@ -8,7 +8,7 @@ const short = code => String(code || '').replace(/^ZAP-/, '');
 const labels = {queued:'Pendiente de sincronización',sending:'Guardando…',uncertain:'Por confirmar · reintento seguro',confirmed:'Confirmado en servidor',failed:'No registrado'};
 
 export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCurrent=()=>true,onLegacy=()=>{},onUnavailable=()=>{},onEvidence=()=>{},onEvidenceConfirmed=()=>{}}) {
-  let destroyed=false,frame=null,camera=false,opening=false,resumeAfterSwitch=false,audio=null,lastSignal='',notice='',feedbackTimer=null,toastTimer=null,wake=null;
+  let destroyed=false,frame=null,camera=false,opening=false,resumeAfterSwitch=false,audio=null,lastSignal='',notice='',feedbackTimer=null,toastTimer=null,wake=null,manualActive=false;
   const $=id=>root.querySelector('#'+id);
   const current=()=>!destroyed && root.isConnected && isCurrent();
   const ready=()=>current() && queue.canScan;
@@ -57,6 +57,7 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     notice='';
     try {
       const source=details?.source||'scanner';
+      if(source==='manual')manualActive=false;
       const result=queue.scan(code,{source});
       if(result.type==='piece'&&source==='camera')onEvidence(result.id,code,details?.frame??null);
       if(result.type==='switch'){feedback('Confirma el cambio de marbete','info');queueMicrotask(()=>$('crConfirmSwitch')?.focus());}
@@ -114,7 +115,7 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     $('crPendingLocationCount').textContent=num(report.awaitingLocation)+' pieza'+(report.awaitingLocation===1?'':'s')+' esperando ubicación';
     $('crSaveWithoutLocation').disabled=!ready()||!report.awaitingLocation;
     $('crScan').disabled=!ready();
-    $('crDevice').textContent=camera?'Cámara activa · QR y barras':opening?'Abriendo cámara…':lastSignal?'Lector portátil · última señal '+lastSignal:'Lector portátil listo';
+    $('crDevice').textContent=camera?'Cámara activa · QR y barras':opening?'Abriendo cámara…':manualActive?'Modo manual · sin fotografía':lastSignal?'Lector portátil · última señal '+lastSignal:'Lector portátil listo';
     $('crCameraButton').textContent=camera?'Cerrar cámara':'Cámara';$('crCameraButton').disabled=opening||(!ready()&&!camera);
     const unknown=queue.rows.filter(row=>row.kind==='receive'&&row.status==='queued'&&/pendiente de alta|pendiente de confirmar|SKU pendiente/i.test(row.error||'')).length;
     $('crSync').textContent=(queue.backend==='checking'?'Comprobando servidor · ':!queue.online()?'Sin conexión de red · ':queue.backend==='offline'?'Servidor sin respuesta · ':'')+num(report.confirmed)+' confirmados · '+num(report.pending)+' pendientes'+(unknown?' · '+num(unknown)+' SKUs por catalogar':'')+(report.failed?' · '+num(report.failed)+' fallidos':'');
@@ -157,7 +158,7 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     try{const count=queue.approveWithoutLocation();feedback(count+' pieza'+(count===1?'':'s')+' preparada'+(count===1?'':'s')+' para registrar sin ubicación','info');render();input.focus();}
     catch(error){fail(error);}
   };
-  $('crKeyboard').onclick=()=>{const field=$('crScan');if(!ready())return;input.manual();field.inputMode='text';field.blur();field.focus({preventScroll:true});};
+  $('crKeyboard').onclick=()=>{const field=$('crScan');if(!ready())return;input.manual();manualActive=true;render();field.inputMode='text';field.blur();field.focus({preventScroll:true});};
   function resolveSwitch(accept) {
     const reopen=resumeAfterSwitch;resumeAfterSwitch=false;
     queue.confirmSwitch(accept);render();
