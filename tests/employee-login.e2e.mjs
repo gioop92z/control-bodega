@@ -65,6 +65,11 @@ try{
       return route.fulfill({contentType:'text/javascript',body:'export const utils={};export const read=()=>({});export const writeFile=()=>{};'});
     return route.abort();
   });
+  // Camera hardware and ZXing are unrelated to the login smoke test.
+  await page.route('**/scanner.js*',route=>route.fulfill({
+    contentType:'text/javascript',
+    body:'export async function startScanner(){return;} export function stopScanner(){}'
+  }));
   await page.route('https://*.supabase.co/**',route=>route.abort());
   await page.goto('http://127.0.0.1:'+server.address().port+'/',{waitUntil:'networkidle'});
   try {
