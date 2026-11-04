@@ -315,7 +315,7 @@ function syncAuthenticatedUI() {
     if (label?.childNodes?.[0]?.nodeType === Node.TEXT_NODE && label.childNodes[0].textContent !== 'Empleado / nota') label.childNodes[0].textContent = 'Empleado / nota';
   }
 
-  injectTutorialTab();
+  // Tutorial desactivado: operación directa sin módulo de aprendizaje.
   ensureIdentityGate();
 }
 
