@@ -152,10 +152,22 @@ function cameraEvidenceService(){
   if(photoEvidenceService?.departmentId===S.deptId&&photoEvidenceService?.userId===S.user?.id)return photoEvidenceService;
   photoEvidenceService?.dispose();
   photoEvidenceService=new ScanEvidence({sb,departmentId:S.deptId,userId:S.user.id,
-    cloudEnabled:vantisBackendConfig.mode!=='LEGACY_PRODUCCION',onIssue:message=>{
+    cloudEnabled:false,onIssue:message=>{
     const status=document.getElementById('crPhotoStatus');
     if(status)status.textContent=message;
   }});
+  // En servidores antiguos la tabla puede faltar. Solo habilitar la subida
+  // privada cuando el propio servidor confirme que admite las evidencias.
+  const service=photoEvidenceService;
+  void (async()=>{
+    try{
+      const {error}=await sb.from('vantis_evidencias_escaneo')
+        .select('evento_id',{count:'exact',head:true}).limit(1);
+      if(!error&&photoEvidenceService===service){
+        service.cloudEnabled=true;await service.sync();
+      }
+    }catch{/* Sin migración: se conserva exclusivamente la copia local. */}
+  })();
   return photoEvidenceService;
 }
 
@@ -743,7 +755,7 @@ function searchEvidenceHtml() {
     }))
   ].sort((a,b)=>String(b.row.capturada_en||'').localeCompare(String(a.row.capturada_en||''))).slice(0,16);
   const note=vantisBackendConfig.mode==='LEGACY_PRODUCCION'
-    ? 'El origen de las nuevas entradas confirmadas se consulta en el servidor. Las fotos de producción permanecen en el dispositivo que realizó la captura.'
+    ? 'El origen de las nuevas entradas confirmadas se consulta en el servidor. Las fotos se conservan en el dispositivo y se sincronizan únicamente si el servidor admite evidencias privadas.'
     : 'Las fotos locales pendientes pueden sincronizarse cuando el servidor confirme el movimiento.';
   if(!items.length)return '<section class="vantis-evidence"><h3>Registro visual y auditoría</h3><p class="muted">'+
     (S.evidenceStatus==='error'?'No se pudo consultar el historial local. Conserva los datos de este navegador y vuelve a intentarlo.':
@@ -1088,7 +1100,7 @@ async function doSearch(code) {
       startCatalogLookup([p.sku,p.upc],current);
       // La búsqueda de stock es independiente de la descarga de imágenes.
       void Promise.allSettled([
-        vantisBackendConfig.mode==='LEGACY_PRODUCCION'?Promise.resolve([]):listSkuEvidence(sb,deptId,p.sku,{limit:16}),
+        listSkuEvidence(sb,deptId,p.sku,{limit:16}),
         listLocalSkuEvidence(deptId,S.user.id,p.sku,{codes:[p.upc],limit:16}),
         listLocalSkuAudit(deptId,S.user.id,p.sku,{codes:[p.upc],limit:16}),
         listServerSkuAudit(sb,deptId,p.sku,{limit:16})
