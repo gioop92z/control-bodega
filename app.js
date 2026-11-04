@@ -367,15 +367,15 @@ function wireShell() {
   const panel=document.getElementById('vantisCommandPanel');
   if(menu&&panel){
     const setOpen=open=>{
-      panel.classList.toggle('open',open);
-      menu.classList.toggle('open',open);
+      panel.classList?.toggle?.('open',open);
+      menu.classList?.toggle?.('open',open);
       menu.setAttribute('aria-expanded',String(open));
       menu.setAttribute('aria-label',open?'Cerrar menú de navegación':'Abrir menú de navegación');
       panel.setAttribute('aria-hidden',String(!open));
       panel.inert=!open;
     };
     setOpen(false);
-    menu.onclick=()=>setOpen(!panel.classList.contains('open'));
+    menu.onclick=()=>setOpen(!panel.classList?.contains?.('open'));
     window.vantisNavController?.abort();
     const controller=new AbortController();
     document.addEventListener('pointerdown',event=>{
