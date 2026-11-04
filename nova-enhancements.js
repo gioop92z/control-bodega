@@ -8,7 +8,7 @@ const SHARED_SELLER_PIN = '1010';
 const $ = id => document.getElementById(id);
 const htmlEsc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const employeeNumber = () => (sessionStorage.getItem(EMPLOYEE_KEY) || '').trim();
-const sellerActive = () => /Vendedor general|acceso\s*10/i.test(document.querySelector('.access-label')?.textContent || '');
+const sellerActive = () => {const label=document.querySelector('.access-label');return label?.dataset?.accessRole==='seller'||/Vendedor general|acceso\s*10/i.test(label?.textContent||'');};
 
 function saveEmployeeNumber(value) {
   const clean = String(value || '').trim().slice(0, 80);
@@ -131,6 +131,9 @@ function syncLogin() {
 document.addEventListener('submit', async event => {
   const form = event.target;
   if (!(form instanceof HTMLFormElement) || form.id !== 'loginForm') return;
+  // The current VANTIS sign-in uses ONE employee number field only.
+  // Do not intercept it with the obsolete access-10/PIN enhancer.
+  if (!$('pin')) return;
 
   const clave = $('clave')?.value.trim() || '';
   const pin = $('pin');

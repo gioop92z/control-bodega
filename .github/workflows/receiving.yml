@@ -34,7 +34,9 @@ jobs:
         run: npm run test:database
         env:
           VANTIS_TEST_DATABASE_URL: postgresql://vantis_test:isolated_test_only@127.0.0.1:5432/vantis_test
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install chromium --only-shell
+      - name: Verificar acceso exclusivamente con número de empleado en móvil
+        run: node tests/employee-login.e2e.mjs
       - name: Probar aplicación completa en escritorio y móvil
         run: npm run test:browser
       - name: Verificar lector minimalista en navegador móvil y escritorio
