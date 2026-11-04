@@ -5,12 +5,12 @@ import {readFile} from 'node:fs/promises';
 import {chromium} from 'playwright';
 
 const files=new Set(['vantis-command.css','vantis-experience.js']);
-const pageHtml=String.raw\`<!doctype html><html lang="es"><head>
+const pageHtml=String.raw`<!doctype html><html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="stylesheet" href="/vantis-command.css"></head><body>
 <div id="app"><div class="app-shell"><main class="content"><h1>Operación VANTIS</h1></main></div></div>
 <script>sessionStorage.setItem('vantis.session.ready','1')</script>
-<script defer src="/vantis-experience.js"></script></body></html>\`;
+<script defer src="/vantis-experience.js"></script></body></html>`;
 const server=createServer(async(req,res)=>{
   const file=new URL(req.url,'http://localhost').pathname.slice(1);
   if(!file){res.writeHead(200,{'Content-Type':'text/html'});res.end(pageHtml);return;}
