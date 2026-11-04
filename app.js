@@ -33,7 +33,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '5.8.3';
+const APP_VERSION = '5.9.0';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 const HISTORY_RESTART_CUTOFF = '2026-10-15T22:15:00.000Z';
 
@@ -329,10 +329,43 @@ function deptName() {
 }
 
 function nav() {
-  const items = [['home','Inicio','⌂'],['search','Buscar','⌕'],['inventory','Inventario','▦']];
-  if (S.admin) items.push(['history','Historial','☷'],['admin','Ajustes','⚙']);
-  return `<nav class="bottom-nav">${items.map(([v,l,i]) => `<button data-view="${v}" class="${S.view===v?'active':''}"><span>${i}</span>${l}</button>`).join('')}</nav>`;
+  const links = [
+    ['home','Inicio','⌂'],['search','Buscar','⌕'],['inventory','Inventario','▦'],
+    ['count','Conteo físico','✓'],['operations','Centro operativo','◈'],
+    ...(S.admin ? [['history','Historial','☷'],['admin','Ajustes','⚙'],['import','Importar','⇧']] : [])
+  ];
+  const tiles=links.map(([view,label,symbol])=>
+    '<button type="button" class="vc-tile '+(S.view===view?'vc-active':'')+'" data-view="'+view+'" '+
+    (S.view===view?'aria-current="page"':'')+'><span class="vc-tile-icon" aria-hidden="true">'+symbol+'</span>'+
+    '<span>'+label+'</span></button>').join('');
+  return '<div class="vc-dock" id="vcDock">'+
+    '<button class="vc-dismiss" id="vcDismiss" type="button" aria-label="Cerrar menú de operaciones" hidden></button>'+
+    '<nav class="vc-panel" id="vcPanel" aria-label="Centro de acciones VANTIS" hidden>'+
+    '<div class="vc-panel-head"><div><small>VANTIS · Liverpool</small><h2>Centro de acciones</h2></div>'+
+    '<button class="vc-close" id="vcClose" type="button" aria-label="Cerrar menú">×</button></div>'+
+    '<div class="vc-panel-actions">'+
+    '<button type="button" class="vc-tile" data-vc-action="receive"><span class="vc-tile-icon" aria-hidden="true">＋</span><span>Recibir mercancía</span></button>'+
+    '<button type="button" class="vc-tile" data-vc-action="exit"><span class="vc-tile-icon" aria-hidden="true">−</span><span>Sacar de bodega</span></button>'+
+    tiles+'</div><div class="vc-panel-foot"><span>Accesos directos · sin salir de tu operación</span><span>v'+APP_VERSION+'</span></div></nav>'+
+    '<button class="vc-trigger" id="vcTrigger" type="button" aria-label="Abrir centro de acciones" aria-expanded="false" aria-controls="vcPanel">'+
+    '<span class="vc-mark" aria-hidden="true">V</span><span class="vc-trigger-copy"><strong>Acciones</strong><small>Menú VANTIS</small></span>'+
+    '<span class="vc-trigger-glyph" aria-hidden="true">＋</span></button></div>';
 }
+
+function commandOpen(open,restoreFocus=false) {
+  const dock=$('vcDock'),panel=$('vcPanel'),backdrop=$('vcDismiss'),trigger=$('vcTrigger');
+  if(!dock||!panel||!backdrop||!trigger)return;
+  dock.classList.toggle('is-open',open);panel.hidden=!open;backdrop.hidden=!open;
+  trigger.setAttribute('aria-expanded',String(open));
+  trigger.setAttribute('aria-label',open?'Cerrar centro de acciones':'Abrir centro de acciones');
+  if(open)panel.querySelector('button')?.focus({preventScroll:true});
+  else if(restoreFocus)trigger.focus({preventScroll:true});
+}
+document.addEventListener?.('keydown',event=>{
+  if(event.key==='Escape'&&document.getElementById('vcTrigger')?.getAttribute('aria-expanded')==='true'){
+    event.preventDefault();commandOpen(false,true);
+  }
+});
 
 function header() {
   return `<header class="topbar">
@@ -358,6 +391,18 @@ function shell(body) {
 }
 
 function wireShell() {
+  $('vcTrigger').onclick=()=>commandOpen($('vcTrigger').getAttribute('aria-expanded')!=='true',true);
+  $('vcClose').onclick=()=>commandOpen(false,true);
+  $('vcDismiss').onclick=()=>commandOpen(false,true);
+  document.querySelectorAll('[data-vc-action]').forEach(button=>button.onclick=()=>{
+    if(exitBusy()||receiveBusy())return;
+    commandOpen(false);
+    if(button.dataset.vcAction==='receive'){
+      S.moveType='ENTRADA';fastReceiveView();
+    } else {
+      S.moveType='SALIDA';S.view='move';render();
+    }
+  });
   document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => {
     if (exitBusy() || receiveBusy()) return;
     resetSearchContext();
@@ -418,7 +463,7 @@ function kpi(label,val,cls='') { return `<div class="kpi ${cls}"><span>${label}<
 async function homeView() {
   shell(`
     <section class="hero">
-      <div><div class="eyebrow">${esc(deptName())}</div><h1>¿Qué necesitas hacer?</h1><p class="muted">Elige una acción. La app te guía paso a paso.</p></div>
+      <div><div class="eyebrow">${esc(deptName())}</div><h1>¿Qué necesitas hacer?</h1><p class="muted">Todo lo que tu equipo necesita, con el control en tus manos.</p></div>
       <div class="live-badge" id="connectionState" role="status"><i></i> Comprobando red</div>
     </section>
     <section class="action-grid">
@@ -428,13 +473,11 @@ async function homeView() {
       <button class="action-card" data-go="count"><b>✓</b><strong>Inventario físico</strong><span>Contar y detectar diferencias</span></button>
       <button class="action-card" data-go="operations"><b>◈</b><strong>Centro operativo</strong><span>Localizar, preparar, trasladar y supervisar</span></button>
     </section>
-    <button id="quickReceive" class="vr-floating-launch" type="button" aria-label="Abrir escaneo de mercancía"><span class="vr-launch-glyph" aria-hidden="true">▦</span><span>Escanear</span></button>
     <section class="card"><div class="section-head"><h3>Hoy</h3><span class="tiny">Actualización en tiempo real</span></div><div id="summary" class="kpis"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div></section>
     ${S.admin ? `<section class="card"><h3>Estado de la operación</h3><div id="checklist"><div class="skeleton"></div></div></section><section class="quick-row"><button data-go="import" class="secondary">Importar Excel / CSV</button><button data-go="history" class="secondary">Ver historial</button></section>` : `<section class="tip-card"><b>Tip rápido</b><span>En cada entrada o salida escribe tu nombre en “Nota”. Así queda claro quién realizó el movimiento.</span></section>`}
   `);
   syncNetworkBadge();
   document.querySelectorAll('[data-act]').forEach(b => b.onclick = () => { S.moveType=b.dataset.act; if(S.moveType==='ENTRADA'){fastReceiveView();return;} S.view='move'; render(); });
-  $('quickReceive').onclick=()=>{S.moveType='ENTRADA';fastReceiveView();};
   document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { S.view=b.dataset.go; render(); });
 
   const [sum,loc] = await Promise.all([
@@ -1577,7 +1620,7 @@ function downloadBlob(text,name,type) {
 
 function adminView() {
   if (!S.admin) { S.view='home'; return render(); }
-  shell(`<section class="page-title"><h1>Ajustes</h1><p class="muted">Departamentos, ubicaciones y operación. Sin módulo de empleados.</p></section><div class="tabs-row"><button data-atab="departments" class="tabbtn">Departamentos</button><button data-atab="locations" class="tabbtn">Ubicaciones</button><button data-atab="onboarding" class="tabbtn">Guía</button></div><section id="adminBody" class="card"></section>`);
+  shell(`<section class="page-title"><h1>Ajustes</h1><p class="muted">Departamentos, ubicaciones y operación. Sin módulo de empleados.</p></section><div class="tabs-row"><button data-atab="departments" class="tabbtn">Departamentos</button><button data-atab="locations" class="tabbtn">Ubicaciones</button></div><section id="adminBody" class="card"></section>`);
   document.querySelectorAll('[data-atab]').forEach(b=>b.onclick=()=>loadAdminTab(b.dataset.atab));
   loadAdminTab('departments');
 }
@@ -1603,7 +1646,6 @@ async function loadAdminTab(tab) {
     return;
   }
 
-  box.innerHTML=`<h3>Cómo operar esta versión</h3><ol class="guide"><li><b>Administrador</b><span>Tu acceso 99 conserva configuración, importaciones, historial, ubicaciones y cierre de conteos.</span></li><li><b>Vendedor general</b><span>Todo el equipo entra con clave 10 y PIN 1010.</span></li><li><b>Nombre en Nota</b><span>En entradas y salidas cada vendedor escribe su nombre. Ya no se crean ni administran empleados.</span></li><li><b>Importar catálogo</b><span>Sube Excel o CSV desde el acceso administrador.</span></li><li><b>Escanear y trabajar</b><span>UPC, SKU y marbetes desde el celular, sin pasos extra.</span></li></ol><div class="access-summary"><div><span>ADMIN</span><b>99</b><small>PIN privado</small></div><div><span>VENTA</span><b>10</b><small>PIN 1010</small></div></div>`;
 }
 
 function openScanner(cb,label) {

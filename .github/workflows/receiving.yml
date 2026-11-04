@@ -37,6 +37,8 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Probar aplicación completa en escritorio y móvil
         run: npm run test:browser
+      - name: Verificar animación VANTIS al iniciar en móvil y accesibilidad
+        run: node tests/command-experience.e2e.mjs
       - name: Verificar lector minimalista en navegador móvil y escritorio
         run: node tests/scanner-ui.e2e.mjs
       - name: Comprobar regresión de salidas con datos aislados

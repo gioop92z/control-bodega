@@ -50,7 +50,7 @@ const bootstrap=`
     return sb.from(table);
   };
   await import('./app.js?v=3.10.0');
-  await Promise.all(['location-scan.js?v=3.9.5','nova-enhancements.js?v=3.8.0','vantis-session-gate.js?v=3.8.0','nova-tutorial-slides.js?v=3.6.0','vantis-enterprise.js?v=1.0.1','liverpool-branding.js?v=1.1.1','vantis-motion.js?v=1.2.0'].map(path=>import('./'+path)));
+  await Promise.all(['location-scan.js?v=3.9.5','nova-enhancements.js?v=5.9.0','vantis-session-gate.js?v=3.8.0','vantis-enterprise.js?v=5.9.0','liverpool-branding.js?v=1.1.1','vantis-motion.js?v=1.2.0'].map(path=>import('./'+path)));
 `;
 const server=createServer(async(req,res)=>{
   try {
@@ -83,6 +83,20 @@ try {
   let blockedWrites=0;
   await page.route('https://*.supabase.co/**',route=>{if(route.request().method()!=='GET')blockedWrites++;return route.abort();});
   await page.goto(`http://127.0.0.1:${server.address().port}/`,{waitUntil:'networkidle'});
+  // Dashboard navigation is now a single floating command island, not a bottom row.
+  assert.equal(await page.locator('.bottom-nav').count(),0);
+  assert.equal(await page.locator('#vcPanel').isVisible(),false);
+  assert.equal(await page.locator('#novaTutorialTab').count(),0);
+  await page.locator('#vcTrigger').click();
+  assert.equal(await page.locator('#vcTrigger').getAttribute('aria-expanded'),'true');
+  assert.equal(await page.locator('#vcPanel').isVisible(),true);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#vcPanel').isVisible(),false);
+  await page.locator('#vcTrigger').click();
+  await page.locator('#vcPanel [data-view="search"]').click();
+  await page.locator('#manualSearch').waitFor();
+  await page.locator('#vcTrigger').click();
+  await page.locator('#vcPanel [data-view="home"]').click();
   await page.locator('[data-act="ENTRADA"]').click();await page.locator('#crScan:not(:disabled)').waitFor();
   assert.match(await page.locator('#crInstruction').innerText(),/SKU O MARBETE/i);
   // True keyboard events: no click or field focus between frames.
