@@ -1,6 +1,6 @@
 // Historial de lecturas por SKU. Consulta el diario local, sin crear existencias
 // ni suponer que una lectura antigua fue manual o por cámara.
-import {listMirroredReceiptRows} from './vantis-offline-idb-v5.mjs';
+import {listMirroredReceiptRows} from './vantis-offline-idb-v5.mjs?v=5.8.3';
 
 export const captureMethodLabel = method => ({
   camera:'Cámara',manual:'Manual',scanner:'Lector portátil',unknown:'Origen no registrado'
