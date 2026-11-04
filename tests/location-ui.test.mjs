@@ -33,6 +33,16 @@ function harness(overrides={}) {
   const scanner={calls:0,callback:null,error:null};
   const sandbox={
     ...locationFunctions,createClient:()=>sb,console,AbortController,crypto,
+    // Isolate location behavior from optional remote catalog, product galleries,
+    // and size runs; production modules are exercised by their own suites.
+    publicSearchUrl:code=>'https://www.liverpool.com.mx/tienda?s='+encodeURIComponent(code),
+    catalogCandidate:()=>null,knownFamilyCandidate:()=>null,isRejectedCandidate:()=>false,
+    recordRunProduct:()=>{},runMembers:()=>({confirmed:[],probable:[],ref:null}),
+    fetchRunInventory:async()=>({rows:[]}),nearbyRunSuggestions:async()=>[],
+    lookupPublicCatalog:async()=>({status:'not_found'}),lookupLiverpoolModels:async()=>[],
+    liverpoolPreview:async()=>null,lookupLiverpoolFamily:async()=>({status:'not_found'}),
+    listSkuEvidence:async()=>[],listLocalSkuEvidence:async()=>[],
+    setInterval:()=>0,
     vantisBackendConfig:{url:'https://example.invalid',key:'test-publishable-key'},
     navigator:{onLine:true,vibrate(){}},localStorage:{getItem(){return null},setItem(){},removeItem(){}},
     document:{getElementById:id=>nodes.get(id)||null,querySelectorAll:()=>[],createElement:()=>new Element(),body:new Element()},
