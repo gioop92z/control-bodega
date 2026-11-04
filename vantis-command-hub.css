@@ -1,0 +1,41 @@
+/* VANTIS 5.9 — Liverpool operational command interface */
+:root{--vh-ink:#251e28;--vh-pink:#db0077;--vh-line:#eae5e9;--vh-ease:cubic-bezier(.2,.8,.2,1)}
+.app-shell .content{padding-bottom:calc(104px + env(safe-area-inset-bottom));}
+.vantis-command{position:fixed;z-index:85;right:clamp(18px,4vw,48px);bottom:calc(20px + env(safe-area-inset-bottom));display:flex;flex-direction:column;align-items:flex-end;gap:12px;pointer-events:none}
+.vantis-command>*{pointer-events:auto}
+.vantis-command-toggle{width:76px;height:76px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:1px solid rgba(255,255,255,.3);border-radius:25px;background:#28202b;color:#fff;box-shadow:0 16px 40px #2b1b2b35;transition:transform .3s var(--vh-ease),background .25s ease,box-shadow .25s ease;cursor:pointer}
+.vantis-command-toggle:hover{background:#3b2939;transform:translateY(-3px);box-shadow:0 20px 42px #2b1b2b45}
+.vantis-command-toggle:focus-visible,.vantis-command-item:focus-visible{outline:3px solid #e5007d;outline-offset:3px}
+.vantis-command-toggle .vantis-command-symbol{font-size:27px;font-weight:500;line-height:1;transition:transform .4s var(--vh-ease)}
+.vantis-command-toggle.open .vantis-command-symbol{transform:rotate(135deg)}
+.vantis-command-toggle>span:last-child{font-size:10px;font-weight:750;letter-spacing:.05em}
+.vantis-command-panel{display:flex;flex-direction:column;gap:6px;padding:9px;width:min(240px,calc(100vw - 40px));border:1px solid #e8e1e8;border-radius:22px;background:rgba(255,255,255,.97);box-shadow:0 22px 70px #24162630;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);opacity:0;visibility:hidden;transform:translateY(12px) scale(.96);transform-origin:bottom right;transition:opacity .24s ease,transform .3s var(--vh-ease),visibility .24s ease}
+.vantis-command-panel.open{opacity:1;visibility:visible;transform:none}
+.vantis-command-item{display:flex;align-items:center;gap:13px;width:100%;padding:11px 13px;text-align:left;background:transparent;color:#3d3540;border:0;border-radius:14px;font-size:13px;cursor:pointer;transition:background .2s ease,transform .2s var(--vh-ease)}
+.vantis-command-item span{font-size:21px;width:28px;text-align:center;color:#6c5967}
+.vantis-command-item b{font-weight:670}
+.vantis-command-item:hover{background:#f7f3f6;transform:translateX(-2px)}
+.vantis-command-item.active{background:#fceaf4;color:#b90068}
+.vantis-command-item.active span{color:#b90068}
+.vantis-command-item:nth-child(1){transition-delay:20ms}
+.vantis-command-item:nth-child(2){transition-delay:35ms}
+.vantis-command-item:nth-child(3){transition-delay:50ms}
+.vantis-command-item:nth-child(4){transition-delay:65ms}
+.vantis-command-item:nth-child(5){transition-delay:80ms}
+/* Primary action remains prominent, but secondary actions are restrained. */
+.action-grid{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:12px!important}
+.action-grid .action-card{min-height:150px;background:#fff!important;border:1px solid var(--vh-line)!important;border-top:1px solid var(--vh-line)!important;border-radius:20px!important;box-shadow:0 4px 18px #1c15200a!important;transition:transform .35s var(--vh-ease),box-shadow .35s ease,border-color .25s ease!important}
+.action-grid .action-card:first-child{grid-column:span 2;min-height:196px;background:linear-gradient(145deg,#302333,#493044)!important;color:#fff!important}
+.action-grid .action-card:first-child span{color:#e6d9e2!important}
+.action-grid .action-card:nth-child(2){grid-column:span 2}
+.action-grid .action-card:nth-child(3),.action-grid .action-card:nth-child(4){grid-column:span 2}
+.action-grid .action-card:nth-child(5){grid-column:span 4;min-height:115px}
+.action-grid .action-card:hover{transform:translateY(-4px)!important;box-shadow:0 16px 35px #1c15201c!important;border-color:#e4c7d7!important}
+.action-grid .action-card b{background:#f7f2f6!important;color:#9d2369!important;border-radius:13px!important}
+.action-grid .action-card:first-child b{background:#ffffff21!important;color:#fff!important}
+.action-grid .action-card:active{transform:scale(.985)!important}
+.vantis-metric,.kpi{transition:transform .35s var(--vh-ease),box-shadow .3s ease}
+.vantis-metric:hover,.kpi:hover{transform:translateY(-2px)}
+@media(min-width:1000px){.vantis-command{right:calc((100vw - min(1120px,92vw))/2)}}
+@media(max-width:560px){.vantis-command{right:17px;bottom:calc(16px + env(safe-area-inset-bottom))}.vantis-command-toggle{width:68px;height:68px;border-radius:23px}.action-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.action-grid .action-card:first-child{grid-column:span 2}.action-grid .action-card:nth-child(2),.action-grid .action-card:nth-child(3),.action-grid .action-card:nth-child(4){grid-column:span 1}.action-grid .action-card:nth-child(5){grid-column:span 2}.action-grid .action-card{min-height:145px}}
+@media(prefers-reduced-motion:reduce){.vantis-command *,.action-grid .action-card,.vantis-metric,.kpi{animation:none!important;transition:none!important;transform:none!important}}
