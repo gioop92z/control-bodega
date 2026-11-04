@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {listLocalSkuAudit,captureMethodLabel} from '../receiving-audit.mjs';
+import {listLocalSkuAudit,listServerSkuAudit,auditFromMovement,captureMethodLabel} from '../receiving-audit.mjs';
 import {durableMemory,receiptLocks,receivingDb} from './helpers/receiving-db.mjs';
 import {ContinuousReceive,receiptCsv} from '../continuous-receive.mjs';
 
@@ -50,6 +50,10 @@ test('new movements persist camera/manual/scanner plus photo status across reloa
   assert.equal(queue.markEvidence(camera.id,'local'),true);
   await queue.flush();
   assert.equal(fixture.db.movements.length,3);
+  assert.deepEqual(fixture.db.requests.map(x=>x.p_operador),[
+    'Vendedora 441 | ORIGEN=camera','Vendedora 441 | ORIGEN=manual','Vendedora 441 | ORIGEN=scanner'
+  ]);
+
   const order=queue.rows.map(r=>r.captureMethod);
   assert.deepEqual(order,['camera','manual','scanner']);
   assert.ok(queue.rows.every(x=>x.operator==='Vendedora 441'));
@@ -59,4 +63,29 @@ test('new movements persist camera/manual/scanner plus photo status across reloa
   const recovered=new ContinuousReceive(opts);t.after(()=>recovered.dispose());await recovered.start();
   assert.deepEqual(recovered.rows.map(x=>x.captureMethod),order);
   assert.equal(recovered.rows[0].evidenceStatus,'local');
+});
+
+test('confirmed movement note recovers operator and source on other devices',async()=>{
+  const calls=[],movement={
+    id:'a1',sku,nota:'RECEPCIÓN CONTINUA COMPATIBLE · Sesión 11111111-1111-4111-8111-111111111111 · Vendedora 441 | ORIGEN=manual',
+    tipo:'ENTRADA',marbete_codigo:'ZAP-402-001',created_at:'2026-11-04T18:00:00Z'
+  };
+  const query={
+    select(...args){calls.push(['select',...args]);return this;},
+    eq(...args){calls.push(['eq',...args]);return this;},
+    order(...args){calls.push(['order',...args]);return this;},
+    limit(value){calls.push(['limit',value]);return Promise.resolve({data:[movement],error:null});}
+  };
+  const sb={from(table){assert.equal(table,'movimientos');return query;}};
+  const [row]=await listServerSkuAudit(sb,'dept1',sku);
+  assert.equal(row.metodo,'manual');
+  assert.equal(row.operador,'Vendedora 441');
+  assert.equal(row.servidor,true);
+  assert.equal(row.marbete,'ZAP-402-001');
+  assert.ok(calls.some(x=>x[0]==='eq'&&x[1]==='departamento_id'&&x[2]==='dept1'));
+  assert.ok(calls.some(x=>x[0]==='eq'&&x[1]==='sku'&&x[2]===sku));
+});
+test('legacy note without method is unknown, unrelated stock movements do not masquerade as receipts',()=>{
+  assert.equal(auditFromMovement({id:'old',nota:'RECEPCIÓN CONTINUA · Sesión xyz · Empleado 123',sku})?.metodo,'unknown');
+  assert.equal(auditFromMovement({id:'not-receipt',nota:'IMPORTACIÓN DE CATÁLOGO',sku}),null);
 });
