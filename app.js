@@ -1103,7 +1103,7 @@ async function doSearch(code) {
         listSkuEvidence(sb,deptId,p.sku,{limit:16}),
         listLocalSkuEvidence(deptId,S.user.id,p.sku,{codes:[p.upc],limit:16}),
         listLocalSkuAudit(deptId,S.user.id,p.sku,{codes:[p.upc],limit:16}),
-        listServerSkuAudit(sb,deptId,p.sku,{limit:16})
+        S.admin?listServerSkuAudit(sb,deptId,p.sku,{limit:16}):Promise.resolve([])
       ]).then(([remote,local,audit,serverAudit])=>{
         if(!current()){
           if(local.status==='fulfilled')local.value.forEach(item=>URL.revokeObjectURL(item.url));
