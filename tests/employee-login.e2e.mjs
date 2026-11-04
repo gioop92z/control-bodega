@@ -65,7 +65,12 @@ try{
   });
   await page.route('https://*.supabase.co/**',route=>route.abort());
   await page.goto('http://127.0.0.1:'+server.address().port+'/',{waitUntil:'networkidle'});
-  await page.locator('#clave').waitFor();
+  try {
+    await page.locator('#clave').waitFor({timeout:10000});
+  } catch(error) {
+    console.error('Login UI did not mount:',JSON.stringify({errors,html:(await page.content()).slice(-2500)}));
+    throw error;
+  }
   assert.equal(await page.locator('#loginForm input').count(),1);
   assert.equal(await page.locator('#pin').count(),0);
   assert.equal(await page.getByText('PIN de administrador').count(),0);
