@@ -56,13 +56,13 @@ export const DecodeHintType={POSSIBLE_FORMATS:1,TRY_HARDER:2,ALSO_INVERTED:3};`;
     const laser=document.querySelector('#scanner .scanner-laser');
     return {frameWidth:frame.width,frameHeight:frame.height,rootHeight:root.height,screenHeight:innerHeight,
       width:document.documentElement.scrollWidth,screenWidth:innerWidth,
-      laserDisplay:getComputedStyle(laser).display,
-      laserAnimation:getComputedStyle(laser).animationName};
+      laserDisplay:laser?getComputedStyle(laser).display:'absent',
+      laserAnimation:laser?getComputedStyle(laser).animationName:'none'};
   });
   assert.ok(visual.frameWidth>240&&visual.frameHeight>140,'target must be readable on a phone');
   assert.ok(Math.abs(visual.rootHeight-visual.screenHeight)<=2,'camera must fit the mobile viewport');
   assert.ok(visual.width<=visual.screenWidth,'scanner must not overflow horizontally');
-  assert.equal(visual.laserDisplay,'none','no decorative laser');
+  assert.ok(['none','absent'].includes(visual.laserDisplay),'no decorative laser');
   assert.equal(visual.laserAnimation,'none','no continuous laser animation');
   assert.equal(await page.locator('#scanSwitchEngine').isVisible(),true);
   assert.equal(await page.locator('#scannerStatus').innerText(),'Lector listo · QR y barras');
