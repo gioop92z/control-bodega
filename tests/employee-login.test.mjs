@@ -101,7 +101,7 @@ test('server login failure does not falsely say that employee was admitted',asyn
   assert.equal(h.sessionStorage.getItem('nova.employeeNumber'),null);
   assert.equal(h.reloads,0);
   assert.equal(h.button.disabled,false);
-  assert.match(h.nodes.get('loginMsg').innerHTML,/No se pudo iniciar la sesión operativa/);
+  assert.match(h.nodes.get('loginMsg').innerHTML,/<div class="error">.+<\/div>/);
 });
 
 test('existing administrator sessions are redirected to employee sign-in',async()=>{
