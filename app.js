@@ -340,7 +340,7 @@ function header() {
     <div>
       <div class="eyebrow">Control de Inventario</div>
       <h2>${esc(deptName())}</h2>
-      <div class="tiny access-label" data-access-role="${S.admin?'admin':'seller'}"><span class="status-dot"></span>Empleado ${esc(sessionStorage.getItem('nova.employeeNumber')||'')}</div>
+      <div class="tiny access-label" data-access-role="${S.admin?'admin':'seller'}"><span class="status-dot"></span>Empleado ${esc((typeof sessionStorage!=='undefined'?sessionStorage.getItem('nova.employeeNumber'):'')||'')}</div>
     </div>
     <div class="top-actions">
       ${S.depts.length > 1 ? `<select id="deptSelect" class="compact">${S.depts.map(d => `<option value="${d.id}" ${d.id===S.deptId?'selected':''}>${esc(d.nombre)}</option>`).join('')}</select>` : ''}
