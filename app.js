@@ -13,10 +13,11 @@ import { FastExitQueue } from './exit-queue.mjs?v=3.8.0';
 import { mountFastExit } from './exit-queue-ui.mjs?v=3.8.0';
 import { ReceiveQueue } from './receive-queue.mjs?v=3.9.5';
 import { mountFastReceive } from './receive-queue-ui.mjs?v=3.9.5';
-import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?v=5.1.0';
-import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=5.8.2';
+import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?v=5.8.3';
+import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=5.8.3';
 import { mountOperations } from './operations-v4.mjs?v=5.0.0';
-import { ScanEvidence, listSkuEvidence, listLocalSkuEvidence } from './scan-evidence.mjs?v=5.1.1';
+import { ScanEvidence, listSkuEvidence, listLocalSkuEvidence } from './scan-evidence.mjs?v=5.8.3';
+import {listLocalSkuAudit,captureMethodLabel} from './receiving-audit.mjs?v=5.8.3';
 import { lookupPublicCatalog, publicSearchUrl, lookupLiverpoolFamily, lookupLiverpoolModels } from './catalog-hybrid.mjs?v=5.8.0';
 import { liverpoolPreview } from './catalog-visual.mjs?v=5.6.0';
 import { catalogCandidate,confirmCatalogCandidate,rejectCatalogCandidate,isRejectedCandidate } from './catalog-relations.mjs?v=5.6.0';
@@ -32,7 +33,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '5.8.2';
+const APP_VERSION = '5.8.3';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 const HISTORY_RESTART_CUTOFF = '2026-10-15T22:15:00.000Z';
 
@@ -51,6 +52,7 @@ const S = {
   searchResult: null,
   searchType: null,
   evidencePhotos: [],
+  evidenceAudit: [],
   evidenceStatus: 'idle',
   externalStatus: 'idle',
   externalProduct: null,
@@ -173,6 +175,7 @@ function clearEvidenceImages(){
     if(photo.local&&photo.url?.startsWith('blob:'))URL.revokeObjectURL(photo.url);
   }
   S.evidencePhotos=[];
+  S.evidenceAudit=[];
 }
 function resetSearchContext() {
   searchRequest++;
@@ -546,7 +549,8 @@ function fastReceiveView(){
   continuousQueue=current;
   continuousCleanup=mountContinuousReceive(panel.querySelector('#continuousReceiveRoot'),current,{
     startScanner,stopScanner,
-    onEvidence:(id,code,frame)=>{void evidence.capture(id,code,frame,()=>current.rows.find(row=>row.id===id));},
+    onEvidence:(id,code,frame)=>{void evidence.capture(id,code,frame,()=>current.rows.find(row=>row.id===id))
+      .then(state=>current.markEvidence(id,state)).catch(()=>current.markEvidence(id,'failed'));},
     onEvidenceConfirmed:row=>{void evidence.confirm(row);prefetchUnknownCatalog(row.product);},
     isCurrent:()=>S.view==='home'&&S.deptId===deptId&&continuousQueue===current&&floatingReceiveElement===layer,
     onLegacy:()=>{if(receiveBusy())return;legacyReceiveView();},
@@ -726,18 +730,40 @@ function searchView() {
 }
 
 function searchEvidenceHtml() {
-  if(S.evidenceStatus==='loading')return '<section class="vantis-evidence"><h3>Registro visual</h3><p class="muted">Cargando imágenes privadas de las recepciones…</p></section>';
-  if(S.evidenceStatus==='error')return '<section class="vantis-evidence"><h3>Registro visual</h3><p class="muted">Las fotografías todavía no están disponibles desde esta instancia. Las nuevas capturas de cámara se intentarán sincronizar.</p></section>';
-  const photos=S.evidencePhotos||[];
-  if(!photos.length)return '<section class="vantis-evidence"><h3>Registro visual</h3><p class="muted">Sin capturas de cámara para este SKU. Esta evidencia de recepción es independiente de la fotografía del catálogo mostrada arriba.</p>'+(vantisBackendConfig.mode==='LEGACY_PRODUCCION'?'<p class="tiny">Las capturas del lector de cámara permanecen en este dispositivo hasta habilitar la sincronización.</p>':'')+'</section>';
-  return '<section class="vantis-evidence"><h3>Registro visual <small>'+photos.length+' últimas capturas</small></h3>'+
-    '<p class="muted">Fotogramas de cámara (pueden mostrar el código sin el producto completo).'+(photos.some(p=>p.pendingLink)?' Hay lecturas con imagen que siguen pendientes de confirmar en el inventario.':'')+(photos.some(p=>p.local)?(vantisBackendConfig.mode==='LEGACY_PRODUCCION'?' Fotos locales: no sincronizadas entre dispositivos.':' Algunas fotos permanecen en este dispositivo, pendientes de sincronización.'):'')+'</p>'
-    '<div class="vantis-evidence-grid">'+photos.map(photo=>{
-      const when=new Date(photo.capturada_en).toLocaleString('es-MX',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
-      return '<figure class="vantis-evidence-item">'+(photo.url?
-        '<a href="'+esc(photo.url)+'" target="_blank" rel="noopener noreferrer" aria-label="Abrir evidencia del '+esc(when)+'"><img loading="lazy" src="'+esc(photo.url)+'" alt="Imagen del código escaneado para '+esc(S.searchResult?.sku||'SKU')+'"></a>'
-        :'<div class="vantis-evidence-missing">Imagen no disponible</div>')+
-        '<figcaption>'+esc(when)+' <span>· '+esc(photo.codigo_leido)+(photo.local?' · En este dispositivo':'')+(photo.pendingLink?' · Pendiente de confirmar':'')+'</span></figcaption></figure>';
+  if(S.evidenceStatus==='loading')return '<section class="vantis-evidence"><h3>Registro visual y auditoría</h3><p class="muted">Consultando lecturas y fotografías…</p></section>';
+  const photos=S.evidencePhotos||[],audit=S.evidenceAudit||[];
+  const byId=new Map(photos.map(photo=>[photo.evento_id,photo]));
+  const known=new Set(audit.map(row=>row.evento_id));
+  const items=[
+    ...audit.map(row=>({row,photo:byId.get(row.evento_id)||null})),
+    ...photos.filter(photo=>!known.has(photo.evento_id)).map(photo=>({
+      row:{evento_id:photo.evento_id,capturada_en:photo.capturada_en,codigo_leido:photo.codigo_leido,
+        metodo:'camera',operador:photo.operador||'Operador no disponible',estado:photo.pendingLink?'queued':'confirmed',
+        evidencia:photo.local?'local':'synced',marbete:photo.marbete||''},photo
+    }))
+  ].sort((a,b)=>String(b.row.capturada_en||'').localeCompare(String(a.row.capturada_en||''))).slice(0,16);
+  const note=vantisBackendConfig.mode==='LEGACY_PRODUCCION'
+    ? 'Auditoría y fotos disponibles en este dispositivo. La sincronización entre equipos todavía no está habilitada para producción.'
+    : 'Las fotos locales pendientes pueden sincronizarse cuando el servidor confirme el movimiento.';
+  if(!items.length)return '<section class="vantis-evidence"><h3>Registro visual y auditoría</h3><p class="muted">'+
+    (S.evidenceStatus==='error'?'No se pudo consultar el historial local. Conserva los datos de este navegador y vuelve a intentarlo.':
+      'No hay lecturas auditadas de este SKU en este dispositivo. Las entradas anteriores a esta actualización pueden no tener método registrado.')+
+    '</p><p class="tiny">'+esc(note)+'</p></section>';
+  return '<section class="vantis-evidence"><h3>Registro visual y auditoría <small>'+items.length+' registros recientes</small></h3>'+
+    '<p class="muted">Cada registro corresponde a una lectura, no a una imagen de catálogo. '+esc(note)+'</p>'+
+    '<div class="vantis-evidence-grid">'+items.map(({row,photo})=>{
+      const when=row.capturada_en&&Number.isFinite(Date.parse(row.capturada_en))
+        ?new Date(row.capturada_en).toLocaleString('es-MX',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})
+        :'Fecha no disponible';
+      const method=captureMethodLabel(row.metodo);
+      const picture=photo?.url
+        ?'<a href="'+esc(photo.url)+'" target="_blank" rel="noopener noreferrer" aria-label="Ver fotograma de '+esc(when)+'"><img loading="lazy" src="'+esc(photo.url)+'" alt="Fotograma del código '+esc(row.codigo_leido)+'"></a>'
+        :'<div class="vantis-evidence-missing">'+(row.metodo==='manual'?'Ingreso sin fotografía':row.metodo==='scanner'?'Lector físico: sin foto':
+          row.metodo==='camera'?(row.evidencia==='pending'?'Foto pendiente':row.evidencia==='failed'?'Foto no disponible':'Sin foto recuperable'):'Sin evidencia fotográfica')+'</div>';
+      return '<article class="vantis-evidence-item"><span class="vantis-evidence-method '+esc(row.metodo)+'">'+esc(method)+'</span>'+picture+
+        '<div class="vantis-evidence-meta"><strong>'+esc(when)+'</strong><span>Responsable: '+esc(row.operador||'No identificado')+'</span>'+
+        '<span>Código: '+esc(row.codigo_leido||'—')+'</span><span>Marbete: '+esc(row.marbete||'Sin ubicación')+'</span>'+
+        '<span>Estado: '+esc(row.estado||'No disponible')+'</span></div></article>';
     }).join('')+'</div></section>';
 }
 
@@ -1062,9 +1088,10 @@ async function doSearch(code) {
       startCatalogLookup([p.sku,p.upc],current);
       // La búsqueda de stock es independiente de la descarga de imágenes.
       void Promise.allSettled([
-        vantisBackendConfig.mode==='LEGACY_PRODUCCION'?Promise.resolve([]):listSkuEvidence(sb,deptId,p.sku),
-        listLocalSkuEvidence(deptId,S.user.id,p.sku,{codes:[p.upc]})
-      ]).then(([remote,local])=>{
+        vantisBackendConfig.mode==='LEGACY_PRODUCCION'?Promise.resolve([]):listSkuEvidence(sb,deptId,p.sku,{limit:16}),
+        listLocalSkuEvidence(deptId,S.user.id,p.sku,{codes:[p.upc],limit:16}),
+        listLocalSkuAudit(deptId,S.user.id,p.sku,{codes:[p.upc],limit:16})
+      ]).then(([remote,local,audit])=>{
         if(!current()){
           if(local.status==='fulfilled')local.value.forEach(item=>URL.revokeObjectURL(item.url));
           return;
@@ -1076,8 +1103,9 @@ async function doSearch(code) {
         S.evidencePhotos=[...cloud,...localRows.filter(item=>{
           if(cloudIds.has(item.evento_id)){URL.revokeObjectURL(item.url);return false;}
           return true;
-        })].sort((a,b)=>String(b.capturada_en).localeCompare(String(a.capturada_en))).slice(0,8);
-        S.evidenceStatus=cloud.length||localRows.length||remote.status==='fulfilled'?'ready':'error';
+        })].sort((a,b)=>String(b.capturada_en).localeCompare(String(a.capturada_en))).slice(0,16);
+        S.evidenceAudit=audit.status==='fulfilled'?audit.value:[];
+        S.evidenceStatus=(local.status==='rejected'&&audit.status==='rejected')?'error':'ready';
         render();
       });
       return;
