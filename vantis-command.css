@@ -4,6 +4,10 @@
 body,.app-shell{background:#fbf9fb!important}
 .content{padding-bottom:calc(44px + env(safe-area-inset-bottom,0px))!important}
 .bottom-nav,.vantis-position{display:none!important}
+/* La franja de otras marcas no aporta al flujo de bodega; Liverpool permanece en el encabezado. */
+.lp-family-strip{display:none!important}
+/* La isla nunca bloquea cámara ni la recepción de piezas. */
+body.vr-receive-open .vc-dock,body.vantis-scanner-open .vc-dock{display:none!important}
 
 /* El panel flotante sustituye por completo la fila inferior. */
 .vc-dock{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:91;pointer-events:none;isolation:isolate}
