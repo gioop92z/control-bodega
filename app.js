@@ -33,7 +33,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '5.9.0';
+const APP_VERSION = '6.0.0';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 const HISTORY_RESTART_CUTOFF = '2026-10-15T22:15:00.000Z';
 
@@ -210,17 +210,15 @@ function humanError(e) {
 }
 
 function roleFromUser(user) {
-  const email = String(user?.email || '').toLowerCase();
-  if (email === '99@bodega.local') return 'admin';
-  if (email === '10@bodega.local') return 'seller';
-  return null;
+  // La interfaz operativa nunca adquiere permisos de administrador.
+  return String(user?.email||'').toLowerCase()==='10@bodega.local'?'seller':null;
 }
-
-function applyRole(role) {
-  S.access = role;
-  S.admin = role === 'admin';
-  S.staff = S.admin;
-  S.displayName = S.admin ? 'Administrador' : 'Vendedor general';
+function employeeNumber() {
+  return (sessionStorage.getItem('nova.employeeNumber')||'').trim();
+}
+function applyRole(role){
+  S.access=role;S.admin=false;S.staff=false;
+  S.displayName=employeeNumber()?'Empleado '+employeeNumber():'Operador';
 }
 
 function cleanupLegacyAccess() {
@@ -240,7 +238,8 @@ async function boot() {
   const role = roleFromUser(user);
   if (!role) {
     await sb.auth.signOut();
-    return renderLogin('Este acceso ya no está habilitado.');
+    S.user=null;
+    return renderLogin();
   }
   S.user = user;
   applyRole(role);
@@ -262,65 +261,72 @@ async function loadDepartments() {
 }
 
 function renderLogin(err='') {
+  document.documentElement.classList.remove('vantis-session-pending');
   app.innerHTML = `
-    <main class="login-shell">
+    <main class="login-shell vantis-employee-login">
       <section class="login-card">
-        <div class="brandmark"><span>CI</span></div>
-        <div class="eyebrow">Bodega inteligente · v${APP_VERSION}</div>
-        <h1>Control de Inventario</h1>
-        <p class="muted">Dos accesos. Menos pasos. Inventario en tiempo real.</p>
-        <div class="login-accesses">
-          <div><b>Administrador</b><span>Configuración, importaciones e historial</span></div>
-          <div><b>Vendedor general</b><span>Entradas, salidas, búsqueda y conteos</span></div>
-        </div>
+        <div class="vantis-login-mark" aria-hidden="true">V</div>
+        <div class="eyebrow">VANTIS · ACCESO OPERATIVO</div>
+        <h1>Tu turno comienza aquí.</h1>
+        <p class="muted">Identifícate con tu número de empleado para registrar tus movimientos.</p>
         <form id="loginForm" class="stack">
-          <label>Clave</label>
-          <input id="clave" autocomplete="username" inputmode="numeric" maxlength="2" placeholder="99 o 10">
-          <label>PIN</label>
-          <input id="pin" type="password" autocomplete="current-password" inputmode="numeric" placeholder="Tu PIN">
-          <div id="loginMsg">${err ? `<div class="error">${esc(err)}</div>` : ''}</div>
-          <button class="primary" type="submit">Entrar</button>
+          <label for="employeeNumber">Número de empleado</label>
+          <input id="employeeNumber" name="employeeNumber" autocomplete="off" inputmode="numeric"
+            pattern="[0-9]{4,12}" minlength="4" maxlength="12" placeholder="Ej. 16647310" required autofocus>
+          <div id="loginMsg" role="status" aria-live="polite">${err ? `<div class="error">${esc(err)}</div>` : ''}</div>
+          <button class="primary" type="submit">Entrar a VANTIS</button>
+          <button class="secondary vantis-login-scan" id="scanEmployeeLogin" type="button">▣ Escanear gafete</button>
         </form>
-        <p class="tiny center">Acceso seguro · Información separada por departamento</p>
+        <p class="tiny center">El número se registra como identificador de cada operación.</p>
       </section>
     </main>`;
-  $('loginForm').onsubmit = doLogin;
+  $('loginForm').onsubmit=doLogin;
+  $('scanEmployeeLogin').onclick=()=>{
+    startScanner(code=>{
+      stopScanner();
+      const value=String(code||'').replace(/\s/g,'');
+      if(!/^[0-9]{4,12}$/.test(value)){
+        $('loginMsg').textContent='El gafete no contiene un número válido.';
+        return;
+      }
+      $('employeeNumber').value=value;
+      $('loginForm').requestSubmit();
+    },'gafete de empleado',{qrEnabled:true}).catch(()=>{
+      $('loginMsg').textContent='No fue posible abrir la cámara. Puedes escribir tu número.';
+    });
+  };
 }
-
 async function doLogin(e) {
   e.preventDefault();
-  const button = e.submitter;
-  const clave = $('clave').value.trim();
-  const pin = $('pin').value.trim();
-  $('loginMsg').innerHTML = '';
-
-  if (!['99','10'].includes(clave)) {
-    $('loginMsg').innerHTML = '<div class="error">Solo existen los accesos 99 (Administrador) y 10 (Vendedor general).</div>';
+  const button=e.submitter||document.querySelector('#loginForm button[type="submit"]');
+  const employee=String($('employeeNumber')?.value||'').replace(/\s/g,'');
+  const msg=$('loginMsg');
+  if(!/^[0-9]{4,12}$/.test(employee)){
+    msg.textContent='Escribe un número de empleado de 4 a 12 dígitos.';
     return;
   }
-  if (!pin) {
-    $('loginMsg').innerHTML = '<div class="error">Escribe tu PIN.</div>';
-    return;
-  }
-  if (clave === '10' && pin !== '1010') {
-    $('loginMsg').innerHTML = '<div class="error">Clave o PIN incorrectos.</div>';
-    return;
-  }
-
-  button.disabled = true;
-  button.textContent = 'Validando…';
-  try {
+  button.disabled=true;button.textContent='Preparando sesión…';msg.textContent='';
+  try{
     cleanupLegacyAccess();
-    await sb.auth.signOut();
-    const email = `${clave}@bodega.local`;
-    const password = clave === '10' ? 'bodega-10-1010' : `bodega-99-${pin}`;
-    const r = await sb.auth.signInWithPassword({ email, password });
-    if (r.error) throw Error('Clave o PIN incorrectos.');
+    // El número identifica al operador. Los permisos siguen en la cuenta
+    // Supabase operativa existente, nunca en la cuenta administrativa.
+    const current=await sb.auth.getUser();
+    if(roleFromUser(current.data?.user)!=='seller'){
+      await sb.auth.signOut();
+      const result=await sb.auth.signInWithPassword({
+        email:'10@bodega.local',
+        password:'bodega-10-1010'
+      });
+      if(result.error)throw Error('No se pudo iniciar la sesión operativa.');
+    }
+    sessionStorage.setItem('nova.employeeNumber',employee);
+    sessionStorage.removeItem('vantis.session.ready');
+    sessionStorage.removeItem('vantis.session.role');
+    sessionStorage.setItem('vantis.skipIntroOnce','1');
     location.reload();
-  } catch (x) {
-    $('loginMsg').innerHTML = `<div class="error">${esc(humanError(x))}</div>`;
-    button.disabled = false;
-    button.textContent = 'Entrar';
+  }catch(error){
+    msg.textContent=humanError(error);
+    button.disabled=false;button.textContent='Entrar a VANTIS';
   }
 }
 
@@ -330,7 +336,7 @@ function deptName() {
 
 function nav() {
   const items = [['home','Inicio','⌂'],['search','Buscar','⌕'],['inventory','Inventario','▦']];
-  if (S.admin) items.push(['history','Historial','☷'],['admin','Ajustes','⚙']);
+  // Solo navegación operativa; las herramientas administrativas no se exponen.
   return `<nav class="vantis-command" aria-label="Navegación principal">
     <div id="vantisCommandPanel" class="vantis-command-panel" aria-label="Secciones" aria-hidden="true">
       ${items.map(([v,l,i]) => `<button type="button" data-view="${v}" class="vantis-command-item ${S.view===v?'active':''}" ${S.view===v?'aria-current="page"':''}><span aria-hidden="true">${i}</span><b>${l}</b></button>`).join('')}
@@ -344,7 +350,7 @@ function header() {
     <div>
       <div class="eyebrow">Control de Inventario</div>
       <h2>${esc(deptName())}</h2>
-      <div class="tiny access-label"><span class="status-dot"></span>${esc(S.displayName)} · acceso ${S.admin?'99':'10'}</div>
+      <div class="tiny access-label"><span class="status-dot"></span>${esc(employeeNumber()?'Empleado '+employeeNumber():'Turno operativo')}</div>
     </div>
     <div class="top-actions">
       ${S.depts.length > 1 ? `<select id="deptSelect" class="compact">${S.depts.map(d => `<option value="${d.id}" ${d.id===S.deptId?'selected':''}>${esc(d.nombre)}</option>`).join('')}</select>` : ''}
