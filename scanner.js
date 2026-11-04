@@ -191,19 +191,19 @@ export async function startScanner(cb, label = 'código', options = {}) {
   // iOS Safari otherwise clips position:fixed to a tiny camera preview.
   document.body.insertAdjacentHTML('beforeend',
     '<div class="scanner scanner-pro' + (options.qrEnabled?' scanner-qr':'') + '" id="scanner" role="dialog" aria-modal="true" aria-label="Lector VANTIS">' +
-      '<div class="scanner-head"><div class="scanner-heading"><span class="scanner-label">VANTIS <i>·</i> LECTOR INTELIGENTE</span><b>Escanear ' + String(label).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])) + '</b></div>' +
+      '<div class="scanner-head"><div class="scanner-heading"><span class="scanner-label">VANTIS <i>·</i> Lector de cámara</span><b>Escanear ' + String(label).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])) + '</b></div>' +
       '<button id="closeScan" class="scanner-close" type="button" aria-label="Cerrar cámara">✕</button></div>' +
       '<div id="scannerViewport" class="scanner-viewport">' +
         '<video id="scanVideo" autoplay muted playsinline aria-label="Vista en vivo de la cámara"></video>' +
         '<div class="scanner-shade" aria-hidden="true"></div>' +
-        '<div class="scanner-live"><span></span> CÁMARA ACTIVA</div>' +
-        '<div class="scanner-target" aria-hidden="true"><span class="scanner-corner tl"></span><span class="scanner-corner tr"></span><span class="scanner-corner bl"></span><span class="scanner-corner br"></span><span class="scanner-laser"></span></div>' +
-        '<div class="scanner-hint">Alinea el código dentro de la guía</div>' +
-        '<div id="scannerReceipt" class="scanner-receipt" hidden><span class="scanner-tick">✓</span><span><b>CÓDIGO DETECTADO</b><strong id="scannerReceiptCode"></strong><small id="scannerCount">1 LECTURA</small></span></div>' +
+        '<div class="scanner-live"><span></span> Cámara activa</div>' +
+        '<div class="scanner-target" aria-hidden="true"><span class="scanner-corner tl"></span><span class="scanner-corner tr"></span><span class="scanner-corner bl"></span><span class="scanner-corner br"></span></div>' +
+        '<div class="scanner-hint">Coloca el código dentro del recuadro</div>' +
+        '<div id="scannerReceipt" class="scanner-receipt" hidden><span class="scanner-tick">✓</span><span><b>Código detectado</b><strong id="scannerReceiptCode"></strong><small id="scannerCount">1 LECTURA</small></span></div>' +
       '</div>' +
       '<div class="scanner-note">' +
-        '<div id="scannerStatus" role="status" aria-live="polite">Buscando QR o código de barras…</div>' +
-        (options.captureEvidence?'<small class="scanner-evidence-note">El registro con cámara conserva un fotograma del código como evidencia interna.</small>':'') +
+        '<div id="scannerStatus" role="status" aria-live="polite">Buscando código…</div>' +
+        (options.captureEvidence?'<small class="scanner-evidence-note">Se guarda una imagen del código como evidencia de la lectura.</small>':'') +
         '<div class="scanner-actions">' +
         (options.continuous && options.allowRepeat !== false ? '<button id="scanRepeat" type="button" class="scanner-action" disabled>+1 mismo SKU</button>' : '') +
         '<button id="scanSwitchEngine" type="button" class="scanner-action">Cambiar lector</button></div>' +
@@ -233,7 +233,7 @@ export async function startScanner(cb, label = 'código', options = {}) {
     });
     if (!stillActive()) { readerControls.stop(); return; }
     controls = readerControls;
-    status('Lector listo · QR y barras · lectura automática');
+    status('Lector listo · QR y barras');
   }
 
   async function startQuagga() {
