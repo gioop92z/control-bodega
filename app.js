@@ -7,7 +7,7 @@ function getSpreadsheet(){
     .catch(error=>{spreadsheetPromise=null;throw error;});
   return spreadsheetPromise;
 }
-import { startScanner, stopScanner } from './scanner.js?v=5.8.2';
+import { startScanner, stopScanner } from './scanner.js?v=5.8.3';
 import { getMarbete, normalizeMarbete, parseMarbeteScan, assignProductLocation, registerMarbete, locationQuery } from './product-location.mjs?v=3.9.5';
 import { FastExitQueue } from './exit-queue.mjs?v=3.8.0';
 import { mountFastExit } from './exit-queue-ui.mjs?v=3.8.0';
