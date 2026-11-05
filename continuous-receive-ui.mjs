@@ -1,5 +1,5 @@
 import {wireReceivingInput} from './receiving-input.mjs?v=5.8.3';
-import {receiptCsv} from './continuous-receive.mjs?v=5.8.3';
+import {receiptCsv} from './continuous-receive.mjs?v=5.10.4';
 import {captureMethodLabel} from './receiving-audit.mjs?v=5.8.3';
 
 const esc = value => String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -72,7 +72,7 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
   const pendingReason=row=>{
     if(row.status==='sending')return 'El servidor está procesando esta lectura.';
     if(row.status==='uncertain')return 'Sin confirmación del servidor. No vuelvas a escanear la misma pieza: se conciliará con su folio original.';
-    if(!row.canSync)return 'Falta asignar un marbete o autorizar recepción sin ubicación.';
+    if(!row.canSync)return 'Pendiente local: asigna un marbete o pulsa «Registrar sin marbete». No suma existencias todavía.';
     if(row.error)return row.error;
     if(queue.backend==='offline'||!queue.online())return 'Conexión no confirmada. Puedes volver a intentar cuando haya señal.';
     return 'Lectura protegida, esperando respuesta del servidor.';
@@ -113,7 +113,7 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     $('crVisitCount').textContent=num(report.visitPieces);$('crTotalCount').textContent=num(report.totalPieces);
     $('crPendingLocation').hidden=!report.awaitingLocation||Boolean(active);
     $('crPendingLocationCount').textContent=num(report.awaitingLocation)+' pieza'+(report.awaitingLocation===1?'':'s')+' esperando ubicación';
-    $('crSaveWithoutLocation').disabled=!ready()||!report.awaitingLocation;
+    $('crSaveWithoutLocation').disabled=!queue.canApproveWithoutLocation||!report.awaitingLocation;
     $('crScan').disabled=!ready();
     $('crDevice').textContent=camera?'Cámara activa · QR y barras':opening?'Abriendo cámara…':manualActive?'Modo manual · sin fotografía':lastSignal?'Lector portátil · última señal '+lastSignal:'Lector portátil listo';
     $('crCameraButton').textContent=camera?'Cerrar cámara':'Cámara';$('crCameraButton').disabled=opening||(!ready()&&!camera);
@@ -155,7 +155,7 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
   }
   $('crScanForm').onsubmit=event=>{event.preventDefault();input.flush('manual');};
   $('crSaveWithoutLocation').onclick=()=>{
-    try{const count=queue.approveWithoutLocation();feedback(count+' pieza'+(count===1?'':'s')+' preparada'+(count===1?'':'s')+' para registrar sin ubicación','info');render();input.focus();}
+    try{const count=queue.approveWithoutLocation();feedback(count+' pieza'+(count===1?'':'s')+' autorizada'+(count===1?'':'s')+' sin marbete · pendiente'+(count===1?'':'s')+' de confirmación del servidor','info');render();input.focus();}
     catch(error){fail(error);}
   };
   $('crKeyboard').onclick=()=>{const field=$('crScan');if(!ready())return;input.manual();manualActive=true;render();field.inputMode='text';field.blur();field.focus({preventScroll:true});};

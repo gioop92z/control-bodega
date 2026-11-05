@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ContinuousReceive,receiptCsv,withNetworkDeadline} from '../continuous-receive.mjs';
+import {ContinuousReceive,receiptCsv,withNetworkDeadline,isExpiredAuthError,SupabaseReceiptApi} from '../continuous-receive.mjs';
 import {durableMemory,receiptLocks,receivingDb} from './helpers/receiving-db.mjs';
 
 const SKU='0012345678',UPC='0200000000001';
@@ -198,4 +198,82 @@ test('pending detail survives finish/resume and keeps its same UUID for safe ret
   assert.equal(h.queue.pendingDetails().length,0);
   assert.equal(h.queue.report().totalPieces,1);
   assert.equal(h.db.requests[0].p_id,saved.id);
+});
+
+
+test('SKU without marbete stays local without catalog or stock writes until approval',async t=>{
+  const h=await setup(t);
+  h.queue.scan('PENDIENTE-SIN-MARBETE-2026');
+  await h.queue.flush();
+  assert.equal(h.queue.report().awaitingLocation,1);
+  assert.equal(h.db.movements.length,0);
+  assert.equal(h.db.products.some(row=>row.sku==='PENDIENTE-SIN-MARBETE-2026'),false);
+  assert.equal(h.queue.rows[0].status,'queued');
+  assert.equal(h.queue.rows[0].payload,null);
+  assert.equal(h.queue.canApproveWithoutLocation,true);
+  h.queue.approveWithoutLocation();
+  await h.queue.flush();
+  assert.equal(h.queue.rows[0].status,'confirmed');
+  assert.equal(h.queue.rows[0].location,null);
+  assert.equal(h.queue.rows[0].unlocatedApproved,true);
+  assert.equal(h.db.movements.length,1);
+  assert.equal(h.db.movements[0].marbete_codigo,null);
+  assert.equal(h.db.products.find(row=>row.sku==='PENDIENTE-SIN-MARBETE-2026').stock,1);
+});
+
+test('approve without marbete remains available during server session recovery',async t=>{
+  const h=await setup(t);
+  h.queue.scan(SKU);
+  h.queue.backend='checking';
+  assert.equal(h.queue.canScan,false);
+  assert.equal(h.queue.canApproveWithoutLocation,true);
+  assert.equal(h.queue.approveWithoutLocation(),1);
+  assert.equal(h.queue.rows[0].unlocatedApproved,true);
+  assert.equal(h.db.movements.length,0);
+  h.queue.backend='ready';
+  await h.queue.flush();
+  assert.equal(h.queue.report().totalPieces,1);
+});
+
+test('a local receipt session error is not mislabeled an expired Auth token',()=>{
+  assert.equal(isExpiredAuthError(Error('Sesión local incompatible.')),false);
+  assert.equal(isExpiredAuthError(Error('La sesión se cerró antes de terminar.')),false);
+  assert.equal(isExpiredAuthError(Error('El servidor tarda en responder a esta sesión.')),false);
+  assert.equal(isExpiredAuthError({code:'42501',message:'Sin acceso al departamento'}),false);
+  assert.equal(isExpiredAuthError({code:'PGRST301',message:'JWT expired'}),true);
+  assert.equal(isExpiredAuthError(Error('Invalid refresh token')),true);
+});
+
+test('expired JWT can be refreshed in a read-only capability probe without losing rows',async t=>{
+  const fixture=receivingDb();
+  const api=fixture.api('user1');
+  const original=api.capabilities.bind(api);
+  let first=true,refreshes=0;
+  api.capabilities=async()=>{
+    if(first){first=false;throw Object.assign(Error('JWT expired'),{code:'PGRST301'});}
+    return original();
+  };
+  api.recoverAuth=async id=>{assert.equal(id,'user1');refreshes++;return true;};
+  const h=await setup(t,{shared:fixture,api});
+  assert.equal(h.queue.backend,'ready');
+  assert.equal(refreshes,1);
+  h.queue.scan(SKU);
+  h.queue.approveWithoutLocation();
+  await h.queue.flush();
+  assert.equal(h.queue.report().totalPieces,1);
+  assert.equal(fixture.db.movements.length,1);
+});
+
+test('failed JWT refresh leaves the current UUID and scan protected for later retry',async t=>{
+  const fixture=receivingDb();
+  const api=fixture.api('user1');
+  api.capabilities=async()=>{throw Object.assign(Error('JWT expired'),{code:'PGRST301'});};
+  api.recoverAuth=async()=>false;
+  const h=await setup(t,{shared:fixture,api});
+  assert.equal(h.queue.backend,'offline');
+  assert.match(h.queue.error,/autoriza|renovar/i);
+  const id=h.queue.scan(SKU).id;
+  assert.equal(h.queue.rows[0].id,id);
+  assert.equal(h.queue.rows[0].status,'queued');
+  assert.equal(fixture.db.movements.length,0);
 });

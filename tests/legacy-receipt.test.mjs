@@ -45,8 +45,10 @@ function server({modern=false,lost=false}={}){
         assert.equal(args.p_cantidad,1);
         product.stock++;
         const assignment=db.assignments.find(row=>row.sku===product.sku&&row.marbete_codigo===args.p_marbete);
-        assert.ok(assignment);
-        assignment.cantidad=(assignment.cantidad||0)+1;
+        if(args.p_marbete){
+          assert.ok(assignment);
+          assignment.cantidad=(assignment.cantidad||0)+1;
+        }
         db.movements.push({id:args.p_id,tipo:'ENTRADA',sku:product.sku,cantidad:1,
           departamento_id:'dept1',marbete_codigo:args.p_marbete,
           stock_resultante:product.stock,user_id:'user1',created_at:new Date().toISOString()});
@@ -139,4 +141,30 @@ test('continuous queue records a stream of independent legacy receipts without c
   assert.equal(new Set(db.movements.map(x=>x.id)).size,100);
   assert.ok(queue.rows.every(x=>x.writeMode==='legacy'&&x.status==='confirmed'));
   assert.throws(()=>queue.undoLast(),/migración segura/);
+});
+
+
+test('legacy database records a single unit without any marbete',async()=>{
+  const {sb,db}=server(),api=new LegacyReceiptApi(sb,'dept1');
+  const unlocated={...payload,p_id:'00000000-0000-4000-8000-000000000333',p_marbete:null};
+  const row=await api.receive(unlocated,opts);
+  assert.equal(row.marbete_codigo,null);
+  assert.equal(db.products[0].stock,11);
+  assert.equal(db.assignments.length,0);
+  assert.equal(db.movements.length,1);
+  const verified=await api.receive(unlocated,{...opts,allowWrite:false});
+  assert.equal(verified.id,unlocated.p_id);
+  assert.equal(db.movements.length,1);
+  assert.equal(db.writes,1);
+});
+
+test('lost server response to unlocated legacy entry is read-only reconciled',async()=>{
+  const {sb,db}=server({lost:true}),api=new LegacyReceiptApi(sb,'dept1');
+  const unlocated={...payload,p_id:'00000000-0000-4000-8000-000000000334',p_marbete:null};
+  await assert.rejects(()=>api.receive(unlocated,opts),/Network response was lost/);
+  assert.equal(db.movements.length,1);
+  const verified=await api.receive(unlocated,{...opts,allowWrite:false});
+  assert.equal(verified.marbete_codigo,null);
+  assert.equal(db.movements.length,1);
+  assert.equal(db.writes,1);
 });
