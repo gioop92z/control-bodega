@@ -6,7 +6,7 @@ import vm from 'node:vm';
 const source=readFileSync(new URL('../vantis-boot.js',import.meta.url),'utf8');
 const introKey='vantis.cinema.introShown.v1';
 
-function renderDocument(store,{reduceMotion=false,brokenStorage=false}={}){
+function renderDocument(store,{reduceMotion=false,brokenStorage=false,persistent=null,now=100000}={}){
   let shown=0,skipped=false,removed=false;
   const overlay={
     id:'vantisCinema',
@@ -41,7 +41,7 @@ function renderDocument(store,{reduceMotion=false,brokenStorage=false}={}){
     addEventListener(){},removeEventListener(){}
   };
   const sandbox={
-    document,window,sessionStorage,performance:{now:()=>100},setTimeout:()=>1,
+    document,window,sessionStorage,localStorage:persistent?{getItem:k=>persistent.get(k)||null,setItem:(k,v)=>persistent.set(k,String(v))}:undefined,Date:{now:()=>now},performance:{now:()=>100},setTimeout:()=>1,
     requestAnimationFrame:()=>1,cancelAnimationFrame(){},
     devicePixelRatio:1,innerWidth:390,innerHeight:844
   };
@@ -78,4 +78,16 @@ test('reduced-motion setting avoids opening entirely',()=>{
 
 test('unavailable sessionStorage does not crash the opening sequence',()=>{
   assert.equal(renderDocument(new Map(),{brokenStorage:true}).shown,1);
+});
+
+test('iPhone reload with fresh sessionStorage cannot replay intro within one minute',()=>{
+  const persistent=new Map();
+  assert.equal(renderDocument(new Map(),{persistent,now:100000}).shown,1);
+  assert.equal(renderDocument(new Map(),{persistent,now:105000}).shown,0);
+  assert.equal(renderDocument(new Map(),{persistent,now:161000}).shown,1);
+});
+
+test('intro cannot be started twice in the same document',()=>{
+  const persistent=new Map();
+  assert.equal(renderDocument(new Map(),{persistent,now:100000}).shown,1);
 });
