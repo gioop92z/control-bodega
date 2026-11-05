@@ -7,6 +7,15 @@ import {scanMetric,startMetric,serverMetric} from './vantis-telemetry-v5.mjs';
 const message = error => String(error?.message || error || 'No se pudo guardar.');
 const permanent = error => /^(22|23|P0001)/.test(String(error?.code || ''));
 const missing = error => /PGRST202|42883/.test(String(error?.code || ''));
+// A user-facing "session expired" warning must only come from an actual
+// token/authentication error, not a local receipt-session or network message.
+export const isExpiredAuthError = error => {
+  const code=String(error?.code||'');
+  const detail=message(error);
+  return /^(PGRST30[123]|jwt_expired|invalid_jwt|token_expired)$/i.test(code) ||
+    /(?:jwt|access[ _-]?token|refresh[ _-]?token).{0,70}(?:expired|invalid|missing|not found)/i.test(detail) ||
+    /(?:expired|invalid|missing).{0,55}(?:jwt|access[ _-]?token|refresh[ _-]?token)/i.test(detail);
+};
 const uuid = () => crypto.randomUUID();
 // La petición puede quedarse esperando indefinidamente en Safari aunque haya Wi-Fi.
 // Timeout de diagnóstico: una escritura que no respondió es INCIERTA, nunca fallida.
@@ -83,6 +92,16 @@ export class SupabaseReceiptApi {
   }
   async receive(payload) { return locationQuery(this.sb.rpc('vantis_recibir_pieza_v1', payload)); }
   legacyReceive(payload,options) { return this.legacy.receive(payload,options); }
+  async recoverAuth(expectedUserId){
+    if(!this.sb.auth?.refreshSession)return false;
+    try{
+      const {data,error}=await this.sb.auth.refreshSession();
+      if(error)return false;
+      const identity=data?.user||data?.session?.user;
+      // Never continue a warehouse journal under a different Auth identity.
+      return Boolean(identity?.id&&identity.id===expectedUserId);
+    }catch{return false;}
+  }
 }
 
 export class ContinuousReceive {
@@ -186,7 +205,14 @@ export class ContinuousReceive {
     if (!this.owned || this.disposed || this.storageError) return;
     try {
       if (!this.online()) throw Error('Sin conexión.');
-      const result = await withNetworkDeadline(()=>this.api.capabilities(),'Consulta al servidor');
+      let result;
+      try {
+        result=await withNetworkDeadline(()=>this.api.capabilities(),'Consulta al servidor');
+      } catch(error) {
+        if(!isExpiredAuthError(error)||!await this.api.recoverAuth?.(this.userId))throw error;
+        // Recheck only a READ-ONLY capability probe after refreshing the token.
+        result=await withNetworkDeadline(()=>this.api.capabilities(),'Consulta al servidor');
+      }
       const compatible = result?.version===1 && result?.mode==='legacy' &&
         result?.atomic===false && result?.idempotent===false && result?.guarded===true;
       const modern = result?.version===1 && result?.atomic===true && result?.idempotent===true;
@@ -205,7 +231,15 @@ export class ContinuousReceive {
       this.schedule(0);
     } catch (error) {
       if (missing(error)) { this.backend = 'missing'; this.error = 'La recepción continua requiere activar la migración del servidor. La recepción por lote sigue disponible.'; }
-      else if (String(error?.code) === '42501' || /JWT|PGRST30/.test(String(error?.code))) { this.backend = 'denied'; this.error = 'El servidor no autoriza esta sesión. Vuelve a iniciar sesión.'; }
+      else if (isExpiredAuthError(error)) {
+        this.backend='offline';
+        this.error='No se ha podido renovar la autorización. Las lecturas siguen guardadas; reintenta la conexión.';
+        this.schedule(4000);
+      }
+      else if(String(error?.code)==='42501'){
+        this.backend='denied';
+        this.error='El servidor no autoriza esta operación en el departamento seleccionado.';
+      }
       else { if (this.backend !== 'invalid') this.backend = [1,-1].includes(this.state.backendVersion) ? 'offline' : 'checking'; this.error = message(error); this.schedule(4000); }
     }
     this.changed();
@@ -256,8 +290,13 @@ export class ContinuousReceive {
     this.changed();
     if(this.backend==='ready')void this.activateCandidate();
   }
+  get canApproveWithoutLocation() {
+    return this.owned&&!this.disposed&&!this.storageError&&!this.state.endedAt&&!this.state.pendingSwitch;
+  }
   approveWithoutLocation(){
-    if(!this.canScan)throw Error('La recepción no está preparada para guardar sin ubicación.');
+    // Authorizing an already journaled scan is LOCAL. Do not block the
+    // decision merely because Supabase is refreshing its session.
+    if(!this.canApproveWithoutLocation)throw Error('La recepción no está preparada para guardar sin ubicación.');
     const rows=this.rows.filter(r=>r.kind==='receive'&&!r.location&&!r.unlocatedApproved&&r.status==='queued');
     if(!rows.length)throw Error('No hay lecturas esperando ubicación.');
     for(const row of rows){
@@ -345,7 +384,12 @@ export class ContinuousReceive {
   async process() {
     if (this.state.candidate) { await this.activateCandidate(); if (this.state.candidate) return; }
     while (!this.disposed && !this.storageError && this.backend === 'ready' && this.online()) {
-      const candidates = this.rows.filter(row => ['queued','uncertain'].includes(row.status) && (!row.retryAt || row.retryAt <= this.now()) && row.visitId !== this.state.candidate?.visitId).slice(0,75);
+      // A SKU without a marbete is staged locally, without catalog writes or
+      // stock changes, until the operator explicitly approves 'sin marbete'.
+      const candidates = this.rows.filter(row => ['queued','uncertain'].includes(row.status) &&
+        (row.location||row.unlocatedApproved) &&
+        (!row.retryAt||row.retryAt<=this.now()) &&
+        row.visitId!==this.state.candidate?.visitId).slice(0,75);
       if (!candidates.length) break;
       const unresolved = candidates.filter(row => !row.payload && !row.product && row.kind === 'receive');
       try {
@@ -425,9 +469,12 @@ export class ContinuousReceive {
       else {
         row.status = 'uncertain'; row.retryAt = this.now() + Math.min(30000,1000 * 2 ** Math.min(row.attempts-1,5));
         if (missing(error)) this.backend = 'missing';
-        else if (String(error?.code) === '42501' || /PGRST30/.test(String(error?.code))) this.backend = 'denied';
+        else if(isExpiredAuthError(error))this.backend='offline';
+        else if(String(error?.code)==='42501')this.backend='denied';
         else if (this.backend !== 'invalid') this.backend = 'offline';
-        this.error = 'Hay lecturas pendientes de confirmación: ' + message(error);
+        this.error = isExpiredAuthError(error)
+          ? 'La autorización de red debe renovarse. La lectura conserva su folio y espera conciliación.'
+          : 'Hay lecturas pendientes de confirmación: ' + message(error);
       }
       this.saveRow(row);
     }
