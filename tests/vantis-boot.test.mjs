@@ -22,6 +22,7 @@ function renderDocument(store,{reduceMotion=false,brokenStorage=false}={}){
   };
   const document={
     readyState:'complete',
+    createElement(){return overlay},
     body:{appendChild(){shown++}},
     getElementById(id){
       if(id==='app')return {};
