@@ -2,18 +2,29 @@
 const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 const DURATION=4600;
 const INTRO_KEY='vantis.cinema.introShown.v1';
+const RECENT_KEY='vantis.cinema.lastOpenedAt.v1';
+const RELOAD_GUARD_MS=60*1000;
 let started=false;
 function claimOpening(){
-  // A login/logout or department change may reload the document; do not
-  // replay the startup film until the next genuinely new browser/app session.
+  // Session storage handles normal login reloads. A short persistent guard
+  // also handles iOS standalone relaunches that unexpectedly reset sessionStorage.
+  if(window.__vantisCinemaOpened)return false;
+  window.__vantisCinemaOpened=true;
   try{
     if(sessionStorage.getItem(INTRO_KEY)==='1')return false;
+    const now=Date.now();
+    try{
+      const last=Number(localStorage.getItem(RECENT_KEY)||0);
+      if(last>0&&now>=last&&now-last<RELOAD_GUARD_MS){
+        sessionStorage.setItem(INTRO_KEY,'1');
+        return false;
+      }
+    }catch{}
     sessionStorage.setItem(INTRO_KEY,'1');
+    try{localStorage.setItem(RECENT_KEY,String(now))}catch{}
     return true;
   }catch{
-    // Storage disabled: still prevent duplicate playback in this document.
-    if(window.__vantisCinemaOpened)return false;
-    window.__vantisCinemaOpened=true;
+    // Storage blocked: prevent duplicates within the current document.
     return true;
   }
 }
