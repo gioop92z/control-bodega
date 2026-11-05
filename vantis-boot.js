@@ -1,9 +1,25 @@
 /* VANTIS CINEMA — original real-time opening film, no third-party assets. */
 const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 const DURATION=4600;
+const INTRO_KEY='vantis.cinema.introShown.v1';
 let started=false;
+function claimOpening(){
+  // A login/logout or department change may reload the document; do not
+  // replay the startup film until the next genuinely new browser/app session.
+  try{
+    if(sessionStorage.getItem(INTRO_KEY)==='1')return false;
+    sessionStorage.setItem(INTRO_KEY,'1');
+    return true;
+  }catch{
+    // Storage disabled: still prevent duplicate playback in this document.
+    if(window.__vantisCinemaOpened)return false;
+    window.__vantisCinemaOpened=true;
+    return true;
+  }
+}
 function playVantisOpening(){
-  if(started||document.getElementById('vantisCinema'))return;
+  if(started||reduced||document.getElementById('vantisCinema'))return;
+  if(!claimOpening())return;
   started=true;
   const root=document.createElement('section');
   root.id='vantisCinema';
@@ -75,11 +91,10 @@ function playVantisOpening(){
     setTimeout(()=>root.remove(),440);
   }
   root.querySelector('button').addEventListener('click',close);
-  if(reduced){close();return}
   raf=requestAnimationFrame(render);
 }
 function check(){
-  // Show on each fresh opening, before login, without blocking subsequent operations.
+  // Show once at the beginning of the app session, not again after login reload.
   if(document.body&&document.getElementById('app'))playVantisOpening();
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',check,{once:true});else check();
