@@ -13,8 +13,8 @@ import { FastExitQueue } from './exit-queue.mjs?v=3.8.0';
 import { mountFastExit } from './exit-queue-ui.mjs?v=3.8.0';
 import { ReceiveQueue } from './receive-queue.mjs?v=3.9.5';
 import { mountFastReceive } from './receive-queue-ui.mjs?v=3.9.5';
-import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?v=5.8.3';
-import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=5.8.3';
+import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?v=5.10.4';
+import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=5.10.4';
 import { mountOperations } from './operations-v4.mjs?v=5.0.0';
 import { ScanEvidence, listSkuEvidence, listLocalSkuEvidence } from './scan-evidence.mjs?v=5.8.3';
 import {listLocalSkuAudit,listServerSkuAudit,captureMethodLabel} from './receiving-audit.mjs?v=5.8.3';
@@ -33,7 +33,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '5.10.2';
+const APP_VERSION = '5.10.4';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 const HISTORY_RESTART_CUTOFF = '2026-10-15T22:15:00.000Z';
 
@@ -205,7 +205,7 @@ function humanError(e) {
   const s = String(e?.message || e || 'Error');
   if (/fetch|network|load failed|abort/i.test(s)) return 'Sin conexión. Revisa tu internet e intenta de nuevo.';
   if (/permission|policy|42501|not authorized/i.test(s)) return 'Este acceso no tiene permiso para realizar esa acción.';
-  if (/JWT|expired|sesión|session/i.test(s)) return 'Tu sesión expiró. Vuelve a entrar.';
+  if (/(?:jwt|access[ _-]?token|refresh[ _-]?token).{0,70}(?:expired|invalid|missing|not found)|(?:expired|invalid|missing).{0,55}(?:jwt|access[ _-]?token|refresh[ _-]?token)|PGRST30[123]/i.test(s)) return 'No se pudo validar la autorización del servidor. Reintenta la conexión; las lecturas pendientes siguen protegidas.';
   return s.replace(/^.*?ERROR:\s*/,'');
 }
 
