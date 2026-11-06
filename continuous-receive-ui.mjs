@@ -1,5 +1,5 @@
 import {wireReceivingInput} from './receiving-input.mjs?v=5.8.3';
-import {receiptCsv} from './continuous-receive.mjs?v=5.10.4';
+import {receiptCsv} from './continuous-receive.mjs?v=5.10.5';
 import {captureMethodLabel} from './receiving-audit.mjs?v=5.8.3';
 
 const esc = value => String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -22,8 +22,8 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     <div id="crFeedback" class="cr-feedback" role="status" aria-live="polite" hidden></div>
     <section id="crPendingReview" class="cr-pending-review" aria-label="Lecturas pendientes" hidden>
       <div class="cr-pending-title"><div><small>PENDIENTE DE CONFIRMACIÓN</small><h2>Lecturas por resolver</h2></div><span id="crPendingBadge">0</span></div>
-      <p>Estas piezas todavía <b>no cuentan como confirmadas</b>. El folio queda guardado en el dispositivo.</p>
-      <div id="crPendingRows" class="cr-pending-rows"></div>
+      <p>Solo se suman las piezas confirmadas.</p>
+      <div id="crPendingRows" class="cr-pending-rows"></div><div class="cr-pending-actions"><button id="crResetPending" type="button" class="ghost">Reiniciar pendientes sin enviar</button></div>
       <div class="cr-pending-actions"><button id="crPendingRetry" type="button" class="primary">Reintentar sincronización</button><button id="crPendingBackup" type="button" class="secondary">Guardar respaldo JSON</button></div>
     </section>
     <div id="crPendingLocation" class="cr-pending-location" hidden><div><b id="crPendingLocationCount">0 piezas esperando ubicación</b><small>Escanea un marbete y se vincularán automáticamente, o guárdalas sin ubicación.</small></div><button id="crSaveWithoutLocation" type="button" class="secondary">Registrar sin marbete</button></div>
@@ -79,10 +79,10 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
   };
   const pendingMarkup=rows=>rows.slice(0,30).map(row=>
     '<article class="cr-pending-item"><div><b>'+esc(row.descripcion||row.code)+'</b>'+
-    '<span>SKU / código: '+esc(row.sku)+' · Marbete: '+esc(short(row.marbete)||'SIN UBICACIÓN')+
-    ' · '+esc(new Date(row.capturedAt).toLocaleString('es-MX'))+' · '+esc(captureMethodLabel(row.captureMethod))+'</span>'+
-    '<small>'+esc(pendingReason(row))+'</small></div>'+
-    '<span class="cr-pending-state">'+esc(labels[row.status]||row.status)+'</span></article>').join('')+
+    '<span>'+esc(short(row.marbete)||'Sin marbete')+' · '+esc(row.status==='uncertain'?'Por verificar':row.canSync?'Por confirmar':'Sin enviar')+'</span></div>'+
+    (row.status==='queued'&&row.attempts===0
+      ?'<button class="cr-cancel-row ghost" type="button" data-cancel-id="'+esc(row.id)+'" aria-label="Cancelar lectura '+esc(row.code)+'">Cancelar</button>'
+      :'<span class="cr-pending-state">'+esc(row.status==='uncertain'?'Verificar':'En proceso')+'</span>')+'</article>').join('')+
     (rows.length>30?'<p>Hay '+num(rows.length-30)+' lecturas adicionales en el respaldo JSON.</p>':'');
   const stamp=row=>'<span class="cr-badge cr-'+row.status+'">'+esc(labels[row.status])+'</span>';
   const method=row=>row.kind==='undo'?'Compensación':captureMethodLabel(row.captureMethod);
@@ -94,6 +94,7 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     const pendingPanel=$('crPendingReview');
     pendingPanel.hidden=!pendingRows.length;
     $('crPendingBadge').textContent=num(pendingRows.length);
+    $('crResetPending').disabled=!queue.owned||!queue.rows.some(row=>row.kind==='receive'&&row.status==='queued'&&row.attempts===0&&!row.payload);
     const pendingHtml=pendingMarkup(pendingRows);
     if(pendingHtml!==lastPendingMarkup){$('crPendingRows').innerHTML=pendingHtml;lastPendingMarkup=pendingHtml;}
     const modalPending=$('crSummaryPending');
@@ -209,6 +210,19 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
   }
   $('crRetry').onclick=()=>void retryNow($('crRetry'));
   $('crPendingRetry').onclick=()=>void retryNow($('crPendingRetry'));
+  $('crPendingRows').addEventListener('click',event=>{
+    const button=event.target.closest('button[data-cancel-id]');
+    if(!button)return;
+    if(!window.confirm('¿Cancelar esta lectura sin enviar?'))return;
+    try{queue.cancelPending(button.dataset.cancelId);feedback('Lectura cancelada','info');render();}
+    catch(error){fail(error);}
+  });
+  $('crResetPending').onclick=()=>{
+    const count=queue.rows.filter(row=>row.kind==='receive'&&row.status==='queued'&&row.attempts===0&&!row.payload).length;
+    if(!count||!window.confirm('¿Cancelar '+count+' lectura(s) que aún no se han enviado? Las que pudieron llegar al servidor se conservarán.'))return;
+    try{queue.resetUnsent();feedback('Pendientes sin enviar cancelados','info');render();}
+    catch(error){fail(error);}
+  };
   $('crSummaryRetry').onclick=()=>void retryNow($('crSummaryRetry'));
   $('crRetryFailed').onclick=()=>queue.retryFailures();
   $('crFinish').onclick=()=>{input.flush();try{queue.finish();stopScanner();render();$('crResume').focus();}catch(error){fail(error);}};
