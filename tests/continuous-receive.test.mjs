@@ -277,3 +277,58 @@ test('failed JWT refresh leaves the current UUID and scan protected for later re
   assert.equal(h.queue.rows[0].status,'queued');
   assert.equal(fixture.db.movements.length,0);
 });
+
+
+test('cancel individual unsent scan retains audit tombstone without inventory mutations',async t=>{
+  const h=await setup(t);
+  const first=h.queue.scan(SKU).id;
+  h.queue.scan(SKU);
+  assert.equal(h.queue.pending,2);
+  assert.equal(h.queue.canCancelUnsent(h.queue.rows[0]),true);
+  assert.equal(h.queue.cancelUnsent(first),1);
+  assert.equal(h.queue.pending,1);
+  assert.equal(h.queue.report().awaitingLocation,1);
+  assert.equal(h.queue.pendingDetails().length,1);
+  assert.equal(h.queue.rows[0].status,'cancelled');
+  assert.equal(h.queue.journal.readRows(h.queue.state.id)[0].status,'cancelled');
+  assert.equal(h.db.movements.length,0);
+  await h.queue.flush();
+  assert.equal(h.db.movements.length,0);
+  h.queue.scan('402-001');await until(()=>!h.queue.selecting);await h.queue.flush();
+  assert.equal(h.queue.rows[0].location,null,'cancelled read must not be assigned to a later marbete');
+  assert.equal(h.queue.report().totalPieces,1);
+  assert.equal(h.db.movements.length,1);
+});
+
+test('restart cancels only unsent pending rows; confirmed inventory stays unchanged',async t=>{
+  const h=await setup(t);
+  h.queue.scan(SKU);
+  h.queue.approveWithoutLocation();await h.queue.flush();
+  assert.equal(h.queue.report().totalPieces,1);
+  const confirmed=h.queue.rows[0].id;
+  const pending1=h.queue.scan(SKU).id;
+  const pending2=h.queue.scan(SKU).id;
+  assert.equal(h.queue.canRestartUnsent,true);
+  assert.equal(h.queue.restartUnsent(),2);
+  assert.equal(h.queue.canRestartUnsent,false);
+  assert.equal(h.queue.report().totalPieces,1);
+  assert.equal(h.queue.report().pending,0);
+  assert.equal(h.queue.pending,0);
+  assert.equal(h.db.movements.length,1);
+  assert.equal(h.queue.rows.find(r=>r.id===confirmed).status,'confirmed');
+  assert.ok([pending1,pending2].every(id=>h.queue.rows.find(r=>r.id===id).status==='cancelled'));
+  assert.doesNotThrow(()=>h.queue.newSession());
+});
+
+test('a sent or uncertain folio cannot be cancelled or restarted, even with network loss',async t=>{
+  const h=await setup(t);
+  const id=h.queue.scan(SKU).id;
+  const row=h.queue.rows[0];
+  row.attempts=1;row.status='uncertain';row.payload={p_id:id};h.queue.saveRow(row);
+  assert.equal(h.queue.canCancelUnsent(row),false);
+  assert.equal(h.queue.canRestartUnsent,false);
+  assert.throws(()=>h.queue.cancelUnsent(id),/pudo enviarse/i);
+  assert.throws(()=>h.queue.restartUnsent(),/verificar|enviad/i);
+  assert.equal(h.queue.journal.readRows(h.queue.state.id)[0].status,'uncertain');
+  assert.equal(h.db.movements.length,0);
+});
