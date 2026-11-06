@@ -59,3 +59,28 @@ body:has(.cr-standalone .continuous-receive) .page-title:before{display:none}
  .cr-pending-actions button{flex-basis:100%}
  .cr-summary .quick-row button{flex-basis:42%}
 }
+
+
+/* VANTIS 5.10.5 — pending receipts: compact operational list. */
+.cr-pending-review{padding:14px 16px!important;border:1px solid #e8e2e7!important;border-left:3px solid #e5007d!important;border-radius:16px!important;background:#fff!important;color:#302637!important;box-shadow:0 3px 14px #1f142009!important}
+.cr-pending-title{align-items:center;gap:10px}
+.cr-pending-title h2{display:flex;align-items:center;gap:9px;margin:0!important;font-size:16px!important;color:#27202a!important}
+.cr-pending-title small{color:#8b7f89!important;font-size:11px!important;letter-spacing:0!important;text-transform:none}
+.cr-pending-title #crPendingBadge{display:inline-block;background:#f8e8f1;color:#aa0062;border-radius:20px;min-width:25px;padding:3px 8px;font-size:12px;font-weight:800;text-align:center;font-variant-numeric:tabular-nums}
+.cr-pending-rows{gap:0!important;max-height:255px;overflow:auto;margin-top:10px;border-top:1px solid #eee8ed}
+.cr-pending-item{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:nowrap!important;border:0!important;border-bottom:1px solid #efe9ee!important;border-radius:0!important;padding:10px 2px!important;background:transparent!important}
+.cr-pending-info{min-width:0;flex:1}
+.cr-pending-info b{font-size:13px!important;line-height:1.3}
+.cr-pending-info span,.cr-pending-info small{margin-top:2px!important;font-size:11px!important;line-height:1.35!important;color:#7d7380!important}
+.cr-pending-info small{color:#98633a!important}
+.cr-pending-controls{display:flex;align-items:flex-end;flex-direction:column;gap:5px;flex:none}
+.cr-pending-state{max-width:none!important;padding:3px 7px!important;font-size:10px!important;border-radius:6px!important;background:#f6f2f5!important;color:#705c6b!important;white-space:nowrap!important}
+.cr-cancel-one{min-height:30px;padding:4px 9px!important;font-size:11px!important;font-weight:650!important;color:#a1055e!important;background:transparent!important;border:1px solid #edd9e5!important;border-radius:8px!important}
+.cr-cancel-one:hover{background:#fff1f8!important}
+.cr-cancel-one:focus-visible,.cr-pending-actions button:focus-visible{outline:2px solid #e5007d;outline-offset:2px}
+.cr-pending-more{display:block;padding:9px 0;font-size:11px;color:#81727a}
+.cr-pending-actions{gap:7px!important;margin-top:10px!important}
+.cr-pending-actions button{flex:0 1 auto!important;min-height:36px!important;padding:7px 12px!important;font-size:11px!important;border-radius:10px!important}
+.cr-pending-actions #crPendingBackup{margin-left:auto}
+.cr-pending-actions #crPendingRestart:disabled{opacity:.45;cursor:not-allowed}
+@media(max-width:520px){.cr-pending-review{padding:12px!important}.cr-pending-title h2{font-size:15px!important}.cr-pending-actions button{flex:1 1 auto!important}.cr-pending-actions #crPendingBackup{margin-left:0}.cr-pending-state{font-size:9px!important}.cr-pending-info{overflow-wrap:anywhere}}
