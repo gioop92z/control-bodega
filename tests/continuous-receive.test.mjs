@@ -277,3 +277,54 @@ test('failed JWT refresh leaves the current UUID and scan protected for later re
   assert.equal(h.queue.rows[0].status,'queued');
   assert.equal(fixture.db.movements.length,0);
 });
+
+
+test('operator can cancel one staged SKU and preserve an audit record without stock writes',async t=>{
+  const h=await setup(t);
+  const first=h.queue.scan('CANCELAR-1').id;
+  h.queue.scan('CONSERVAR-2');
+  assert.equal(h.queue.cancelPending(first),true);
+  assert.equal(h.queue.rows.find(row=>row.id===first).status,'cancelled');
+  assert.equal(h.queue.report().pending,1);
+  assert.equal(h.queue.report().awaitingLocation,1);
+  assert.equal(h.queue.pendingDetails().length,1);
+  h.queue.approveWithoutLocation();
+  await h.queue.flush();
+  assert.equal(h.db.movements.length,1);
+  assert.equal(h.db.products.some(row=>row.sku==='CANCELAR-1'),false);
+  assert.equal(h.db.products.find(row=>row.sku==='CONSERVAR-2').stock,1);
+});
+
+test('reset only unsent pieces and keep uncertain movements for reconciliation',async t=>{
+  const h=await setup(t);
+  h.queue.scan('ERROR-1');h.queue.scan('ERROR-2');
+  assert.equal(h.queue.resetUnsent(),2);
+  assert.equal(h.queue.report().pending,0);
+  assert.equal(h.queue.report().awaitingLocation,0);
+  assert.equal(h.queue.pendingDetails().length,0);
+  assert.equal(h.db.movements.length,0);
+  assert.equal(h.queue.rows.filter(row=>row.status==='cancelled').length,2);
+  assert.throws(()=>h.queue.resetUnsent(),/No hay lecturas/);
+});
+
+test('a scan already sent or with uncertain response cannot be cancelled',async t=>{
+  const h=await setup(t);
+  const id=h.queue.scan(SKU).id;
+  h.queue.rows[0].attempts=1;
+  h.queue.rows[0].status='uncertain';
+  assert.throws(()=>h.queue.cancelPending(id),/no se puede cancelar/i);
+  assert.equal(h.queue.rows[0].status,'uncertain');
+  assert.equal(h.queue.report().pending,1);
+});
+
+test('cancelled entries survive journal recovery and are not restored as pending',async t=>{
+  const storage=durableMemory(),shared=receivingDb();
+  const first=await setup(t,{storage,shared});
+  first.queue.scan('CANCELAR-PERSISTENTE');
+  first.queue.resetUnsent();
+  await first.queue.dispose();
+  const second=await setup(t,{storage,shared});
+  assert.equal(second.queue.report().pending,0);
+  assert.equal(second.queue.rows[0].status,'cancelled');
+  assert.equal(second.queue.pendingDetails().length,0);
+});

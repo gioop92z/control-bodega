@@ -122,7 +122,7 @@ export class ContinuousReceive {
       this.rows = this.journal.readRows(this.state.id);
       for (const row of this.rows) {
         if (!row.id || row.sessionId !== this.state.id || !Number.isSafeInteger(row.sequence) ||
-          !['queued','sending','uncertain','confirmed','failed'].includes(row.status)) throw Error('Diario local incompleto.');
+          !['queued','sending','uncertain','confirmed','failed','cancelled'].includes(row.status)) throw Error('Diario local incompleto.');
         this.nextSequence = Math.max(this.nextSequence,row.sequence);
         if (row.status === 'sending') row.status = 'uncertain';
       }
@@ -145,7 +145,7 @@ export class ContinuousReceive {
   }
   changed() { this.onChange(); }
   get busy() { return Boolean(this.job || this.selecting); }
-  get pending() { return this.rows.filter(row => !['confirmed','failed'].includes(row.status)).length; }
+  get pending() { return this.rows.filter(row => !['confirmed','failed','cancelled'].includes(row.status)).length; }
   get canScan() { return this.owned && !this.disposed && !this.storageError && !this.state.endedAt && !this.state.pendingSwitch && !['missing','invalid','denied','checking'].includes(this.backend); }
   async start() {
     if(this.storageError){this.backend='denied';this.changed();return;}
@@ -279,7 +279,7 @@ export class ContinuousReceive {
   setCandidate(code) {
     const candidate={code,visitId:this.makeId()};
     if(!this.state.active&&!this.state.candidate){
-      for(const row of this.rows.filter(r=>r.kind==='receive'&&!r.location&&!r.unlocatedApproved)){
+      for(const row of this.rows.filter(r=>r.kind==='receive'&&r.status!=='cancelled'&&!r.location&&!r.unlocatedApproved)){
         const updated={...row,location:code,visitId:candidate.visitId};
         if(!this.saveRow(updated))throw Error(this.storageError);
         Object.assign(row,updated);
@@ -305,6 +305,22 @@ export class ContinuousReceive {
       Object.assign(row,updated);
     }
     this.changed();this.schedule(0);return rows.length;
+  }
+  cancelPending(id) {
+    if(!this.owned||this.disposed||this.storageError||this.state.endedAt)throw Error('Recepción no disponible.');
+    const row=this.rows.find(r=>r.id===id);
+    // Never cancel a request that could already have reached the server.
+    if(!row||row.kind!=='receive'||row.status!=='queued'||row.attempts!==0||row.payload)
+      throw Error('Esta lectura ya pudo enviarse. No se puede cancelar sin verificar el servidor.');
+    const updated={...row,status:'cancelled',error:'Cancelada por el operador antes del envío.'};
+    if(!this.saveRow(updated))throw Error(this.storageError);
+    Object.assign(row,updated);this.changed();return true;
+  }
+  resetUnsent() {
+    const rows=this.rows.filter(r=>r.kind==='receive'&&r.status==='queued'&&r.attempts===0&&!r.payload);
+    if(!rows.length)throw Error('No hay lecturas sin enviar para reiniciar.');
+    for(const row of rows)this.cancelPending(row.id);
+    return rows.length;
   }
   confirmSwitch(accept) {
     const request = this.state.pendingSwitch; if (!request) return;
@@ -511,7 +527,7 @@ export class ContinuousReceive {
     this.changed();
   }
   pendingDetails() {
-    return this.rows.filter(row=>row.status!=='confirmed'&&row.status!=='failed')
+    return this.rows.filter(row=>!['confirmed','failed','cancelled'].includes(row.status))
       .map(row=>({id:row.id,sequence:row.sequence,code:row.code,sku:row.product?.sku||row.code,
         descripcion:row.product?.descripcion||'',marbete:row.location||null,
         status:row.status,error:row.error||'',capturedAt:row.capturedAt,attempts:row.attempts,
@@ -535,7 +551,8 @@ export class ContinuousReceive {
     const locations = new Map(), active = this.state.candidate || this.state.active;
     let confirmed = 0, failed = 0, pendingCount = 0, net = 0, visit = 0, awaitingLocation=0;
     for (const row of this.rows) {
-      if(row.kind==='receive'&&!row.location&&!row.unlocatedApproved&&row.status!=='confirmed')awaitingLocation++;
+      if(row.status==='cancelled')continue;
+      if(row.kind==='receive'&&!row.location&&!row.unlocatedApproved&&!['confirmed','cancelled'].includes(row.status))awaitingLocation++;
       const value = locations.get(row.location) || {marbete:row.location,pieces:0,confirmed:0,pending:0,failed:0};
       if (row.status === 'confirmed') {
         const delta = row.kind === 'undo' ? -1 : 1;
