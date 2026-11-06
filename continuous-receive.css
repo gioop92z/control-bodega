@@ -59,3 +59,19 @@ body:has(.cr-standalone .continuous-receive) .page-title:before{display:none}
  .cr-pending-actions button{flex-basis:100%}
  .cr-summary .quick-row button{flex-basis:42%}
 }
+
+/* Compact review: one line per pending scan, with a safe cancel action. */
+.cr-pending-review{padding:12px 14px;margin:10px 0}
+.cr-pending-title small{display:none}
+.cr-pending-title h2{font-size:15px!important;margin:0}
+.cr-pending-title>span{font-size:15px;min-width:32px;padding:5px 8px;border-radius:10px}
+.cr-pending-review>p{font-size:11px;margin:5px 0 9px}
+.cr-pending-rows{gap:5px;max-height:185px}
+.cr-pending-item{padding:8px 10px;align-items:center;flex-wrap:nowrap}
+.cr-pending-item b{font-size:12px}
+.cr-pending-item span:not(.cr-pending-state){font-size:10px;margin-top:2px}
+.cr-pending-state{font-size:10px;padding:4px 6px}
+.cr-cancel-row{font-size:11px!important;padding:5px 9px!important;min-height:30px!important;flex-shrink:0}
+.cr-pending-actions{margin-top:7px;gap:6px}
+.cr-pending-actions button{min-height:34px;font-size:11px}
+#crResetPending{min-height:30px}
