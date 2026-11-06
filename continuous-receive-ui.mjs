@@ -1,5 +1,5 @@
 import {wireReceivingInput} from './receiving-input.mjs?v=5.8.3';
-import {receiptCsv} from './continuous-receive.mjs?v=5.10.4';
+import {receiptCsv} from './continuous-receive.mjs?v=5.10.5';
 import {captureMethodLabel} from './receiving-audit.mjs?v=5.8.3';
 
 const esc = value => String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
