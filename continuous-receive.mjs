@@ -145,7 +145,7 @@ export class ContinuousReceive {
   }
   changed() { this.onChange(); }
   get busy() { return Boolean(this.job || this.selecting); }
-  get pending() { return this.rows.filter(row => !['confirmed','failed'].includes(row.status)).length; }
+  get pending() { return this.rows.filter(row => !['confirmed','failed','cancelled'].includes(row.status)).length; }
   get canScan() { return this.owned && !this.disposed && !this.storageError && !this.state.endedAt && !this.state.pendingSwitch && !['missing','invalid','denied','checking'].includes(this.backend); }
   async start() {
     if(this.storageError){this.backend='denied';this.changed();return;}
