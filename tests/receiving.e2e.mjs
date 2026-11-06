@@ -83,6 +83,9 @@ try {
   let blockedWrites=0;
   await page.route('https://*.supabase.co/**',route=>{if(route.request().method()!=='GET')blockedWrites++;return route.abort();});
   await page.goto(`http://127.0.0.1:${server.address().port}/`,{waitUntil:'networkidle'});
+  await page.locator('#vantisOverview .vantis-metric').first().waitFor({state:'visible'});
+  assert.equal(await page.locator('#vantisOverview .vantis-metric').count(),2,'home must display only the two useful operating KPIs');
+  assert.doesNotMatch(await page.locator('#vantisOverview').innerText(),/Productos|Stock bajo/i);
   await page.locator('[data-act="ENTRADA"]').click();await page.locator('#crScan:not(:disabled)').waitFor();
   assert.match(await page.locator('#crInstruction').innerText(),/SKU O MARBETE/i);
   // True keyboard events: no click or field focus between frames.

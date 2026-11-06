@@ -33,7 +33,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '5.10.5';
+const APP_VERSION = '5.11.0';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 const HISTORY_RESTART_CUTOFF = '2026-10-15T22:15:00.000Z';
 
@@ -1293,7 +1293,7 @@ let inventoryPage=0, inventoryLastPage=false, inventoryEpoch=0, inventoryRows=[]
 const INVENTORY_PAGE_SIZE=100;
 function inventoryView() {
   inventoryPage=0;inventoryLastPage=false;inventoryRows=[];inventoryEpoch++;
-  shell('<section class="page-title"><h1>Inventario</h1><p class="muted">Consulta paginada para catálogos grandes · '+esc(deptName())+'</p></section><div class="card"><div class="inline-form"><input id="invQ" placeholder="SKU, UPC, descripción, marca…"><select id="stockFilter" class="compact"><option value="all">Todos</option><option value="positive">Con stock</option><option value="zero">Agotados</option><option value="low">Stock bajo</option></select></div><div id="invList"></div><button id="invLoadMore" class="secondary" type="button" hidden>Cargar más productos</button><p id="invRangeInfo" class="tiny"></p></div>');
+  shell('<section class="page-title"><h1>Inventario</h1><p class="muted">Consulta paginada para catálogos grandes · '+esc(deptName())+'</p></section><div class="card"><div class="inline-form"><input id="invQ" placeholder="SKU, UPC, descripción, marca…"><select id="stockFilter" class="compact"><option value="all">Todos</option><option value="positive">Con stock</option><option value="zero">Agotados</option></select></div><div id="invList"></div><button id="invLoadMore" class="secondary" type="button" hidden>Cargar más productos</button><p id="invRangeInfo" class="tiny"></p></div>');
   let timer;
   const restart=()=>{clearTimeout(timer);timer=setTimeout(()=>{inventoryPage=0;inventoryRows=[];inventoryLastPage=false;void loadInventory();},170);};
   $('invQ').oninput=restart;$('stockFilter').onchange=restart;
@@ -1303,7 +1303,6 @@ function inventoryView() {
 function inventoryPassesFilter(p,f) {
   if(f==='positive')return Number(p.stock)>0;
   if(f==='zero')return Number(p.stock)<=0;
-  if(f==='low')return Number(p.stock)>0&&Number(p.stock)<=Number(p.stock_minimo||0);
   return true;
 }
 function renderInventoryRows(rows){
@@ -1337,7 +1336,7 @@ async function loadInventory(append=false){
     inventoryPage=page+1;inventoryLastPage=chunk.length<INVENTORY_PAGE_SIZE;
     renderInventoryRows(inventoryRows);
     more.hidden=inventoryLastPage;
-    info.textContent=inventoryRows.length.toLocaleString('es-MX')+' artículos visibles'+(inventoryLastPage?' · Fin de resultados':' · Hay más páginas')+(f==='low'?' · Revisa todas las páginas para encontrar los de stock bajo':'');
+    info.textContent=inventoryLastPage?'Fin de resultados':'Hay más productos para consultar';
   }catch(error){if(active())info.textContent='Error al cargar catálogo: '+humanError(error);}
   finally{if(active())more.disabled=false;}
 }

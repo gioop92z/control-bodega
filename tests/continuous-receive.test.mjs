@@ -25,6 +25,19 @@ for(const size of [100,500,1000])test(`${size} physical reads commit ${size} sep
   assert.ok(h.queue.rows.every(row=>row.status==='confirmed'&&row.quantity===1));
 });
 
+test('confirmed scans build a product from a zero baseline, one unit at a time',async t=>{
+  const h=await setup(t);
+  h.db.products[0].stock=0;
+  await location(h.queue);
+  for(let i=0;i<3;i++)h.queue.scan(SKU);
+  assert.equal(h.db.products[0].stock,0);
+  await h.queue.flush();
+  assert.equal(h.db.products[0].stock,3);
+  assert.equal(h.db.assignments[0].cantidad,3);
+  assert.equal(h.queue.report().totalPieces,3);
+  assert.equal(h.db.movements.length,3);
+});
+
 test('repeated SKU frames count five units; a repeated technical event ID counts once',async t=>{
   const h=await setup(t);await location(h.queue);
   for(let i=0;i<5;i++)h.queue.scan(SKU);

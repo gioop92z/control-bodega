@@ -122,7 +122,7 @@ function ensureMetrics(hero){
     box=document.createElement('section');
     box.id='vantisOverview';
     box.className='vantis-overview vantis-overview-loading';
-    box.innerHTML=metricHtml('Productos','…','Catálogo activo')+metricHtml('Stock bajo','…','Requiere atención')+metricHtml('Movimientos hoy','…','Entradas y salidas')+metricHtml('Último conteo','…','Sincronizando');
+    box.innerHTML=metricHtml('Movimientos hoy','…','Entradas y salidas')+metricHtml('Último conteo','…','Sincronizando');
     hero.after(box);
   }
   const dept=currentDeptId();
@@ -131,7 +131,7 @@ function ensureMetrics(hero){
   loadMetrics(box,dept).catch(()=>{
     if(!document.body.contains(box))return;
     box.classList.remove('vantis-overview-loading');
-    box.innerHTML=metricHtml('Productos','—','Catálogo activo')+metricHtml('Stock bajo','—','No disponible')+metricHtml('Movimientos hoy','—','No disponible')+metricHtml('Último conteo','—','No disponible');
+    box.innerHTML=metricHtml('Movimientos hoy','—','No disponible')+metricHtml('Último conteo','—','No disponible');
   });
 }
 
@@ -139,21 +139,16 @@ async function loadMetrics(box,dept){
   const encoded=encodeURIComponent(dept);
   const now=new Date();
   const start=new Date(now.getFullYear(),now.getMonth(),now.getDate()).toISOString();
-  const [productTotal,products,todayMoves,lastCounts]=await Promise.all([
-    fetchCount(`productos?select=id&departamento_id=eq.${encoded}&activo=eq.true`),
-    fetchJson(`productos?select=stock,stock_minimo&departamento_id=eq.${encoded}&activo=eq.true&limit=1000`),
+  const [todayMoves,lastCounts]=await Promise.all([
     fetchCount(`movimientos?select=id&departamento_id=eq.${encoded}&created_at=gte.${encodeURIComponent(start)}`),
     fetchJson(`conteos?select=nombre,estado,created_at&departamento_id=eq.${encoded}&order=created_at.desc&limit=1`)
   ]);
   if(!document.body.contains(box)||dept!==currentDeptId())return;
-  const low=(products||[]).filter(p=>Number(p.stock)>0&&Number(p.stock)<=Number(p.stock_minimo||0)).length;
   const last=lastCounts?.[0];
   const lastValue=last?String(last.estado||'—'):'—';
   const lastSub=last?`${last.nombre||'Conteo'} · ${new Date(last.created_at).toLocaleDateString('es-MX')}`:'Sin conteos registrados';
   box.classList.remove('vantis-overview-loading');
   box.innerHTML=
-    metricHtml('Productos',Number(productTotal).toLocaleString('es-MX'),'Catálogo activo')+
-    metricHtml('Stock bajo',Number(low).toLocaleString('es-MX'),'Requiere atención',low?'attention':'good')+
     metricHtml('Movimientos hoy',Number(todayMoves).toLocaleString('es-MX'),'Entradas, salidas y ajustes')+
     metricHtml('Último conteo',lastValue,lastSub,lastValue==='CERRADO'?'good':'');
 }
