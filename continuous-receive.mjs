@@ -122,7 +122,7 @@ export class ContinuousReceive {
       this.rows = this.journal.readRows(this.state.id);
       for (const row of this.rows) {
         if (!row.id || row.sessionId !== this.state.id || !Number.isSafeInteger(row.sequence) ||
-          !['queued','sending','uncertain','confirmed','failed'].includes(row.status)) throw Error('Diario local incompleto.');
+          !['queued','sending','uncertain','confirmed','failed','cancelled'].includes(row.status)) throw Error('Diario local incompleto.');
         this.nextSequence = Math.max(this.nextSequence,row.sequence);
         if (row.status === 'sending') row.status = 'uncertain';
       }
@@ -279,7 +279,7 @@ export class ContinuousReceive {
   setCandidate(code) {
     const candidate={code,visitId:this.makeId()};
     if(!this.state.active&&!this.state.candidate){
-      for(const row of this.rows.filter(r=>r.kind==='receive'&&!r.location&&!r.unlocatedApproved)){
+      for(const row of this.rows.filter(r=>r.kind==='receive'&&r.status!=='cancelled'&&!r.location&&!r.unlocatedApproved)){
         const updated={...row,location:code,visitId:candidate.visitId};
         if(!this.saveRow(updated))throw Error(this.storageError);
         Object.assign(row,updated);
@@ -492,6 +492,35 @@ export class ContinuousReceive {
     if (!this.saveRow(row)) throw Error(this.storageError);
     this.rows.push(row); this.changed(); this.schedule(0); return row;
   }
+  // Cancel an unsubmitted scan without deleting its audit record or changing stock.
+  // A sent/uncertain/confirmed UUID must never be erased: it can have committed.
+  canCancelUnsent(row) {
+    return Boolean(row&&this.owned&&!this.disposed&&!this.storageError&&!this.state.endedAt&&
+      !this.state.pendingSwitch&&!this.busy&&row.kind==='receive'&&row.status==='queued'&&
+      Number(row.attempts||0)===0&&!row.payload);
+  }
+  cancelUnsent(id) {
+    const row=this.rows.find(item=>item.id===id);
+    if(!this.canCancelUnsent(row))throw Error('Esta lectura ya pudo enviarse; revisa su folio antes de corregirla.');
+    const updated={...row,status:'cancelled',error:'Cancelada por el operador antes de enviarse.',cancelledAt:new Date(this.now()).toISOString()};
+    if(!this.saveRow(updated))throw Error(this.storageError);
+    Object.assign(row,updated);
+    this.changed();
+    return 1;
+  }
+  get canRestartUnsent() {
+    const pending=this.rows.filter(row=>!['confirmed','failed','cancelled'].includes(row.status));
+    return pending.length>0&&pending.every(row=>this.canCancelUnsent(row));
+  }
+  restartUnsent() {
+    if(!this.canRestartUnsent)throw Error('Hay lecturas ya enviadas o por verificar. No se pueden reiniciar sin conciliación.');
+    const pending=this.rows.filter(row=>this.canCancelUnsent(row));
+    // Persist cancellation tombstones individually, never delete local/IDB rows.
+    // If storage fails midway, previously cancelled reads stay safe/auditable.
+    let cancelled=0;
+    for(const row of pending)cancelled+=this.cancelUnsent(row.id);
+    return cancelled;
+  }
   retryFailures() {
     for (const row of this.rows.filter(row => row.status === 'failed')) {
       row.status = 'queued'; row.error = ''; row.retryAt = 0;
@@ -511,12 +540,12 @@ export class ContinuousReceive {
     this.changed();
   }
   pendingDetails() {
-    return this.rows.filter(row=>row.status!=='confirmed'&&row.status!=='failed')
+    return this.rows.filter(row=>!['confirmed','failed','cancelled'].includes(row.status))
       .map(row=>({id:row.id,sequence:row.sequence,code:row.code,sku:row.product?.sku||row.code,
         descripcion:row.product?.descripcion||'',marbete:row.location||null,
         status:row.status,error:row.error||'',capturedAt:row.capturedAt,attempts:row.attempts,
         captureMethod:row.captureMethod||'unknown',operator:row.operator||this.actor,
-        canSync:Boolean(row.location||row.unlocatedApproved)}));
+        canSync:Boolean(row.location||row.unlocatedApproved),canCancel:this.canCancelUnsent(row)}));
   }
   finish() {
     if (this.state.pendingSwitch) throw Error('Confirma o cancela el cambio de marbete.');
@@ -535,6 +564,7 @@ export class ContinuousReceive {
     const locations = new Map(), active = this.state.candidate || this.state.active;
     let confirmed = 0, failed = 0, pendingCount = 0, net = 0, visit = 0, awaitingLocation=0;
     for (const row of this.rows) {
+      if(row.status==='cancelled')continue;
       if(row.kind==='receive'&&!row.location&&!row.unlocatedApproved&&row.status!=='confirmed')awaitingLocation++;
       const value = locations.get(row.location) || {marbete:row.location,pieces:0,confirmed:0,pending:0,failed:0};
       if (row.status === 'confirmed') {
