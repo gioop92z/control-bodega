@@ -79,7 +79,7 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
   };
   const pendingMarkup=rows=>rows.slice(0,30).map(row=>
     '<article class="cr-pending-item"><div><b>'+esc(row.descripcion||row.code)+'</b>'+
-    '<span>'+esc(short(row.marbete)||'Sin marbete')+' · '+esc(row.status==='uncertain'?'Por verificar':row.canSync?'Por confirmar':'Sin enviar')+'</span></div>'+
+    '<span>'+esc(row.sku)+' · '+esc(short(row.marbete)||'Sin marbete')+' · '+esc(row.status==='uncertain'?'Por verificar':row.canSync?'Por confirmar':'Sin enviar')+'</span></div>'+
     (row.status==='queued'&&row.attempts===0
       ?'<button class="cr-cancel-row ghost" type="button" data-cancel-id="'+esc(row.id)+'" aria-label="Cancelar lectura '+esc(row.code)+'">Cancelar</button>'
       :'<span class="cr-pending-state">'+esc(row.status==='uncertain'?'Verificar':'En proceso')+'</span>')+'</article>').join('')+
