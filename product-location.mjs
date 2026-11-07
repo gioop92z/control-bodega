@@ -43,14 +43,17 @@ export function parseMarbeteScan(value) {
     payload = ['marbete','marbete_codigo','codigo','code','ubicacion','location']
       .map(key => data[key]).find(x => typeof x === 'string') || '';
   }
-  const text = String(payload).trim().toUpperCase().normalize('NFKC');
-  const exact = text.match(/^ZAP[-\s]*(402|405|459)[-\s]+(\d{3,4})$/);
+  // Some portable Code39 readers include the printed * delimiters or
+  // return ZAP*402*002. These are locations, never product SKUs.
+  const text = String(payload).trim().toUpperCase().normalize('NFKC')
+    .replace(/^\*+(?=ZAP[\s*:/.-])/, '').replace(/\*+$/, '');
+  const exact = text.match(/^ZAP[-\s*:/\.]+(402|405|459)[-\s*:/\.]+(\d{3,4})$/);
   if (exact) return 'ZAP-' + exact[1] + '-' + exact[2];
   const numbered = text.match(/^(402|405|459)[-\s]+(\d{3,4})$/);
   if (numbered) return 'ZAP-' + numbered[1] + '-' + numbered[2];
   // QR generators can embed visible labels such as
   // "SECCIÓN 402 · CAJÓN 001 · MARBETE: ZAP-402-001".
-  const embedded = text.match(/(?:^|[^A-Z0-9])ZAP[-\s]*(402|405|459)[-\s]+(\d{3,4})(?=$|[^0-9])/);
+  const embedded = text.match(/(?:^|[^A-Z0-9])ZAP[-\s*:/\.]+(402|405|459)[-\s*:/\.]+(\d{3,4})(?=$|[^0-9])/);
   if (embedded) return 'ZAP-' + embedded[1] + '-' + embedded[2];
   // Backwards compatibility for non-ZAP locations using a direct,
   // unambiguous barcode. Do not register untrusted prose or a URL.
