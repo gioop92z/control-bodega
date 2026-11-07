@@ -1,5 +1,5 @@
 import {wireReceivingInput} from './receiving-input.mjs?v=5.8.3';
-import {receiptCsv} from './continuous-receive.mjs?v=5.10.5';
+import {receiptCsv} from './continuous-receive.mjs?v=5.12.0';
 import {captureMethodLabel} from './receiving-audit.mjs?v=5.8.3';
 
 const esc = value => String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -60,10 +60,11 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
       if(source==='manual')manualActive=false;
       const result=queue.scan(code,{source});
       if(result.type==='piece'&&source==='camera')onEvidence(result.id,code,details?.frame??null);
-      if(result.type==='switch'){feedback('Confirma el cambio de marbete','info');queueMicrotask(()=>$('crConfirmSwitch')?.focus());}
-      else if(result.type!=='piece')feedback('Validando marbete…','info');
+      if(result.type==='location')
+        feedback('Marbete '+short(queue.state.candidate?.code||queue.state.active?.code)+' seleccionado · sigue escaneando','info');
+      else if(result.type==='same-location')feedback('Este marbete ya está seleccionado','info');
       if(result.type==='piece'&&!queue.state.active&&!queue.state.candidate)feedback('✓ SKU conservado. Escanea un marbete o registra sin ubicación.','info');
-      return result.type==='piece'?'Lectura protegida · pendiente de confirmación':result.type==='switch'?'Confirma el cambio de marbete':'Marbete en validación';
+      return result.type==='piece'?'Lectura protegida · pendiente de confirmación':'Marbete seleccionado · continúa escaneando';
     } catch(error) {fail(error);throw error;}
     finally {scheduleRender();}
   }
@@ -108,9 +109,9 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     $('crLocationLabel').textContent=pending?'Marbete por validar':active?'Marbete activo':'Ubicación opcional';
     $('crLocation').textContent=active?short(active.code):'Sin asignar';
     $('crInstruction').textContent=active?'Escanea la siguiente pieza':'Escanea un SKU o marbete';
-    $('crLocationState').textContent=queue.compatibility
-      ? 'Cada lectura confirma una pieza en el historial. Si la red falla, queda protegida para revisión.'
-      : pending?'Las lecturas quedarán pendientes hasta validar esta ubicación.':active?'Cada lectura registra una unidad en esta ubicación.':'Empieza por el SKU o el cajón. Si el SKU va primero, se conserva hasta asignarle ubicación o registrarlo sin marbete.';
+    $('crLocationState').textContent=pending?'Puedes seguir leyendo SKU: este marbete se valida en segundo plano.'
+      :active?'Escanea SKU seguidos. Otro marbete cambia la ubicación automáticamente.'
+      :'Escanea un marbete y después los SKU; no hay que confirmar cambios.';
     $('crVisitCount').textContent=num(report.visitPieces);$('crTotalCount').textContent=num(report.totalPieces);
     $('crPendingLocation').hidden=!report.awaitingLocation||Boolean(active);
     $('crPendingLocationCount').textContent=num(report.awaitingLocation)+' pieza'+(report.awaitingLocation===1?'':'s')+' esperando ubicación';
@@ -142,9 +143,9 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     $('crUndo').title=queue.compatibility?'Deshacer automático disponible al activar la migración segura.':'Deshacer la última entrada confirmada';
     $('crRetry').disabled=!queue.owned||queue.busy||Boolean(queue.storageError);
     $('crRetryFailed').hidden=!report.failed;$('crRetryFailed').disabled=!queue.owned||queue.busy;
-    $('crFinish').disabled=!queue.owned||Boolean(queue.state.pendingSwitch);
-    $('crLegacy').disabled=queue.busy||Boolean(queue.pending)||Boolean(queue.state.pendingSwitch);
-    $('crSwitch').hidden=!queue.state.pendingSwitch;
+    $('crFinish').disabled=!queue.owned||Boolean(queue.state.pendingLabels?.length)||Boolean(queue.state.pendingSwitch);
+    $('crLegacy').disabled=queue.busy||Boolean(queue.pending)||Boolean(queue.state.pendingLabels?.length)||Boolean(queue.state.pendingSwitch);
+    $('crSwitch').hidden=true; // Automatic marbete switching never uses the old blocking dialog.
     $('crOld').textContent=short(active?.code);$('crNew').textContent=short(queue.state.pendingSwitch?.code);
     $('crSummary').hidden=!queue.state.endedAt;
     if(queue.state.endedAt) {
@@ -174,12 +175,6 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
       await startScanner((code,photo)=>{
         if(!ready())throw Error('Lectura en pausa. Confirma el cambio o reanuda la recepción.');
         const message=scan(code,{source:'camera',frame:photo});
-        if(queue.state.pendingSwitch){
-          // The confirmation dialog is underneath the full-screen reader.
-          // Close the camera only for this explicit, required confirmation.
-          resumeAfterSwitch=true;
-          queueMicrotask(()=>stopScanner());
-        }
         return message;
       },'marbete o mercancía',{
         continuous:true,qrEnabled:true,captureEvidence:true,acknowledgedOnly:true,allowRepeat:false,
