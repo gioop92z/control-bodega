@@ -78,6 +78,7 @@ test('rapid marbete A → SKU → marbete B → SKU retains original destination
   assert.equal(h.queue.rows[1].location,'ZAP-402-003');
   assert.ok(h.queue.rows.every(r=>r.locationVerified===false));
   assert.equal(h.db.movements.length,0);
+  await until(()=>pending.length===1);
   await pending[0].complete();
   await until(()=>pending.length===2);
   await pending[1].complete();
