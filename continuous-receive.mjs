@@ -266,6 +266,10 @@ export class ContinuousReceive {
     // Never turn malformed Code39 or QR labels into fake merchandise.
     if(/^\*?ZAP[-*:/\.\s]/i.test(code)||/^https?:\/\//i.test(code)||code.startsWith('{'))
       throw Error('Marbete no reconocido. Revisa el código antes de seguir.');
+    // Safari's synchronous localStorage is not an unlimited offline warehouse.
+    // Stop safely before an offline backlog can exhaust its quota.
+    if(this.rows.length%25===0&&this.pending>=1200)
+      throw Error('Hay más de 1,200 lecturas sin confirmar. Sincroniza y guarda un respaldo antes de continuar.');
     const location = this.state.candidate || this.state.active;
     const productCode = cleanSupportCode(code), id = eventId || this.makeId();
     if (eventId && this.rows.some(row => row.id === id)) return {type:'duplicate-event',id};
