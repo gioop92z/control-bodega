@@ -45,17 +45,57 @@ test('repeated SKU frames count five units; a repeated technical event ID counts
   await h.queue.flush();assert.equal(h.db.movements.length,6);assert.equal(h.queue.report().totalPieces,6);
 });
 
-test('only a different marbete asks for confirmation; cancellation keeps the old location',async t=>{
-  const h=await setup(t);await location(h.queue);h.queue.scan(SKU);
-  h.queue.scan('402-002');assert.equal(h.queue.state.active.code,'ZAP-402-001');
-  assert.equal(h.db.marbetes.some(row=>row.codigo==='ZAP-402-002'),false);
-  assert.throws(()=>h.queue.scan(SKU),/Confirma/);h.queue.confirmSwitch(false);h.queue.scan(SKU);
-  await h.queue.flush();assert.equal(h.queue.report().visitPieces,2);
-  h.queue.scan('402-002');h.queue.confirmSwitch(true);await until(()=>!h.queue.selecting);
-  assert.equal(h.queue.report().visitPieces,0);h.queue.scan(UPC);await h.queue.flush();
-  assert.equal(h.queue.report().totalPieces,3);assert.equal(h.queue.report().visitPieces,1);
-  assert.deepEqual(h.db.assignments.map(row=>row.cantidad),[2,1]);
-  h.queue.scan('ZAP-402-002');assert.equal(h.queue.state.pendingSwitch,null);
+test('marbete switches automatically while continuing SKU scans without confirmation',async t=>{
+  const h=await setup(t);
+  await location(h.queue);
+  h.queue.scan(SKU);
+  assert.equal(h.queue.scan('ZAP*402*002').type,'location');
+  assert.equal(h.queue.state.pendingSwitch,null);
+  assert.equal(h.queue.scan(UPC).type,'piece');
+  await until(()=>!h.queue.selecting&&h.queue.state.pendingLabels.length===0);
+  await h.queue.flush();
+  assert.equal(h.queue.report().totalPieces,2);
+  assert.deepEqual(h.db.assignments.map(x=>[x.marbete_codigo,x.cantidad]),
+    [['ZAP-402-001',1],['ZAP-402-002',1]]);
+  assert.equal(h.queue.state.active.code,'ZAP-402-002');
+  assert.equal(h.queue.scan('ZAP-402-002').type,'same-location');
+});
+
+test('rapid marbete A → SKU → marbete B → SKU retains original destinations during slow validation',async t=>{
+  const h=await setup(t);await location(h.queue);
+  const original=h.settings.api.activate.bind(h.settings.api);
+  const pending=[];
+  h.settings.api.activate=code=>new Promise((resolve,reject)=>{
+    pending.push({code,complete:()=>original(code).then(resolve,reject)});
+  });
+  h.queue.scan('402-002');
+  h.queue.scan(SKU);
+  h.queue.scan('402-003');
+  h.queue.scan(UPC);
+  assert.equal(h.queue.state.pendingSwitch,null);
+  assert.equal(h.queue.state.pendingLabels.length,2);
+  assert.equal(h.queue.rows[0].location,'ZAP-402-002');
+  assert.equal(h.queue.rows[1].location,'ZAP-402-003');
+  assert.ok(h.queue.rows.every(r=>r.locationVerified===false));
+  assert.equal(h.db.movements.length,0);
+  await until(()=>pending.length===1);
+  await pending[0].complete();
+  await until(()=>pending.length===2);
+  await pending[1].complete();
+  await until(()=>h.queue.state.pendingLabels.length===0);
+  await h.queue.flush();
+  assert.equal(h.queue.report().totalPieces,2);
+  assert.deepEqual(h.db.movements.map(r=>r.marbete_codigo),
+    ['ZAP-402-002','ZAP-402-003']);
+});
+
+test('malformed location-looking codes cannot become phantom merchandise',async t=>{
+  const h=await setup(t);await location(h.queue);
+  for(const code of ['ZAP*402*12','*ZAP*999*002*','https://example.invalid/not-a-marbete','{"bad":"payload"}']){
+    assert.throws(()=>h.queue.scan(code),/marbete no reconocido/i);
+  }
+  assert.equal(h.queue.rows.length,0);
+  assert.equal(h.db.movements.length,0);
 });
 
 test('SKU may be scanned before marbete; pending pieces attach to the first later marbete',async t=>{

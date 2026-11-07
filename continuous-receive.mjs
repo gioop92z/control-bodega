@@ -1,4 +1,4 @@
-import {parseMarbeteScan, locationQuery} from './product-location.mjs?v=3.9.5';
+import {parseMarbeteScan, locationQuery} from './product-location.mjs?v=5.12.0';
 import {cleanSupportCode, lookupSupportCodes} from './support-batch.mjs?v=3.8.0';
 import {LegacyReceiptApi} from './legacy-receipt-api.mjs?v=3.10.1';
 import {InventoryJournalMirror} from './vantis-offline-idb-v5.mjs?v=5.8.3';
@@ -133,7 +133,7 @@ export class ContinuousReceive {
   }
   empty() {
     return {version:1,id:this.makeId(),userId:this.userId,deptId:this.deptId,actor:this.actor,
-      startedAt:new Date(this.now()).toISOString(),endedAt:null,active:null,candidate:null,pendingSwitch:null,backendVersion:0};
+      startedAt:new Date(this.now()).toISOString(),endedAt:null,active:null,candidate:null,pendingSwitch:null,pendingLabels:[],backendVersion:0};
   }
   saveSession() {
     try { this.journal.saveSession(this.state); this.mirror.queue('active','',this.state); return true; }
@@ -197,6 +197,15 @@ export class ContinuousReceive {
         }
       }
       for(const row of this.rows){if(row.status==='sending')row.status='uncertain';this.nextSequence=Math.max(this.nextSequence,row.sequence);}
+      // Restore a pending label from previous versions without discarding scans.
+      this.state.pendingLabels ||= this.state.candidate?[this.state.candidate]:[];
+      if(this.state.pendingSwitch?.code){
+        const code=this.state.pendingSwitch.code;this.state.pendingSwitch=null;
+        if(code!==this.state.candidate?.code){
+          const target={code,visitId:this.makeId()};
+          this.state.pendingLabels.push(target);this.state.candidate=target;
+        }
+      }
       if(!this.saveSession())return;
     }catch(error){this.storageError='No se pudo recuperar la sesión local: '+message(error);this.changed();return;}
     await this.connect();
@@ -221,11 +230,11 @@ export class ContinuousReceive {
       }
       this.compatibility = compatible;
       this.backend = 'ready'; this.error = ''; this.state.backendVersion = compatible?-1:1; this.saveSession();
-      if (this.state.candidate) await this.activateCandidate();
-      else if (this.state.active) {
-        // Revalidate restored labels before sending any new or recovered row.
-        const active = this.state.active;
-        this.state.candidate = active; this.state.active = null; this.saveSession();
+      if(this.state.pendingLabels?.length||this.state.candidate)await this.activateCandidate();
+      else if(this.state.active) {
+        const active=this.state.active;
+        this.state.pendingLabels=[active];this.state.candidate=active;this.state.active=null;
+        if(!this.saveSession())throw Error(this.storageError);
         await this.activateCandidate();
       }
       this.schedule(0);
@@ -247,22 +256,26 @@ export class ContinuousReceive {
   scan(raw, {eventId, source='unknown'} = {}) {
     if (!this.canScan) throw Error(this.storageError || (this.state.pendingSwitch ? 'Confirma o cancela el cambio de marbete antes de escanear.' : this.error || 'Espera a que el lector esté listo.'));
     const code = String(raw ?? '').trim(), label = canonical(code);
-    if (label) {
-      if(this.selecting)throw Error('Espera a validar el marbete antes de cambiar de ubicación. Las piezas sí se pueden seguir escaneando.');
-      const current = this.state.candidate || this.state.active;
-      if (current && canonical(current.code) === label) return {type:'same-location'};
-      if (this.state.active || this.state.candidate) {
-        this.state.pendingSwitch = {code:label};
-        if (!this.saveSession()) throw Error(this.storageError);
-        this.changed(); return {type:'switch'};
-      }
-      this.setCandidate(label); return {type:'location'};
+    if(label){
+      const current=this.state.candidate||this.state.active;
+      if(current&&canonical(current.code)===label)return {type:'same-location'};
+      // Non-blocking automatic destination switch; FIFO server validation.
+      this.setCandidate(label);
+      return {type:'location'};
     }
+    // Never turn malformed Code39 or QR labels into fake merchandise.
+    if(/^\*?ZAP[-*:/\.\s]/i.test(code)||/^https?:\/\//i.test(code)||code.startsWith('{'))
+      throw Error('Marbete no reconocido. Revisa el código antes de seguir.');
+    // Safari's synchronous localStorage is not an unlimited offline warehouse.
+    // Stop safely before an offline backlog can exhaust its quota.
+    if(this.rows.length%25===0&&this.pending>=1200)
+      throw Error('Hay más de 1,200 lecturas sin confirmar. Sincroniza y guarda un respaldo antes de continuar.');
     const location = this.state.candidate || this.state.active;
     const productCode = cleanSupportCode(code), id = eventId || this.makeId();
     if (eventId && this.rows.some(row => row.id === id)) return {type:'duplicate-event',id};
     const row = {id,sessionId:this.state.id,sequence:++this.nextSequence,kind:'receive',
-      code:productCode,quantity:1,location:location?.code||null,visitId:location?.visitId||null,unlocatedApproved:false,
+      code:productCode,quantity:1,location:location?.code||null,visitId:location?.visitId||null,
+      locationVerified:!this.state.candidate,unlocatedApproved:false,
       capturedAt:new Date(this.now()).toISOString(),status:'queued',attempts:0,error:'',product:null,payload:null,
       captureMethod:['camera','manual','scanner'].includes(source)?source:'unknown',operator:this.actor,
       evidenceStatus:source==='camera'?'pending':'none'};
@@ -279,12 +292,16 @@ export class ContinuousReceive {
   setCandidate(code) {
     const candidate={code,visitId:this.makeId()};
     if(!this.state.active&&!this.state.candidate){
-      for(const row of this.rows.filter(r=>r.kind==='receive'&&r.status!=='cancelled'&&!r.location&&!r.unlocatedApproved)){
-        const updated={...row,location:code,visitId:candidate.visitId};
+      // SKU-first reads attach only to the FIRST scanned marbete.
+      // A rejected label's reads are never silently reassigned.
+      for(const row of this.rows.filter(r=>r.kind==='receive'&&r.status!=='cancelled'&&!r.location&&!r.unlocatedApproved&&!r.locationRejected)){
+        const updated={...row,location:code,visitId:candidate.visitId,locationVerified:false};
         if(!this.saveRow(updated))throw Error(this.storageError);
         Object.assign(row,updated);
       }
     }
+    this.state.pendingLabels||=[];
+    this.state.pendingLabels.push(candidate);
     this.state.candidate=candidate;
     if(!this.saveSession())throw Error(this.storageError);
     this.changed();
@@ -329,29 +346,42 @@ export class ContinuousReceive {
     else { this.saveSession(); this.changed(); }
   }
   async activateCandidate() {
-    if (this.selecting || !this.state.candidate || !this.online() || this.backend !== 'ready') return;
-    const target = this.state.candidate; this.selecting = true; this.changed();
-    try {
-      const location = await withNetworkDeadline(()=>this.api.activate(target.code),'Validación del marbete');
-      if (!location?.codigo || canonical(location.codigo) !== canonical(target.code) || location.departamento_id !== this.deptId || location.activo !== true) throw Object.assign(Error('El servidor no confirmó el marbete.'), {code:'P0001'});
-      // Rows captured during validation keep their visit and canonical server ID.
-      for (const row of this.rows.filter(row => row.visitId === target.visitId && !row.payload)) {
-        row.location = location.codigo;
-        if (!this.saveRow(row)) return;
+    if(this.selecting||!this.online()||this.backend!=='ready')return;
+    const target=this.state.pendingLabels?.[0]||this.state.candidate;
+    if(!target)return;
+    this.selecting=true;this.changed();
+    try{
+      const location=await withNetworkDeadline(()=>this.api.activate(target.code),'Validación del marbete');
+      if(!location?.codigo||canonical(location.codigo)!==canonical(target.code)||
+        location.departamento_id!==this.deptId||location.activo!==true)
+        throw Object.assign(Error('El servidor no confirmó el marbete.'),{code:'P0001'});
+      // Bind only rows of the validated visit. A newer label can already be active.
+      for(const row of this.rows.filter(row=>row.visitId===target.visitId&&!row.payload&&row.status!=='cancelled')){
+        const updated={...row,location:location.codigo,locationVerified:true};
+        if(!this.saveRow(updated))return;
+        Object.assign(row,updated);
       }
-      this.state.active = {...target,code:location.codigo}; this.state.candidate = null;
-      this.error = ''; this.saveSession();
-    } catch (error) {
-      this.error = 'Marbete sin activar: ' + message(error);
-      if (permanent(error)) {
-        for (const row of this.rows.filter(row => row.visitId === target.visitId && !row.payload)) {
-          const updated={...row,location:null,visitId:null,unlocatedApproved:false,status:'queued',error:'Marbete rechazado. La pieza sigue pendiente.'};
+      this.state.pendingLabels=(this.state.pendingLabels||[]).filter(item=>item.visitId!==target.visitId);
+      this.state.active={...target,code:location.codigo};
+      if(this.state.candidate?.visitId===target.visitId)this.state.candidate=null;
+      this.error='';this.saveSession();
+    }catch(error){
+      this.error='Marbete pendiente de validar: '+message(error);
+      if(permanent(error)){
+        for(const row of this.rows.filter(row=>row.visitId===target.visitId&&!row.payload&&row.status!=='cancelled')){
+          const updated={...row,location:null,visitId:null,locationVerified:false,locationRejected:true,
+            unlocatedApproved:false,status:'queued',error:'Marbete rechazado. Esta pieza sigue pendiente.'};
           if(!this.saveRow(updated))break;
           Object.assign(row,updated);
         }
-        this.state.candidate = null; this.saveSession();
-      } else { this.backend = 'offline'; this.schedule(4000); }
-    } finally { this.selecting = false; this.changed(); this.schedule(25); }
+        this.state.pendingLabels=(this.state.pendingLabels||[]).filter(item=>item.visitId!==target.visitId);
+        // Do not silently go back to the previous marbete after a rejection.
+        if(this.state.candidate?.visitId===target.visitId){this.state.candidate=null;this.state.active=null;}
+        this.saveSession();
+      }else{this.backend='offline';this.schedule(4000);}
+    }finally{
+      this.selecting=false;this.changed();this.schedule(25);
+    }
   }
   schedule(delay = 25) {
     if (this.timer || this.disposed || !this.owned || this.storageError || ['missing','invalid','denied'].includes(this.backend)) return;
@@ -370,7 +400,8 @@ export class ContinuousReceive {
     finally {
       this.job=null;this.changed();
       await this.compactJournal();
-      const actionable=this.rows.filter(r=>['queued','uncertain'].includes(r.status)&&(r.location||r.unlocatedApproved));
+      const actionable=this.rows.filter(r=>['queued','uncertain'].includes(r.status)&&
+        (r.location||r.unlocatedApproved)&&r.locationVerified!==false);
       if(actionable.length&&!this.disposed){
         const retry=Math.min(...actionable.map(r=>Math.max(0,(r.retryAt||0)-this.now())));
         this.schedule(Math.max(1000,Math.min(30000,retry||1000)));
@@ -398,12 +429,15 @@ export class ContinuousReceive {
     try{await this.compacting;}finally{this.compacting=null;}
   }
   async process() {
-    if (this.state.candidate) { await this.activateCandidate(); if (this.state.candidate) return; }
+    if(this.state.pendingLabels?.length||this.state.candidate){
+      await this.activateCandidate();
+      if(this.state.pendingLabels?.length||this.state.candidate||this.selecting)return;
+    }
     while (!this.disposed && !this.storageError && this.backend === 'ready' && this.online()) {
       // A SKU without a marbete is staged locally, without catalog writes or
       // stock changes, until the operator explicitly approves 'sin marbete'.
       const candidates = this.rows.filter(row => ['queued','uncertain'].includes(row.status) &&
-        (row.location||row.unlocatedApproved) &&
+        (row.location||row.unlocatedApproved) && row.locationVerified!==false &&
         (!row.retryAt||row.retryAt<=this.now()) &&
         row.visitId!==this.state.candidate?.visitId).slice(0,75);
       if (!candidates.length) break;
@@ -434,7 +468,8 @@ export class ContinuousReceive {
       } catch (error) { this.backend = 'offline'; this.error = 'Lecturas protegidas; catálogo pendiente: ' + message(error); break; }
       // Four requests can be in flight; each transaction locks its product on
       // the server. Input capture remains independent of network latency.
-      const ready = candidates.filter(row => row.product&&(row.location||row.unlocatedApproved)&&row.status !== 'failed'&&row.visitId!==this.state.candidate?.visitId);
+      const ready=candidates.filter(row=>row.product&&(row.location||row.unlocatedApproved)&&
+        row.locationVerified!==false&&row.status!=='failed'&&row.visitId!==this.state.candidate?.visitId);
       // SKU-first readings can sit in local staging indefinitely. Do not spin
       // while there is no server movement ready to commit.
       if(!ready.length)break;
@@ -535,7 +570,8 @@ export class ContinuousReceive {
         canSync:Boolean(row.location||row.unlocatedApproved)}));
   }
   finish() {
-    if (this.state.pendingSwitch) throw Error('Confirma o cancela el cambio de marbete.');
+    if(this.state.pendingLabels?.length||this.state.candidate||this.selecting)
+      throw Error('Hay marbetes pendientes de validación. Espera la confirmación del servidor.');
     if (this.rows.some(row=>row.kind==='receive'&&!row.location&&!row.unlocatedApproved&&row.status==='queued'))
       throw Error('Hay piezas sin ubicación. Escanea su marbete o elige registrar sin ubicación antes de finalizar.');
     this.state.endedAt = new Date(this.now()).toISOString(); this.saveSession(); this.changed();

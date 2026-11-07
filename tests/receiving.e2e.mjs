@@ -77,7 +77,7 @@ try {
     return route.abort();
   });
   await page.route('**/scanner.js*',route=>route.fulfill({contentType:'text/javascript',body:`
-    export async function startScanner(cb,label,options={}){window.__scanner={cb,label,options};window.__cameraOpens=(window.__cameraOpens||0)+1;const div=document.createElement('div');div.id='scanner';div.textContent='Cámara de prueba';document.body.appendChild(div);}
+    export async function startScanner(cb,label,options={}){window.__scanner={cb,label,options};window.__cameraOpens=(window.__cameraOpens||0)+1;const div=document.createElement('div');div.id='scanner';div.className='scanner scanner-pro';div.innerHTML='<button id="closeScan" class="scanner-close" type="button">Cerrar cámara</button>';document.body.appendChild(div);div.querySelector('button').onclick=()=>stopScanner();}
     export function stopScanner(){const s=window.__scanner;window.__scanner=null;document.getElementById('scanner')?.remove();s?.options.onClose?.();}
   `}));
   let blockedWrites=0;
@@ -98,16 +98,14 @@ try {
   // Both a barcode with no suffix and global focus recovery are supported.
   await page.locator('.cr-brand').click();await page.keyboard.type('0012345678');
   await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='6');
-  await page.keyboard.type('402-002');await page.keyboard.press('Enter');await page.locator('#crSwitch').waitFor({state:'visible'});
-  assert.equal(await page.locator('#crLocation').innerText(),'402-001');
+  // The next scanned marbete changes destination automatically; HID keeps working.
+  await page.keyboard.type('ZAP*402*002');await page.keyboard.press('Enter');
   await page.keyboard.type('0012345678');await page.keyboard.press('Enter');
-  assert.equal(await page.locator('#crSwitch').isVisible(),true,'a scanner terminator must not confirm the focused dialog');
-  assert.equal(await page.locator('#crLocation').innerText(),'402-001');
-  await page.locator('#crCancelSwitch').click();await page.keyboard.type('0012345678');await page.keyboard.press('Enter');
-  await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='7');
-  await page.keyboard.type('402-002');await page.keyboard.press('Enter');await page.locator('#crConfirmSwitch').click();
-  await page.waitForFunction(()=>document.getElementById('crLocation').textContent==='402-002'&&document.getElementById('crLocationLabel').textContent.toLowerCase()==='marbete activo');
-  assert.equal(await page.locator('#crVisitCount').innerText(),'0');
+  await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='7'
+    &&document.getElementById('crLocation').textContent==='402-002'
+    &&document.getElementById('crLocationLabel').textContent.toLowerCase()==='marbete activo');
+  assert.equal(await page.locator('#crSwitch').isVisible(),false,'location changes must not show a confirmation dialog');
+  assert.equal(await page.locator('#crVisitCount').innerText(),'1');
   // Continuous camera callback is shared by marbetes, QR and products.
   await page.locator('#crCameraButton').click();await page.waitForFunction(()=>!!window.__scanner);
   assert.equal(await page.evaluate(()=>window.__scanner.options.qrEnabled),true);
@@ -128,10 +126,11 @@ try {
   assert.ok(audit.some(row=>row.metodo==='scanner'),'HID receipts preserve reader origin');
   assert.equal(await page.evaluate(()=>window.__cameraOpens),1);
   await page.evaluate(()=>window.__scanner.cb('{"marbete":"ZAP-402-003"}'));
-  await page.locator('#crConfirmSwitch').click();await page.waitForFunction(()=>document.getElementById('crLocation').textContent==='402-003'&&document.getElementById('crLocationLabel').textContent.toLowerCase()==='marbete activo');
-  await page.waitForFunction(()=>window.__cameraOpens===2,'camera should resume after confirming a location');
+  await page.waitForFunction(()=>document.getElementById('crLocation').textContent==='402-003'&&document.getElementById('crLocationLabel').textContent.toLowerCase()==='marbete activo');
+  assert.equal(await page.locator('#crSwitch').isVisible(),false);
+  assert.equal(await page.evaluate(()=>window.__cameraOpens),1,'camera must stay open across marbete changes');
   assert.equal(await page.evaluate(()=>document.getElementById('scanner')?.parentElement===document.body),true);
-  await page.locator('#crCameraButton').click();
+  await page.locator('#closeScan').click();
   // Large HID bursts exercise actual input listeners and durable browser storage.
   for(const count of [100,500,1000]){
     const before=Number((await page.locator('#crTotalCount').innerText()).replace(/,/g,''));
