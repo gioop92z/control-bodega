@@ -77,7 +77,7 @@ try {
     return route.abort();
   });
   await page.route('**/scanner.js*',route=>route.fulfill({contentType:'text/javascript',body:`
-    export async function startScanner(cb,label,options={}){window.__scanner={cb,label,options};window.__cameraOpens=(window.__cameraOpens||0)+1;const div=document.createElement('div');div.id='scanner';div.textContent='Cámara de prueba';document.body.appendChild(div);}
+    export async function startScanner(cb,label,options={}){window.__scanner={cb,label,options};window.__cameraOpens=(window.__cameraOpens||0)+1;const div=document.createElement('div');div.id='scanner';div.innerHTML='<button id="closeScan" type="button">Cerrar cámara</button>';document.body.appendChild(div);div.querySelector('button').onclick=()=>stopScanner();}
     export function stopScanner(){const s=window.__scanner;window.__scanner=null;document.getElementById('scanner')?.remove();s?.options.onClose?.();}
   `}));
   let blockedWrites=0;
