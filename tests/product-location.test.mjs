@@ -99,6 +99,10 @@ test('barcode cleanup preserves leading zeroes and rejects invalid input',()=>{
 test('QR payloads and printed marbete barcodes resolve to one canonical code',()=>{
   const examples=[
     ['ZAP-402-001','ZAP-402-001'],
+    ['ZAP*402*002','ZAP-402-002'],
+    ['*ZAP*402*002*','ZAP-402-002'],
+    ['{"marbete":"ZAP*405*010"}','ZAP-405-010'],
+    ['https://example.com/ubicacion?marbete=ZAP*459*100','ZAP-459-100'],
     ['zap-405-010','ZAP-405-010'],
     ['402-001','ZAP-402-001'],
     ['Sección 402 · Cajón 001 · Marbete: ZAP-402-001','ZAP-402-001'],
