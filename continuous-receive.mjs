@@ -1,4 +1,4 @@
-import {parseMarbeteScan, locationQuery} from './product-location.mjs?v=3.9.5';
+import {parseMarbeteScan, locationQuery} from './product-location.mjs?v=5.12.0';
 import {cleanSupportCode, lookupSupportCodes} from './support-batch.mjs?v=3.8.0';
 import {LegacyReceiptApi} from './legacy-receipt-api.mjs?v=3.10.1';
 import {InventoryJournalMirror} from './vantis-offline-idb-v5.mjs?v=5.8.3';
@@ -263,6 +263,9 @@ export class ContinuousReceive {
       this.setCandidate(label);
       return {type:'location'};
     }
+    // Never turn malformed Code39 or QR labels into fake merchandise.
+    if(/^\*?ZAP[-*:/\.\s]/i.test(code)||/^https?:\/\//i.test(code)||code.startsWith('{'))
+      throw Error('Marbete no reconocido. Revisa el código antes de seguir.');
     const location = this.state.candidate || this.state.active;
     const productCode = cleanSupportCode(code), id = eventId || this.makeId();
     if (eventId && this.rows.some(row => row.id === id)) return {type:'duplicate-event',id};
