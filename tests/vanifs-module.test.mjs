@@ -23,7 +23,7 @@ test('VANIFS opens the existing collaborative service without migrating inventor
   assert.match(portal, /iframe id="reception-frame"/);
   assert.match(portal, /allow="camera;/);
   assert.match(portal, /Abrir en pantalla completa/);
-  assert.match(portal, /no modifica automáticamente las existencias/);
+  assert.match(portal, /Ningún manifiesto ni lectura de VANIFS modifica automáticamente las existencias/);
   assert.ok(!portal.includes('service_role'));
   assert.ok(!portal.includes('vanifs_api'));
   assert.ok(!portal.includes('supabase.co'));
