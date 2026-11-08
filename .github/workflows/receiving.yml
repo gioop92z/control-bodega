@@ -49,3 +49,31 @@ jobs:
         with:
           name: receiving-qa
           path: /tmp/vantis-receiving-qa/
+  vanifs:
+    name: VANIFS integrado · concurrencia y navegador
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: vantis_test
+          POSTGRES_PASSWORD: isolated_test_only
+          POSTGRES_DB: vanifs_qa
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U vantis_test -d vanifs_qa"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build:vanifs
+      - run: npx --no-install tsc -p vanifs/tsconfig.json
+      - run: npm run test:vanifs:database
+        env:
+          VANIFS_TEST_DATABASE_URL: postgresql://vantis_test:isolated_test_only@127.0.0.1:5432/vanifs_qa
+      - run: npx playwright install chromium --only-shell
+      - run: node tests/vanifs-browser.e2e.mjs

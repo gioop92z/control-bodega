@@ -34,12 +34,17 @@ const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const APP_VERSION = '5.12.0';
+function teamModuleUrl(mode='inicio') {
+  const backend = vantisBackendConfig.mode === 'NUEVO_EN_PREPARACION' ? 'backend=nuevo&' : '';
+  return './vanifs/?' + backend + 'modulo=' + mode;
+}
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 const HISTORY_RESTART_CUTOFF = '2026-10-15T22:15:00.000Z';
 
 const S = {
   user: null,
   access: null,
+  individual: false,
   admin: false,
   staff: false,
   displayName: '',
@@ -238,6 +243,27 @@ async function boot() {
   const { data: { user }, error } = await sb.auth.getUser();
   if (error || !user) return renderLogin();
   const role = roleFromUser(user);
+  if (!role) {
+    const { data: profile, error: profileError } = await sb.rpc('vanifs_api',{p_route:'access',p_action:'profile',p_data:{}});
+    if (profileError || !profile?.id) return renderLogin('Esta cuenta necesita una invitación individual de VANTIS.');
+    const selected = new URLSearchParams(location.search).get('modulo');
+    if (selected !== 'inventario' || !['admin','operador'].includes(profile.inventoryRole) ||
+        !/^\d{4,12}$/.test(profile.employeeNumber || '')) {
+      location.assign(teamModuleUrl());
+      return;
+    }
+    S.user = user;
+    S.individual = true;
+    applyRole(profile.inventoryRole === 'admin' ? 'admin' : 'seller');
+    S.displayName = profile.name;
+    if (sessionStorage.getItem('nova.employeeNumber') !== profile.employeeNumber) {
+      sessionStorage.removeItem('vantis.session.ready');
+    }
+    sessionStorage.setItem('nova.employeeNumber', profile.employeeNumber);
+    await loadDepartments();
+    render();
+    return;
+  }
   // Every operational session must carry its own employee identification.
   // Never let an existing administrator session bypass the employee-only entry.
   const employee = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('nova.employeeNumber') : null;
@@ -279,6 +305,7 @@ function renderLogin(err='') {
           <button class="primary" type="submit">Entrar</button>
         </form>
         <p class="tiny center">Tu número quedará asociado a los movimientos de esta sesión.</p>
+        <a class="secondary" href="${esc(teamModuleUrl())}">Acceso individual del equipo</a>
       </section>
     </main>`;
   $('loginForm').onsubmit = doLogin;
@@ -344,10 +371,11 @@ function header() {
     <div>
       <div class="eyebrow">Control de Inventario</div>
       <h2>${esc(deptName())}</h2>
-      <div class="tiny access-label" data-access-role="${S.admin?'admin':'seller'}"><span class="status-dot"></span>Empleado ${esc((typeof sessionStorage!=='undefined'?sessionStorage.getItem('nova.employeeNumber'):'')||'')}</div>
+      <div class="tiny access-label" data-access-role="${S.admin?'admin':'seller'}" data-individual="${S.individual?'1':'0'}"><span class="status-dot"></span>Empleado ${esc((typeof sessionStorage!=='undefined'?sessionStorage.getItem('nova.employeeNumber'):'')||'')}</div>
     </div>
     <div class="top-actions">
       ${S.depts.length > 1 ? `<select id="deptSelect" class="compact">${S.depts.map(d => `<option value="${d.id}" ${d.id===S.deptId?'selected':''}>${esc(d.nombre)}</option>`).join('')}</select>` : ''}
+      ${S.individual ? '<button id="vantisModules" class="ghost" type="button">Módulos</button>' : ''}
       <button id="logout" class="ghost">Salir</button>
     </div>
   </header>`;
@@ -394,6 +422,9 @@ function wireShell() {
     S.product = null;
     S.searchResult = null;
     render();
+  });
+  $('vantisModules')?.addEventListener('click', () => {
+    if (!exitBusy() && !receiveBusy()) location.assign(teamModuleUrl());
   });
   $('logout').onclick = async () => {
     if (exitBusy() || receiveBusy()) return;

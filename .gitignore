@@ -1,3 +1,7 @@
 node_modules/
 test-results/
 supabase/.temp/
+
+# Compilación local del módulo VANIFS
+vanifs/build/
+vanifs/vanifs-sw.generated.js

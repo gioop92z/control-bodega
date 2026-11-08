@@ -53,12 +53,21 @@ jobs:
           grep -Fq 'catalog-product-showcase' app.js
       # Database integration and live Supabase API tests run separately in CI.
       # A temporary outage cannot freeze the static frontend on an old release.
+      - name: Build VANIFS reception module
+        env:
+          VANIFS_GOOGLE_CLIENT_ID: ${{ vars.VANIFS_GOOGLE_CLIENT_ID }}
+          VANIFS_GOOGLE_PICKER_KEY: ${{ vars.VANIFS_GOOGLE_PICKER_KEY }}
+          VANIFS_GOOGLE_PROJECT_NUMBER: ${{ vars.VANIFS_GOOGLE_PROJECT_NUMBER }}
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build:vanifs
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - name: Stage tracked site files
         run: |
           mkdir -p "${{ runner.temp }}/vantis-pages"
           git archive HEAD | tar -x -C "${{ runner.temp }}/vantis-pages"
+          cp -r vanifs/build vanifs/vanifs-sw.generated.js "${{ runner.temp }}/vantis-pages/vanifs/"
           cat > "${{ runner.temp }}/vantis-pages/deployment-info.json" <<EOF
           {"release":"5.8.3","commit":"${{ github.sha }}","generated_by":"github-actions-pages"}
           EOF

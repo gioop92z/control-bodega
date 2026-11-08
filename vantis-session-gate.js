@@ -55,7 +55,9 @@ function departmentStep(g,r){
   }
   const opts=ds.map(d=>'<button type="button" class="vantis-dept '+(d.id===current?'current':'')+'" data-vantis-dept="'+esc(d.id)+'"><span><b>'+esc(d.name)+'</b><small>'+(d.id===current?'Último departamento usado':'Seleccionar para esta sesión')+'</small></span><strong>›</strong></button>').join('');
   g.innerHTML='<section class="vantis-session-card"><div class="eyebrow">VANTIS · DEPARTAMENTO</div><div class="vantis-session-steps"><i class="on"></i><i class="on"></i></div><h2>¿En qué departamento trabajarás?</h2><div class="vantis-who"><div><small>'+who+' identificado</small><b>Gafete '+esc(n)+'</b></div><button id="vantisChangeBadge" type="button">Cambiar</button></div><p>Selecciona el departamento para esta sesión. Inventario, búsquedas, movimientos y conteos iniciarán ahí.</p><div class="vantis-depts">'+opts+'</div></section>';
-  $('vantisChangeBadge').onclick=()=>{sessionStorage.removeItem(EMP);sessionStorage.removeItem(READY);identityStep(g,r)};
+  const changeBadge=$('vantisChangeBadge');
+  if(document.querySelector('.access-label')?.dataset?.individual==='1') changeBadge?.remove();
+  else if(changeBadge) changeBadge.onclick=()=>{sessionStorage.removeItem(EMP);sessionStorage.removeItem(READY);identityStep(g,r)};
   document.querySelectorAll('[data-vantis-dept]').forEach(b=>b.onclick=()=>finish(g,r,b.dataset.vantisDept));
 }
 function identityStep(g,r){
