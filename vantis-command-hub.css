@@ -39,3 +39,12 @@
 @media(min-width:1000px){.vantis-command{right:calc((100vw - min(1120px,92vw))/2)}}
 @media(max-width:560px){.vantis-command{right:17px;bottom:calc(16px + env(safe-area-inset-bottom))}.vantis-command-toggle{width:68px;height:68px;border-radius:23px}.action-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.action-grid .action-card:first-child{grid-column:span 2}.action-grid .action-card:nth-child(2),.action-grid .action-card:nth-child(3),.action-grid .action-card:nth-child(4){grid-column:span 1}.action-grid .action-card:nth-child(5){grid-column:span 2}.action-grid .action-card{min-height:145px}}
 @media(prefers-reduced-motion:reduce){.vantis-command *,.action-grid .action-card,.vantis-metric,.kpi{animation:none!important;transition:none!important;transform:none!important}}
+
+/* VANIFS reception entry is a navigational link; it does not call inventory APIs. */
+.vantis-command-panel a.vantis-command-item{box-sizing:border-box;text-decoration:none}
+.action-grid a.action-card.vanifs-link{grid-column:span 4!important;box-sizing:border-box;text-decoration:none;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:6px;background:linear-gradient(110deg,#fdf1f8,#fff)!important;border:1px solid #edc8dd!important;color:#5f1d49!important;cursor:pointer}
+.action-grid a.action-card.vanifs-link b{display:inline-grid;place-items:center;width:43px;height:43px;background:#f6d8e9!important;color:#a90069!important}
+.action-grid a.action-card.vanifs-link strong{font-size:16px}
+.action-grid a.action-card.vanifs-link span{font-size:12px;color:#75596b!important}
+.action-grid a.action-card.vanifs-link:focus-visible{outline:3px solid #e5007d;outline-offset:3px}
+@media(max-width:560px){.action-grid a.action-card.vanifs-link{grid-column:span 2!important;min-height:130px}}

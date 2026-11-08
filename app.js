@@ -334,6 +334,7 @@ function nav() {
   return `<nav class="vantis-command" aria-label="Navegación principal">
     <div id="vantisCommandPanel" class="vantis-command-panel" aria-label="Secciones" aria-hidden="true">
       ${items.map(([v,l,i]) => `<button type="button" data-view="${v}" class="vantis-command-item ${S.view===v?'active':''}" ${S.view===v?'aria-current="page"':''}><span aria-hidden="true">${i}</span><b>${l}</b></button>`).join('')}
+      <a href="./vanifs.html" class="vantis-command-item" aria-label="VANIFS, recepción colaborativa"><span aria-hidden="true">▤</span><b>VANIFS · Recepción</b></a>
     </div>
     <button type="button" id="vantisCommandToggle" class="vantis-command-toggle" aria-label="Abrir menú de navegación" aria-controls="vantisCommandPanel" aria-expanded="false"><span class="vantis-command-symbol" aria-hidden="true">✣</span><span>Menú</span></button>
   </nav>`;
@@ -460,6 +461,7 @@ async function homeView() {
       <button class="action-card" data-go="search"><b>⌕</b><strong>Buscar producto</strong><span>UPC, SKU o ubicación</span></button>
       <button class="action-card" data-go="count"><b>✓</b><strong>Inventario físico</strong><span>Contar y detectar diferencias</span></button>
       <button class="action-card" data-go="operations"><b>◈</b><strong>Centro operativo</strong><span>Localizar, preparar, trasladar y supervisar</span></button>
+      <a class="action-card vanifs-link" href="./vanifs.html" aria-label="Abrir VANIFS, recepción por manifiesto"><b>▤</b><strong>VANIFS · Recepción en equipo</strong><span>Manifiestos, cajas, escaneo compartido, conciliación y reportes</span></a>
     </section>
     <button id="quickReceive" class="vr-floating-launch" type="button" aria-label="Abrir escaneo de mercancía"><span class="vr-launch-glyph" aria-hidden="true">▦</span><span>Escanear</span></button>
     <section class="card"><div class="section-head"><h3>Hoy</h3><span class="tiny">Actualización en tiempo real</span></div><div id="summary" class="kpis"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div></section>

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#e5007d">
+  <meta name="description" content="VANIFS desde VANTIS: recepción colaborativa, manifiestos y conciliación sin migrar el inventario.">
+  <title>VANTIS · VANIFS Recepción</title>
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <style>
+    :root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #25212a; background: #faf7fa; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100dvh; }
+    header { padding: 16px max(18px, calc((100vw - 1050px)/2)); background: #241728; color: white; display:flex; flex-wrap:wrap; gap:14px; align-items:center; justify-content:space-between; }
+    .brand { display:flex; align-items:center; gap:12px; }
+    .logo { display:grid; place-items:center; background: #e5007d; color:white; width:42px; height:42px; border-radius:13px; font-weight:900; font-size:23px; }
+    .brand strong { display:block; font-size:18px; letter-spacing:.04em; }
+    .brand small { display:block; opacity:.8; }
+    main { width: min(1050px, calc(100% - 32px)); margin: 30px auto; }
+    .eyebrow { color:#b30069; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.1em; }
+    h1 { font-size:clamp(27px,4vw,39px); line-height:1.12; margin:11px 0 8px; }
+    p { line-height:1.5; color:#5f5663; }
+    .panel { padding:clamp(20px,3vw,32px); border:1px solid #eadfe9; background:#fff; border-radius:25px; box-shadow:0 15px 50px #2e19300c; }
+    .actions { display:flex; flex-wrap:wrap; gap:10px; margin:24px 0 16px; }
+    .button { display:inline-flex; align-items:center; justify-content:center; padding:14px 18px; min-height:48px; font:inherit; font-weight:750; text-decoration:none; border-radius:14px; border:1px solid #ded0dc; cursor:pointer; }
+    .primary { background:#a70066; color:white; border-color:#a70066; }
+    .secondary { background:white; color:#622245; }
+    .back { color:inherit; border-color:#ffffff55; padding:10px 13px; font-size:13px; }
+    .note { border-left:3px solid #c80074; padding:12px 16px; background:#fdf4f9; border-radius:0 12px 12px 0; font-size:13px; color:#5c3150; }
+    .embed { margin-top:25px; border:1px solid #ded0dc; border-radius:20px; overflow:hidden; background:white; }
+    .embed-head { padding:12px 16px; background:#f6edf3; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; }
+    iframe { border:0; display:block; width:100%; min-height:75dvh; background:white; }
+    .muted { font-size:12px; color:#736571; }
+    button:focus-visible, a:focus-visible { outline:3px solid #e5007d; outline-offset:3px; }
+    [hidden] { display:none !important; }
+    @media(max-width:600px){header{padding:14px 16px;}main{margin:18px auto;} .actions .button{width:100%} iframe{min-height:80dvh;}}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="logo" aria-hidden="true">V</span><div><strong>VANTIS</strong><small>VANIFS · Recepción</small></div></div>
+    <a class="button back" href="./">← Volver al inventario</a>
+  </header>
+  <main>
+    <section class="panel">
+      <span class="eyebrow">Recepción colaborativa</span>
+      <h1>Manifiestos, cajas y escaneo en equipo</h1>
+      <p>Desde VANTIS puedes entrar a las jornadas de VANIFS, cargar manifiestos, registrar lecturas con cámara o escáner, revisar diferencias y exportar reportes mediante el servicio de recepción existente.</p>
+      <div class="actions">
+        <a class="button primary" id="open-reception" href="https://vanifs-recepcion-mercancia.toastysparrow.chatgpt.site/" rel="noreferrer">Abrir recepción · Cámara y lector ↗</a>
+        <button class="button secondary" id="show-embedded" type="button" aria-expanded="false" aria-controls="embedded-reception">Ver recepción dentro de VANTIS</button>
+      </div>
+      <div class="note"><strong>Inventario protegido:</strong> la recepción continúa en su servicio actual. Ningún manifiesto ni lectura de VANIFS modifica automáticamente las existencias de VANTIS. El acceso a VANIFS mantiene su propia autorización.</div>
+      <div class="embed" id="embedded-reception" hidden>
+        <div class="embed-head">
+          <strong>Recepción integrada · Vista de escritorio</strong>
+          <a class="button secondary" href="https://vanifs-recepcion-mercancia.toastysparrow.chatgpt.site/" rel="noreferrer">Abrir en pantalla completa ↗</a>
+        </div>
+        <iframe id="reception-frame" title="VANIFS, recepción de mercancía" allow="camera; microphone; clipboard-read; clipboard-write" referrerpolicy="no-referrer" loading="lazy"></iframe>
+        <div class="embed-head muted">Si el navegador impide mostrar la aplicación o usar la cámara dentro del panel, usa «Abrir en pantalla completa».</div>
+      </div>
+    </section>
+  </main>
+  <script>
+    (() => {
+      const pane = document.getElementById('embedded-reception');
+      const btn = document.getElementById('show-embedded');
+      const frame = document.getElementById('reception-frame');
+      btn.addEventListener('click', () => {
+        const show = pane.hidden;
+        pane.hidden = !show;
+        btn.setAttribute('aria-expanded', String(show));
+        btn.textContent = show ? 'Ocultar recepción integrada' : 'Ver recepción dentro de VANTIS';
+        if (show && !frame.src) frame.src = 'https://vanifs-recepcion-mercancia.toastysparrow.chatgpt.site/';
+      });
+    })();
+  </script>
+</body>
+</html>
