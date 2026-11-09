@@ -4,9 +4,10 @@ export const LOCAL_DEPARTMENT = 'ZAPATERIA INFANTIL';
 const DB_NAME = 'vantis-github-local-v1';
 const STORES = ['labels','products','assignments','receipts','evidence'];
 const makeError = (message,code='LOCAL_ERROR') => Object.assign(new Error(message),{code});
+const storageError = cause => makeError('No se pudo guardar en este dispositivo. No borres los datos ni sigas escaneando hasta disponer de almacenamiento local: '+(cause?.message||cause||'error desconocido'),'LOCAL_STORAGE_ERROR');
 
 function openDB() {
-  if(typeof indexedDB==='undefined') return Promise.reject(makeError('Este navegador no dispone de IndexedDB.'));
+  if(typeof indexedDB==='undefined') return Promise.reject(storageError('IndexedDB no disponible'));
   return new Promise((resolve,reject)=>{
     const req=indexedDB.open(DB_NAME,1);
     req.onupgradeneeded=()=>{
@@ -14,20 +15,20 @@ function openDB() {
       for(const name of STORES)if(!db.objectStoreNames.contains(name))db.createObjectStore(name,{keyPath:'id'});
     };
     req.onsuccess=()=>resolve(req.result);
-    req.onerror=()=>reject(req.error||makeError('No se pudo abrir el inventario local.'));
-    req.onblocked=()=>reject(makeError('Otra pestaña bloquea la apertura del inventario.'));
+    req.onerror=()=>reject(storageError(req.error));
+    req.onblocked=()=>reject(storageError('Otra pestaña bloquea el inventario'));
   });
 }
 const request = q => new Promise((resolve,reject)=>{
   q.onsuccess=()=>resolve(q.result);
-  q.onerror=()=>reject(q.error||makeError('Fallo de lectura del almacenamiento.'));
+  q.onerror=()=>reject(storageError(q.error));
 });
 function transaction(db,names,mode,work) {
   return new Promise((resolve,reject)=>{
     const tx=db.transaction(names,mode);
     let result,problem;
     tx.oncomplete=()=>resolve(result);
-    tx.onabort=()=>reject(problem||tx.error||makeError('El dispositivo no confirmó la escritura.'));
+    tx.onabort=()=>reject(problem||storageError(tx.error));
     tx.onerror=()=>{};
     (async()=>{try{result=await work(tx);}catch(e){problem=e;try{tx.abort();}catch{reject(e);}}})();
   });
