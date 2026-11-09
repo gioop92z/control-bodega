@@ -17,7 +17,7 @@
   <header class="vantis-local-top">
     <div class="vantis-local-mark">V</div>
     <div><strong>VANTIS</strong><small>Inventario compartido · edición de equipo</small></div>
-    <span class="vantis-local-tag">Cloudflare D1 · sin Supabase</span>
+    <span class="vantis-local-tag">Base central · acceso seguro</span>
   </header>
   <main class="team-shell">
     <section id="teamUnavailable" class="vantis-local-welcome" hidden>
@@ -38,13 +38,19 @@
       <p id="teamLoginError" class="vantis-local-error" role="alert" hidden></p>
       <details class="team-setup">
         <summary>Primera configuración del administrador</summary>
-        <p>Solo para instalar por primera vez. Necesitas la clave privada de instalación del servidor.</p>
+        <p>Solo necesitas hacerlo una vez. Para impedir que otra persona reclame el inventario, verifica la cuenta de correo del propietario mediante Supabase Auth.</p>
+        <p><strong>Correo autorizado:</strong> trofeosgiova7@gmail.com</p>
+        <button id="teamSendEmail" type="button">Enviar enlace de verificación al correo</button>
+        <label>Código recibido o enlace completo (si el correo ofrece uno)
+          <input id="teamVerifyEmailInput" type="text" autocomplete="one-time-code" placeholder="Código o enlace del correo">
+        </label>
+        <button id="teamVerifyEmail" type="button">Verificar correo</button>
+        <p id="teamEmailStatus" role="status"></p>
         <form id="teamSetupForm">
-          <label>Clave privada de instalación<input name="key" type="password" autocomplete="off" required></label>
           <label>Número de empleado administrador<input name="employee" inputmode="numeric" pattern="[0-9]{4,12}" required></label>
           <label>Nombre<input name="name" maxlength="80" required></label>
-          <label>PIN inicial (6–12 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{6,12}" required></label>
-          <button type="submit">Crear primera cuenta</button>
+          <label>PIN personal (6–12 dígitos)<input name="pin" type="password" inputmode="numeric" minlength="6" maxlength="12" pattern="[0-9]{6,12}" autocomplete="new-password" required></label>
+          <button type="submit" class="vantis-local-primary">Activar mi cuenta administradora</button>
         </form>
         <p id="teamSetupStatus" role="status"></p>
       </details>
