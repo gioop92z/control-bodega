@@ -2,6 +2,8 @@
 import {TEAM_API_URL} from './team-config.mjs';
 export const TEAM_DEPARTMENT='ZAPATERIA INFANTIL';
 const BASE=String(TEAM_API_URL||'').trim().replace(/\/+$/,'');
+const PUBLIC_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVwaG56eWVtYnlyb3V2cW9od3lzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI2NjE5NzIsImV4cCI6MjEwODIzNzk3Mn0.UawCQzEB2ITHSLsq33Je1ChFQf25zKH0xwQic9yXn8U';
+const gatewayHeaders=()=>({'apikey':PUBLIC_ANON_KEY,'authorization':'Bearer '+PUBLIC_ANON_KEY});
 export const teamConfigured=()=>/^https:\/\/[a-z0-9.-]+(?::443)?$/i.test(BASE);
 export class TeamInventoryApi {
   constructor(token,onUnauthorized=()=>{}) {
@@ -13,7 +15,7 @@ export class TeamInventoryApi {
     let response;
     try{
       response=await fetch(BASE+path,{method,cache:'no-store',
-        headers:{'authorization':'Bearer '+this.token,...(body?{'content-type':'application/json'}:{})},
+        headers:{...gatewayHeaders(),'x-vantis-token':this.token,...(body?{'content-type':'application/json'}:{})},
         body:body?JSON.stringify(body):undefined});
     }catch{throw Object.assign(Error('No hay conexión con el inventario central. La lectura se conserva para reintentar.'),{code:'NETWORK_ERROR'});}
     const value=await response.json().catch(()=>({error:'Respuesta inesperada del servidor.'}));
@@ -41,7 +43,7 @@ export class TeamInventoryApi {
 }
 export async function setupTeamAdmin({emailToken,employee,name,pin}){
   if(!teamConfigured())throw Error('Servidor compartido sin configurar.');
-  const response=await fetch(BASE+'/api/bootstrap',{method:'POST',headers:{'content-type':'application/json'},
+  const response=await fetch(BASE+'/api/bootstrap',{method:'POST',headers:{...gatewayHeaders(),'content-type':'application/json'},
     body:JSON.stringify({emailToken,employee,name,pin})}).catch(()=>{throw Error('No se pudo conectar con el servidor.');});
   const result=await response.json().catch(()=>({}));
   if(!response.ok)throw Error(result.error||'No se pudo activar la cuenta.');
