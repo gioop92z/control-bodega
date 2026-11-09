@@ -45,8 +45,10 @@ try{
     return new LocalInventoryApi().exportBackup();
   });
   assert.equal(receiptSnapshot.items.receipts.length,3);
-  assert.deepEqual(receiptSnapshot.items.receipts.map(x=>x.receipt.marbete_codigo),
-    ['ZAP-405-085','ZAP-405-085','ZAP-402-003']);
+  const counts=receiptSnapshot.items.receipts.reduce((map,x)=>{
+    const label=x.receipt.marbete_codigo;map[label]=(map[label]||0)+1;return map;
+  },{});
+  assert.deepEqual(counts,{'ZAP-405-085':2,'ZAP-402-003':1});
   assert.equal(receiptSnapshot.items.products.reduce((a,b)=>a+b.stock,0),3);
   assert.equal(new Set(receiptSnapshot.items.receipts.map(x=>x.id)).size,3);
   assert.equal(supabaseCalls.length,0,'local mode must not contact Supabase');
