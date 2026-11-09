@@ -1,0 +1,12 @@
+name = "vantis-equipo"
+main = "worker.mjs"
+compatibility_date = "2026-11-09"
+
+# Replace with the actual origin where GitHub Pages publishes team.html.
+[vars]
+ALLOWED_ORIGIN = "https://gioop92z.github.io"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "vantis-equipo"
+database_id = "REPLACE_WITH_CLOUDFLARE_D1_DATABASE_ID"
