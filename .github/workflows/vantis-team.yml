@@ -1,0 +1,37 @@
+name: VANTIS Equipo - contratos y 10000 lecturas
+on:
+  push:
+    branches: [main, 'feat/vantis-equipo-cloudflare-20261109']
+    paths:
+      - 'cloudflare/**'
+      - 'team.html'
+      - 'team-config.mjs'
+      - 'vantis-team*'
+      - 'tests/team-worker.test.mjs'
+      - '.github/workflows/vantis-team.yml'
+  pull_request:
+    paths:
+      - 'cloudflare/**'
+      - 'team.html'
+      - 'team-config.mjs'
+      - 'vantis-team*'
+      - 'tests/team-worker.test.mjs'
+permissions:
+  contents: read
+jobs:
+  sqlite-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verificar sintaxis
+        run: |
+          node --check cloudflare/worker.mjs
+          node --check vantis-team-api.mjs
+          node --check vantis-team.mjs
+          node --check team-config.mjs
+      - name: Probar roles, concurrencia e idempotencia en SQLite
+        run: node --test tests/team-worker.test.mjs
