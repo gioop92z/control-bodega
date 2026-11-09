@@ -1,5 +1,5 @@
 // Shared-inventory adapter for the existing ContinuousReceive engine.
-import {TEAM_API_URL} from './team-config.mjs';
+import {TEAM_API_URL} from './team-config.mjs?v=5.15.1';
 export const TEAM_DEPARTMENT='ZAPATERIA INFANTIL';
 const BASE=String(TEAM_API_URL||'').trim().replace(/\/+$/,'');
 const PUBLIC_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVwaG56eWVtYnlyb3V2cW9od3lzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI2NjE5NzIsImV4cCI6MjEwODIzNzk3Mn0.UawCQzEB2ITHSLsq33Je1ChFQf25zKH0xwQic9yXn8U';
@@ -51,9 +51,16 @@ export async function setupTeamAdmin({key,employee,name,pin}){
 }
 export async function openTeamSession(employee,pin){
   if(!teamConfigured())throw Error('No se configuró el servidor compartido de VANTIS.');
-  const response=await fetch(BASE+'/api/login',{method:'POST',cache:'no-store',
-    headers:{...gatewayHeaders(),'content-type':'application/json'},
-    body:JSON.stringify({employee,pin})}).catch(()=>{throw Error('No se pudo conectar con el servidor de VANTIS.');});
+  const controller=new AbortController();
+  const watchdog=setTimeout(()=>controller.abort(),15000);
+  let response;
+  try {
+    response=await fetch(BASE+'/api/login',{method:'POST',cache:'no-store',
+      headers:{...gatewayHeaders(),'content-type':'application/json'},
+      body:JSON.stringify({employee,pin}),signal:controller.signal});
+  }catch{
+    throw Error('No se pudo conectar desde este dispositivo. Abre el enlace en Safari, revisa tu conexión e intenta de nuevo.');
+  }finally{clearTimeout(watchdog);}
   const result=await response.json().catch(()=>({}));
   if(!response.ok)throw Error(result.error||'No fue posible iniciar sesión.');
   if(!['admin','scanner','viewer'].includes(result.role)||!result.token)throw Error('Sesión inválida.');
