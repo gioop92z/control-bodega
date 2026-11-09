@@ -1,0 +1,27 @@
+name: VANTIS Equipo - mobile live browser acceptance
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'team.html'
+      - 'team-config.mjs'
+      - 'vantis-team*'
+      - 'tests/team-ui-live.e2e.mjs'
+      - '.github/workflows/vantis-team-mobile.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mobile-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install chromium --with-deps
+      - name: Verify production VANTIS mobile login and legacy local mode
+        run: node tests/team-ui-live.e2e.mjs
