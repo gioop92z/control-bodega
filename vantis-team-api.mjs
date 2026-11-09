@@ -39,6 +39,14 @@ export class TeamInventoryApi {
   updatePerson(payload){return this.request('/api/people',{method:'PATCH',body:payload});}
   describe(payload){return this.request('/api/products/describe',{method:'PATCH',body:payload});}
 }
+export async function setupTeamAdmin({key,employee,name,pin}){
+  if(!teamConfigured())throw Error('Servidor compartido sin configurar.');
+  const response=await fetch(BASE+'/api/bootstrap',{method:'POST',headers:{'content-type':'application/json'},
+    body:JSON.stringify({key,employee,name,pin})}).catch(()=>{throw Error('No se pudo conectar con el servidor.');});
+  const result=await response.json().catch(()=>({}));
+  if(!response.ok)throw Error(result.error||'No se pudo activar la cuenta.');
+  return result;
+}
 export async function openTeamSession(employee,pin){
   if(!teamConfigured())throw Error('No se configuró el servidor compartido de VANTIS.');
   const response=await fetch(BASE+'/api/login',{method:'POST',cache:'no-store',
