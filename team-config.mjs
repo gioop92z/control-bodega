@@ -1,2 +1,2 @@
-// Public API endpoint for VANTIS Equipo. Credentials stay exclusively in Supabase Edge Functions.
+// VANTIS Equipo · inventario central dedicado, sin utilizar el Supabase original.
 export const TEAM_API_URL = 'https://uphnzyembyrouvqohwys.supabase.co/functions/v1/vantis-team';
