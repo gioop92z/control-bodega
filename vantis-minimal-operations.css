@@ -371,20 +371,6 @@
   outline-offset:1px;
 }
 .continuous-receive .cr-stage #crScan::placeholder{color:#928c97;opacity:1;font-weight:400}
-.continuous-receive .cr-stage #crKeyboard,
-.vr-float-body .cr-stage #crKeyboard{
-  flex:0 0 auto;
-  min-width:82px;
-  min-height:48px;
-  padding:8px 12px!important;
-  border:1px solid #ded9e2!important;
-  border-radius:10px!important;
-  background:#fff!important;
-  color:#4c3e4a!important;
-  font-size:12px!important;
-  font-weight:600;
-  box-shadow:none!important;
-}
 .continuous-receive .cr-indicators{
   grid-column:1/-1;
   grid-row:6;
@@ -491,7 +477,6 @@
 .continuous-receive .cr-history{padding:6px 0}
 .continuous-receive .cr-section-title h2{font-size:16px;color:#2a232d}
 .continuous-receive .cr-row{border-bottom-color:#e6e3e8}
-.continuous-receive .cr-tools{gap:10px;padding:16px 0 4px}
 .vr-receive-float .cr-feedback{
   top:calc(72px + env(safe-area-inset-top,0px));
   padding:10px 13px;
@@ -524,7 +509,6 @@
   .continuous-receive .cr-counters strong{font-size:32px}
   .continuous-receive .cr-counters span{font-size:10px}
   .continuous-receive .cr-stage #crScan{font-size:14px!important}
-  .continuous-receive .cr-stage #crKeyboard{min-width:76px;padding:7px 9px!important}
   .continuous-receive .cr-last{padding:16px;min-height:88px}
 }
 @media(max-width:370px){

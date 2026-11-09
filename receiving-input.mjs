@@ -4,7 +4,7 @@
 // emit the same frame twice.
 export function wireReceivingInput({input,active,onCode,onError,onActivity=()=>{}}) {
   let timer = null, lastAt = 0, rapid = false, size = 0, blockedFrame = false;
-  let firstAt = 0, samples = 0, manualMode = false;
+  let firstAt = 0, samples = 0;
   const editable = node => node?.closest?.('input,textarea,select,[contenteditable="true"]');
   const clear = () => {clearTimeout(timer);timer=null;lastAt=0;rapid=false;size=0;firstAt=0;samples=0;};
   const focus = () => {
@@ -13,10 +13,10 @@ export function wireReceivingInput({input,active,onCode,onError,onActivity=()=>{
   function flush(forceSource=null) {
     const code = input.value.trim();
     const duration=firstAt?performance.now()-firstAt:0;
-    // El lector HID se reconoce por su ráfaga; el teclado manual se marca
-    // por el botón Escribir, por pegado o por tecleo humano lento.
-    const source=forceSource||(manualMode||(samples>=4&&duration>(samples-1)*85)?'manual':'scanner');
-    clear();manualMode=false;input.value = '';
+    // El lector HID se reconoce por su ráfaga; el pegado y el tecleo lento
+    // se registran como captura manual desde el mismo campo.
+    const source=forceSource||(samples>=4&&duration>(samples-1)*85?'manual':'scanner');
+    clear();input.value = '';
     if (!code) return;
     if (!active()) {onError(Error('Lectura no aceptada. Revisa el estado de recepción antes de continuar.'));return;}
     onActivity();
@@ -36,13 +36,12 @@ export function wireReceivingInput({input,active,onCode,onError,onActivity=()=>{
   function key(event) {
     if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.repeat) {if (event.target===input) event.preventDefault();return;}
-    // A scanner's Enter must NEVER click the focused confirmation button
-    // after a barcode was read while the marbete dialog paused capture.
+    // A scanner's suffix must not activate a focused button if capture was paused.
     if(!active()&&!editable(event.target)){
       if(event.key.length===1){blockedFrame=true;event.preventDefault();return;}
       if(blockedFrame&&(event.key==='Enter'||event.key==='Tab')){
         blockedFrame=false;event.preventDefault();event.stopImmediatePropagation();
-        onError(Error('Escaneo en pausa: confirma o cancela el cambio de marbete y vuelve a leer la pieza.'));return;
+        onError(Error('Espera a que el lector esté listo y vuelve a escanear la pieza.'));return;
       }
     }
     if (event.key==='Enter' || event.key==='Tab' && !event.shiftKey && input.value) {
@@ -58,7 +57,7 @@ export function wireReceivingInput({input,active,onCode,onError,onActivity=()=>{
     if (event.target !== input && editable(event.target)) return;
     const text = event.clipboardData?.getData('text/plain'); if (!text) return;
     event.preventDefault();clear();input.value='';
-    if (/[\r\n]/.test(text.trim())) {onError(Error('Escanea una pieza por lectura. Para listas usa Recepción por lote.'));return;}
+    if (/[\r\n]/.test(text.trim())) {onError(Error('Escanea un código por lectura.'));return;}
     input.value=text;flush('manual');
   }
   function blur() {queueMicrotask(focus);}
@@ -68,7 +67,7 @@ export function wireReceivingInput({input,active,onCode,onError,onActivity=()=>{
   window.addEventListener('focus',focus);
   document.addEventListener('pointerup',blur);
   focus();
-  return {flush,manual(){manualMode=true;clear();},focus(){if(active())input.focus({preventScroll:true});},destroy(){
+  return {flush,focus(){if(active())input.focus({preventScroll:true});},destroy(){
     clear();input.removeEventListener('input',changed);document.removeEventListener('keydown',key,true);
     document.removeEventListener('paste',paste,true);window.removeEventListener('focus',focus);document.removeEventListener('pointerup',blur);
   }};

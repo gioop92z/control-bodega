@@ -246,7 +246,7 @@ export class ContinuousReceive {
       if (missing(error)) { this.backend = 'missing'; this.error = 'La recepción continua requiere activar la migración del servidor. La recepción por lote sigue disponible.'; }
       else if (isExpiredAuthError(error)) {
         this.backend='offline';
-        this.error='No se ha podido renovar la autorización. Las lecturas siguen guardadas; reintenta la conexión.';
+        this.error='Las lecturas siguen guardadas en este dispositivo. Se volverá a intentar renovar la autorización.';
         this.schedule(4000);
       }
       else if(String(error?.code)==='42501'){
@@ -283,7 +283,7 @@ export class ContinuousReceive {
     // Safari's synchronous localStorage is not an unlimited offline warehouse.
     // Stop safely before an offline backlog can exhaust its quota.
     if(this.rows.length%25===0&&this.pending>=1200)
-      throw Error('Hay más de 1,200 lecturas sin confirmar. Sincroniza y guarda un respaldo antes de continuar.');
+      throw Error('Hay al menos 1,200 lecturas sin confirmar. Espera a que se guarden antes de seguir escaneando.');
     const id = eventId || this.makeId();
     const row = {id,sessionId:this.state.id,sequence:++this.nextSequence,kind:'receive',
       code:productCode,quantity:1,location:location.code,visitId:location.visitId,
@@ -538,14 +538,6 @@ export class ContinuousReceive {
     if (!this.saveRow(row)) throw Error(this.storageError);
     this.rows.push(row); this.changed(); this.schedule(0); return row;
   }
-  retryFailures() {
-    for (const row of this.rows.filter(row => row.status === 'failed')) {
-      row.status = 'queued'; row.error = ''; row.retryAt = 0;
-      if (!row.payload) row.product = null;
-      this.saveRow(row);
-    }
-    this.cache.clear(); this.changed(); void this.reconnect();
-  }
   async reconnect() {
     if (!this.owned || this.disposed || this.storageError) return;
     // Si hay solicitudes en curso, deja que finalicen (o agoten su plazo)
@@ -575,7 +567,7 @@ export class ContinuousReceive {
   }
   resume() { this.state.endedAt = null; this.saveSession(); this.changed(); this.schedule(0); }
   newSession() {
-    if (this.pending) throw Error('Primero sincroniza las lecturas pendientes.');
+    if (this.pending) throw Error('Espera a que se guarden las lecturas pendientes.');
     if (this.busy) throw Error('Espera al servidor.');
     this.state = this.empty(); this.rows = []; this.nextSequence = 0; this.cache.clear(); this.saveSession(); this.changed();
   }

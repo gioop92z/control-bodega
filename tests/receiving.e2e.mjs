@@ -88,6 +88,10 @@ try {
   assert.doesNotMatch(await page.locator('#vantisOverview').innerText(),/Productos|Stock bajo/i);
   await page.locator('[data-act="ENTRADA"]').click();await page.locator('#crScan:not(:disabled)').waitFor();
   assert.match(await page.locator('#crInstruction').innerText(),/primero un marbete/i);
+  const receiving=page.locator('.continuous-receive');
+  assert.deepEqual(await receiving.locator('button:visible').allTextContents(),['Finalizar','Cámara']);
+  assert.equal(await receiving.getByRole('button',{name:/sincroniz|reintentar/i,includeHidden:true}).count(),0);
+  assert.match(await page.locator('#crSync').innerText(),/Guardado automático/);
   async function portable(code){
     await page.keyboard.type(code);
     await page.waitForFunction(()=>document.getElementById('crScan').value==='');
@@ -179,8 +183,10 @@ try {
   assert.equal(await page.locator('#vantisReceiveFloat').isVisible(),true,'receiving should be a floating dialog');
   assert.equal(await page.locator('.vr-float-sheet').isVisible(),true,'glass panel should be visible');
   assert.equal(await page.locator('.topbar').isVisible(),true,'Inicio remains present behind the scanner');
+  assert.equal(await page.locator('#crUndo').isVisible(),false,'review controls stay collapsed during capture');
   await page.screenshot({path:'/tmp/vantis-receiving-qa/mobile.png',fullPage:true});
   const before=await page.evaluate(()=>window.__receiptFixture.products[0].stock);
+  await page.locator('#crReview summary').click();
   await page.locator('#crUndo').click();await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='1,609');
   assert.equal(await page.evaluate(()=>window.__receiptFixture.products[0].stock),before-1);
   await page.locator('#crFinish').click();await page.locator('#crSummary').waitFor({state:'visible'});
@@ -191,17 +197,23 @@ try {
   await page.reload({waitUntil:'networkidle'});await page.locator('[data-act="ENTRADA"]').click();await page.locator('#crScan:not(:disabled)').waitFor();
   assert.equal(await page.locator('#crTotalCount').innerText(),'1,609');assert.equal(await page.locator('#crLocation').innerText(),'ZAP-402-003');
   // No server response: pending is never presented as a stored success.
-  await page.evaluate(()=>window.__receiptFixture.lostResponse=true);await page.keyboard.type('0012345678');await page.keyboard.press('Enter');
-  await page.waitForFunction(()=>document.getElementById('crSync').textContent.includes('1 pendientes'));
+  await page.evaluate(()=>{
+    window.__receiptFixture.lostResponse=true;
+    window.__receiptFixture.capabilityError={message:'Servidor temporalmente sin respuesta'};
+  });
+  await portable('0012345678');
+  await page.waitForFunction(()=>document.getElementById('crSync').dataset.connection==='offline');
   assert.equal(await page.locator('#crTotalCount').innerText(),'1,609');
   // Recovery UX: show exact pending code, location and state even in finished summary.
+  await page.locator('#crReview summary').click();
   await page.locator('#crPendingReview').waitFor({state:'visible'});
   assert.match(await page.locator('#crPendingRows').innerText(),/0012345678/);
   await page.locator('#crFinish').click();await page.locator('#crSummary').waitFor({state:'visible'});
   assert.match(await page.locator('#crSummaryPending').innerText(),/0012345678/);
   assert.equal(await page.locator('#crNewSession').isDisabled(),true,'pending row may not be abandoned');
-  await page.locator('#crSummaryRetry').click();
-  await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='1,610');
+  await page.evaluate(()=>{window.__receiptFixture.capabilityError=null;});
+  await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='1,610',null,{timeout:10000});
+  assert.equal(await page.evaluate(()=>window.__receiptFixture.movements.length),movements+1,'automatic retry must not duplicate a committed piece');
   await page.locator('#crResume').click();
   assert.equal(await page.evaluate(()=>window.__receiptFixture.products[0].stock),1620);
   await page.keyboard.type('0012990032');await page.keyboard.press('Enter');
@@ -209,7 +221,7 @@ try {
   assert.equal(await page.evaluate(()=>window.__receiptFixture.products.find(x=>x.sku==='0012990032')?.stock),1);
   // Mobile/manual regression: the input always accepts typing and submits via its form.
   assert.equal(await page.locator('#crScan').getAttribute('inputmode'),'text');
-  await page.locator('#crKeyboard').click();
+  await page.locator('#crScan').click();
   assert.equal(await page.locator('#crScan').evaluate(el=>document.activeElement===el),true);
   await page.locator('#crScan').fill('0012990033');
   await page.locator('#crScanForm').evaluate(form=>form.requestSubmit());
@@ -222,6 +234,16 @@ try {
   assert.equal(manualAudit.length,1);
   assert.equal(manualAudit[0].metodo,'manual');
   assert.match(manualAudit[0].operador,/Empleado/);
+  // Keep the destination of a marbete scanned offline and save on reconnection.
+  await page.context().setOffline(true);
+  await page.waitForFunction(()=>!navigator.onLine);
+  await portable("ZAP'405'085");
+  await portable('0200000000001');
+  assert.equal(await page.locator('#crTotalCount').innerText(),'1,612');
+  assert.equal(await page.locator('#crLocation').innerText(),'ZAP-405-085');
+  await page.context().setOffline(false);
+  await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='1,613');
+  assert.equal(await page.evaluate(()=>window.__receiptFixture.movements.at(-1).marbete_codigo),'ZAP-405-085');
   // Source can deploy before the additive server migration without breaking
   // the previous receiving operation or pretending continuous saving works.
   // Simula otro operador con diario local aislado; nunca borra el respaldo de 472918.
@@ -229,5 +251,5 @@ try {
   await page.reload({waitUntil:'networkidle'});await page.locator('[data-act="ENTRADA"]').click();await page.locator('#receiveCode').waitFor();
   assert.match(await page.locator('.vr-compat-note').first().innerText(),/no disponible/);
   assert.equal(blockedWrites,0);assert.deepEqual(errors,[]);
-  console.log('Receiving desktop/mobile passed: HID/Tab/no suffix, 100/500/1000 reads, technical duplicate terminators, camera/QR continuity, switch/cancel, durable restore, lost response, audited undo, CSV, unknown article, safe legacy fallback. No real inventory writes.');
+  console.log('Receiving desktop/mobile passed: HID/Tab/no suffix, 100/500/1000 reads, camera/QR, automatic marbete switching and recovery, no sync controls, audited undo, CSV, unknown article, safe legacy fallback. No real inventory writes.');
 } finally {await browser.close();await new Promise(resolve=>server.close(resolve));}

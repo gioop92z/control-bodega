@@ -255,7 +255,7 @@ test('pending detail survives finish/resume and keeps its same UUID for safe ret
   const finish=h.queue.finish();
   assert.equal(finish.totalPieces,0);
   assert.equal(finish.pending,1);
-  assert.throws(()=>h.queue.newSession(),/sincroniza/i);
+  assert.throws(()=>h.queue.newSession(),/se guarden las lecturas pendientes/i);
   h.queue.resume();
   online=true;h.db.networkError=false;
   await h.queue.reconnect();

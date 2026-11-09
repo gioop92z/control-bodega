@@ -1,14 +1,14 @@
-import {wireReceivingInput} from './receiving-input.mjs?v=5.8.3';
-import {receiptCsv} from './continuous-receive.mjs?v=5.12.2';
+import {wireReceivingInput} from './receiving-input.mjs?v=5.12.3';
+import {receiptCsv} from './continuous-receive.mjs?v=5.12.3';
 import {captureMethodLabel} from './receiving-audit.mjs?v=5.8.3';
 
 const esc = value => String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num = value => Number(value).toLocaleString('es-MX');
 const short = code => String(code || '').replace(/^ZAP-/, '');
-const labels = {queued:'Pendiente de sincronización',sending:'Guardando…',uncertain:'Por confirmar · reintento seguro',confirmed:'Confirmado en servidor',failed:'No registrado',cancelled:'Cancelado'};
+const labels = {queued:'Por guardar',sending:'Guardando…',uncertain:'Por confirmar',confirmed:'Guardado',failed:'No registrado',cancelled:'Cancelado'};
 
 export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCurrent=()=>true,onLegacy=()=>{},onUnavailable=()=>{},onEvidence=()=>{},onEvidenceConfirmed=()=>{}}) {
-  let destroyed=false,frame=null,camera=false,opening=false,audio=null,lastSignal='',notice='',feedbackTimer=null,toastTimer=null,wake=null,manualActive=false,confirmedVisit=null;
+  let destroyed=false,frame=null,camera=false,opening=false,audio=null,lastSignal='',notice='',feedbackTimer=null,toastTimer=null,wake=null,confirmedVisit=null;
   const $=id=>root.querySelector('#'+id);
   const current=()=>!destroyed && root.isConnected && isCurrent();
   const ready=()=>current() && queue.canScan;
@@ -16,25 +16,25 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     <div class="cr-heading"><div><span class="cr-brand">VANTIS <i>·</i> Escaneo activo</span><span class="cr-department">${esc(queue.actor)}</span></div><button id="crFinish" type="button" class="ghost">Finalizar</button></div>
     <section class="cr-stage"><span id="crLocationLabel" class="cr-kicker">Marbete requerido</span><strong id="crLocation" class="cr-location">Sin asignar</strong><h1 id="crInstruction">Escanea primero un marbete</h1><p id="crLocationState"></p>
       <div class="cr-counters"><div><strong id="crVisitCount">0</strong><span>Piezas en marbete</span></div><div><strong id="crTotalCount">0</strong><span>Confirmadas en sesión</span></div></div>
-      <form id="crScanForm" autocomplete="off"><label class="sr-only" for="crScan">Lectura del escáner portátil, marbete, SKU o UPC</label><input id="crScan" type="text" inputmode="text" enterkeyhint="done" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Escanea SKU, UPC o marbete" aria-describedby="crSync"><button id="crKeyboard" class="ghost" type="button" aria-label="Abrir teclado para escribir un código">Escribir</button></form>
+      <form id="crScanForm" autocomplete="off"><label class="sr-only" for="crScan">Lectura del escáner portátil, marbete, SKU o UPC</label><input id="crScan" type="text" inputmode="text" enterkeyhint="done" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Escanea un marbete o una pieza" aria-describedby="crSync"></form>
       <div class="cr-indicators"><span id="crDevice">Lector portátil listo</span><span id="crSync" role="status" aria-live="polite">Comprobando servidor…</span><button id="crCameraButton" type="button" class="secondary">Cámara</button></div><p id="crPhotoStatus" class="cr-photo-status" role="status" aria-live="polite"></p>
     </section>
     <div id="crFeedback" class="cr-feedback" role="status" aria-live="polite" hidden></div>
-    <section id="crPendingReview" class="cr-pending-review" aria-label="Lecturas pendientes" hidden>
-      <div class="cr-pending-title"><div><small>PENDIENTE DE CONFIRMACIÓN</small><h2>Lecturas por resolver</h2></div><span id="crPendingBadge">0</span></div>
-      <p>Solo se suman las piezas confirmadas.</p>
-      <div id="crPendingRows" class="cr-pending-rows"></div><div class="cr-pending-actions"><button id="crResetPending" type="button" class="ghost">Reiniciar pendientes sin enviar</button></div>
-      <div class="cr-pending-actions"><button id="crPendingRetry" type="button" class="primary">Reintentar sincronización</button><button id="crPendingBackup" type="button" class="secondary">Guardar respaldo JSON</button></div>
-    </section>
     <div id="crPendingLocation" class="cr-pending-location" hidden><div><b id="crPendingLocationCount">0 piezas esperando ubicación</b><small>Escanea el marbete correspondiente para vincular estas lecturas anteriores.</small></div></div>
     <div id="crError" class="cr-error" role="alert" hidden></div><div id="crNotice" class="cr-notice" role="status" aria-live="polite"></div>
-    <section id="crLast" class="cr-last" aria-live="polite"><span>Última lectura</span><strong>Listo para comenzar</strong><small>El contador aumenta al recibir confirmación real del servidor.</small></section>
-    <section class="cr-history"><div class="cr-section-title"><h2>Últimos registros</h2><button id="crUndo" type="button" class="ghost">Deshacer último registro</button></div><div id="crRows"></div></section>
-    <div class="cr-tools"><button id="crRetry" type="button" class="secondary">Sincronizar ahora</button><button id="crRetryFailed" type="button" class="ghost" hidden>Reintentar fallidos</button><button id="crLegacy" type="button" class="ghost">Recepción por lote</button></div>
+    <section id="crLast" class="cr-last" aria-live="polite"><span>Última lectura</span><strong>Listo para comenzar</strong><small>Las piezas se guardan automáticamente en el marbete activo.</small></section>
+    <details id="crReview" class="cr-review" hidden>
+      <summary>Revisar lecturas</summary>
+      <section id="crPendingReview" class="cr-pending-review" aria-label="Lecturas pendientes" hidden>
+        <div class="cr-pending-title"><h2>Lecturas pendientes</h2><span id="crPendingBadge">0</span></div>
+        <p>Solo se suman las piezas confirmadas.</p>
+        <div id="crPendingRows" class="cr-pending-rows"></div><div class="cr-pending-actions"><button id="crResetPending" type="button" class="ghost">Cancelar lecturas sin enviar</button></div>
+      </section>
+      <section class="cr-history"><div class="cr-section-title"><h2>Últimos registros</h2><button id="crUndo" type="button" class="ghost">Deshacer último registro</button></div><div id="crRows"></div></section>
+    </details>
     <section id="crSummary" class="cr-overlay" role="dialog" aria-modal="true" aria-labelledby="crSummaryTitle" hidden><div class="cr-dialog cr-summary"><h2 id="crSummaryTitle">Resumen de recepción</h2><div id="crSummaryBody"></div>
       <div id="crSummaryPending" class="cr-summary-pending" hidden></div>
-      <button id="crSummaryRetry" type="button" class="primary" hidden>Reintentar sincronización de pendientes</button>
-      <div class="quick-row"><button id="crDownload" type="button" class="primary">Descargar reporte CSV</button><button id="crDownloadJson" type="button" class="secondary">Respaldo JSON</button></div><div class="quick-row"><button id="crResume" type="button" class="secondary">Volver al escaneo / revisar</button><button id="crNewSession" type="button" class="ghost">Nueva recepción</button></div></div></section>
+      <div class="quick-row"><button id="crDownload" type="button" class="primary">Descargar reporte CSV</button><button id="crDownloadJson" type="button" class="secondary">Respaldo JSON</button></div><div class="quick-row"><button id="crResume" type="button" class="secondary">Volver al escaneo</button><button id="crNewSession" type="button" class="ghost">Nueva recepción</button><button id="crLegacy" type="button" class="ghost">Recepción por lote</button></div></div></section>
   </section>`;
 
   const input=wireReceivingInput({input:$('crScan'),active:ready,onCode:scan,onError:fail,onActivity:()=>{lastSignal=new Date().toLocaleTimeString('es-MX');unlockSound();}});
@@ -56,7 +56,6 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     notice='';
     try {
       const source=details?.source||'scanner';
-      if(source==='manual')manualActive=false;
       const result=queue.scan(code,{source});
       if(result.type==='piece'&&source==='camera')onEvidence(result.id,code,details?.frame??null);
       if(result.type==='piece'){
@@ -72,11 +71,11 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
   }
   function scheduleRender() {if(frame===null&&current())frame=requestAnimationFrame(()=>{frame=null;render();});}
   let lastRowMarkup='',lastRowsMarkup='',lastSummaryMarkup='',lastPendingMarkup='',lastModalPending='';
-  const pendingMarkup=rows=>rows.slice(0,30).map(row=>
+  const pendingMarkup=(rows,allowCancel)=>rows.slice(0,30).map(row=>
     '<article class="cr-pending-item"><div><b>'+esc(row.descripcion||row.code)+'</b>'+
     '<span>'+esc(row.sku)+' · '+esc(short(row.marbete)||'Sin marbete')+' · '+esc(row.status==='uncertain'?'Por verificar':row.canSync?'Por confirmar':'Sin enviar')+'</span>'+
     (row.error?'<span>'+esc(row.error)+'</span>':'')+'</div>'+
-    (row.status==='queued'&&row.attempts===0
+    (allowCancel&&row.status==='queued'&&row.attempts===0
       ?'<button class="cr-cancel-row ghost" type="button" data-cancel-id="'+esc(row.id)+'" aria-label="Cancelar lectura '+esc(row.code)+'">Cancelar</button>'
       :'<span class="cr-pending-state">'+esc(row.status==='uncertain'?'Verificar':'En proceso')+'</span>')+'</article>').join('')+
     (rows.length>30?'<p>Hay '+num(rows.length-30)+' lecturas adicionales en el respaldo JSON.</p>':'');
@@ -86,21 +85,19 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
   function render() {
     if(!current())return;
     const report=queue.report(),active=queue.state.candidate||queue.state.active,pending=Boolean(queue.state.candidate);
-    const pendingRows=queue.pendingDetails();
+    const pendingRows=report.pending?queue.pendingDetails():[];
+    $('crReview').hidden=!queue.rows.length;
     const pendingPanel=$('crPendingReview');
     pendingPanel.hidden=!pendingRows.length;
     $('crPendingBadge').textContent=num(pendingRows.length);
     $('crResetPending').disabled=!queue.owned||!queue.rows.some(row=>row.kind==='receive'&&row.status==='queued'&&row.attempts===0&&!row.payload);
-    const pendingHtml=pendingMarkup(pendingRows);
+    const pendingHtml=pendingMarkup(pendingRows,true);
     if(pendingHtml!==lastPendingMarkup){$('crPendingRows').innerHTML=pendingHtml;lastPendingMarkup=pendingHtml;}
     const modalPending=$('crSummaryPending');
     modalPending.hidden=!pendingRows.length;
     const modalHtml=pendingRows.length?'<h3>Lectura'+(pendingRows.length===1?'':'s')+' pendiente'+(pendingRows.length===1?'':'s')+': '+num(pendingRows.length)+'</h3>'+
-      '<p>Revisa el código, marbete y motivo. Estas piezas no se sumarán al confirmado hasta recibir acuse de Supabase.</p>'+pendingHtml:'';
+      '<p>Las piezas se suman cuando el servidor confirma el guardado.</p>'+pendingMarkup(pendingRows,false):'';
     if(modalHtml!==lastModalPending){modalPending.innerHTML=modalHtml;lastModalPending=modalHtml;}
-    $('crSummaryRetry').hidden=!pendingRows.length;
-    $('crSummaryRetry').disabled=!queue.owned||queue.busy||Boolean(queue.storageError);
-    $('crPendingRetry').disabled=!queue.owned||queue.busy||Boolean(queue.storageError);
     $('crLocationLabel').textContent=pending?'Marbete por validar':active?'Marbete activo':'Marbete requerido';
     $('crLocation').textContent=active?.code||'Sin asignar';
     $('crLocation').dataset.state=pending?'pending':active?'active':'';
@@ -116,12 +113,17 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     $('crPendingLocation').hidden=!report.awaitingLocation||Boolean(active);
     $('crPendingLocationCount').textContent=num(report.awaitingLocation)+' pieza'+(report.awaitingLocation===1?'':'s')+' esperando ubicación';
     $('crScan').disabled=!ready();
-    $('crDevice').textContent=camera?'Cámara activa · QR y barras':opening?'Abriendo cámara…':manualActive?'Modo manual · sin fotografía':lastSignal?'Lector portátil · última señal '+lastSignal:'Lector portátil listo';
+    $('crDevice').textContent=camera?'Cámara activa · QR y barras':opening?'Abriendo cámara…':lastSignal?'Lector portátil · última señal '+lastSignal:'Lector portátil listo';
     $('crCameraButton').textContent=camera?'Cerrar cámara':'Cámara';$('crCameraButton').disabled=opening||(!ready()&&!camera);
-    const unknown=queue.rows.filter(row=>row.kind==='receive'&&row.status==='queued'&&/pendiente de alta|pendiente de confirmar|SKU pendiente/i.test(row.error||'')).length;
-    $('crSync').textContent=(queue.backend==='checking'?'Comprobando servidor · ':!queue.online()?'Sin conexión de red · ':queue.backend==='offline'?'Servidor sin respuesta · ':'')+num(report.confirmed)+' confirmados · '+num(report.pending)+' pendientes'+(unknown?' · '+num(unknown)+' SKUs por catalogar':'')+(report.failed?' · '+num(report.failed)+' fallidos':'');
+    const connected=queue.online();
+    const storageStatus=queue.storageError||['missing','invalid','denied'].includes(queue.backend)?'Guardado no disponible'
+      :queue.backend==='checking'?'Comprobando servidor…'
+      :!connected?'Sin conexión · Guardado local'
+      :queue.backend==='offline'?'Recuperando conexión…':'Guardado automático';
+    const pendingStatus=report.pending?' · '+num(report.pending)+(report.pending===1?' pendiente':' pendientes'):'';
+    $('crSync').textContent=storageStatus+pendingStatus+(report.failed?' · '+num(report.failed)+' sin registrar':'');
     $('crSync').className=report.pending?'cr-pending-text':'cr-confirmed-text';
-    $('crSync').dataset.connection=queue.backend==='checking'?'checking':(!queue.online()||queue.backend==='offline')?'offline':report.pending?'pending':'online';
+    $('crSync').dataset.connection=queue.backend==='checking'?'checking':(!connected||queue.backend==='offline')?'offline':report.pending?'pending':'online';
     $('crError').hidden=!(queue.error||queue.storageError);$('crError').textContent=queue.storageError||queue.error;
     $('crNotice').textContent=notice;
     const last=queue.rows.at(-1);
@@ -140,20 +142,17 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     }
     $('crUndo').disabled=queue.compatibility||!ready()||!canUndo;
     $('crUndo').title=queue.compatibility?'Deshacer automático disponible al activar la migración segura.':'Deshacer la última entrada confirmada';
-    $('crRetry').disabled=!queue.owned||queue.busy||Boolean(queue.storageError);
-    $('crRetryFailed').hidden=!report.failed;$('crRetryFailed').disabled=!queue.owned||queue.busy;
     $('crFinish').disabled=!queue.owned||Boolean(queue.state.pendingLabels?.length)||Boolean(queue.state.pendingSwitch);
     $('crLegacy').disabled=queue.busy||Boolean(queue.pending)||Boolean(queue.state.pendingLabels?.length)||Boolean(queue.state.pendingSwitch);
     $('crSummary').hidden=!queue.state.endedAt;
     if(queue.state.endedAt) {
-      const summaryMarkup='<strong class="cr-summary-count">'+num(report.totalPieces)+' piezas confirmadas</strong><p>'+num(report.locations.filter(row=>row.marbete).length)+' marbetes · '+num(report.confirmed)+' movimientos confirmados · '+num(report.pending)+' pendientes · '+num(report.failed)+' fallidos</p><p><b>'+esc(report.actor)+'</b><br>Inicio: '+esc(new Date(report.startedAt).toLocaleString('es-MX'))+'<br>Fin: '+esc(new Date(report.endedAt).toLocaleString('es-MX'))+'</p>'+(report.pending?'<p class="cr-pending-text">La sesión conserva lecturas pendientes. Continúa la sincronización; estas piezas todavía no están confirmadas.</p>':'')+'<table><thead><tr><th>Marbete</th><th>Piezas</th><th>Pendientes</th><th>Fallidos</th></tr></thead><tbody>'+report.locations.map(row=>'<tr><td>'+esc(short(row.marbete)||'SIN UBICACIÓN')+'</td><td>'+num(row.pieces)+'</td><td>'+num(row.pending)+'</td><td>'+num(row.failed)+'</td></tr>').join('')+'</tbody></table>';
+      const summaryMarkup='<strong class="cr-summary-count">'+num(report.totalPieces)+' piezas confirmadas</strong><p>'+num(report.locations.filter(row=>row.marbete).length)+' marbetes · '+num(report.confirmed)+' movimientos confirmados · '+num(report.pending)+' pendientes · '+num(report.failed)+' fallidos</p><p><b>'+esc(report.actor)+'</b><br>Inicio: '+esc(new Date(report.startedAt).toLocaleString('es-MX'))+'<br>Fin: '+esc(new Date(report.endedAt).toLocaleString('es-MX'))+'</p><table><thead><tr><th>Marbete</th><th>Piezas</th><th>Pendientes</th><th>Fallidos</th></tr></thead><tbody>'+report.locations.map(row=>'<tr><td>'+esc(short(row.marbete)||'SIN UBICACIÓN')+'</td><td>'+num(row.pieces)+'</td><td>'+num(row.pending)+'</td><td>'+num(row.failed)+'</td></tr>').join('')+'</tbody></table>';
       if(summaryMarkup!==lastSummaryMarkup){$('crSummaryBody').innerHTML=summaryMarkup;lastSummaryMarkup=summaryMarkup;}
       $('crNewSession').disabled=Boolean(report.pending)||queue.busy;
-      $('crNewSession').title=report.pending?'Hay lecturas sin confirmar. Sincronízalas antes de crear otra sesión: quedan protegidas en el diario.':queue.busy?'Esperando al servidor.':'';
+      $('crNewSession').title=report.pending?'Espera a que se guarden las lecturas pendientes.':queue.busy?'Esperando al servidor.':'';
     }
   }
   $('crScanForm').onsubmit=event=>{event.preventDefault();input.flush('manual');};
-  $('crKeyboard').onclick=()=>{const field=$('crScan');if(!ready())return;input.manual();manualActive=true;render();field.inputMode='text';field.blur();field.focus({preventScroll:true});};
   async function openCamera() {
     if(opening||camera||!ready())return;
     unlockSound();opening=true;render();
@@ -175,21 +174,6 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     else void openCamera();
   };
   $('crUndo').onclick=()=>{try{queue.undoLast();notice='Compensación pendiente de confirmación.';render();input.focus();}catch(error){fail(error);}};
-  async function retryNow(button){
-    if(queue.busy){feedback('El servidor ya está procesando una lectura.','info');return;}
-    if(!queue.owned){fail(Error('Recepción abierta en otra pestaña o sin acceso al diario local.'));return;}
-    if(queue.storageError){fail(Error(queue.storageError));return;}
-    button.disabled=true;notice='Comprobando conexión y conciliando los folios pendientes…';render();
-    try{
-      await queue.reconnect();
-      const count=queue.report().pending;
-      notice=count?count+' lectura(s) sin confirmar. Revisa la lista y conserva su folio.':'Todas las lecturas están conciliadas.';
-      feedback(notice,count?'info':'success');
-    }catch(error){fail(error);}
-    finally{render();}
-  }
-  $('crRetry').onclick=()=>void retryNow($('crRetry'));
-  $('crPendingRetry').onclick=()=>void retryNow($('crPendingRetry'));
   $('crPendingRows').addEventListener('click',event=>{
     const button=event.target.closest('button[data-cancel-id]');
     if(!button)return;
@@ -203,22 +187,22 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     try{queue.resetUnsent();feedback('Pendientes sin enviar cancelados','info');render();}
     catch(error){fail(error);}
   };
-  $('crSummaryRetry').onclick=()=>void retryNow($('crSummaryRetry'));
-  $('crRetryFailed').onclick=()=>queue.retryFailures();
-  $('crFinish').onclick=()=>{input.flush();try{queue.finish();stopScanner();render();$('crResume').focus();}catch(error){fail(error);}};
-  $('crResume').onclick=()=>{
-    queue.resume();render();
-    if(queue.pending)$('crPendingReview')?.scrollIntoView?.({behavior:'smooth',block:'start'});
-    else input.focus();
+  $('crFinish').onclick=()=>{
+    input.flush();
+    try{queue.finish();stopScanner();render();$('crResume').focus();}
+    catch(error){if(queue.pending)$('crReview').open=true;fail(error);}
   };
-  $('crNewSession').onclick=()=>{try{queue.newSession();render();input.focus();}catch(error){fail(error);}};
+  $('crResume').onclick=()=>{
+    $('crReview').open=false;queue.resume();render();
+    input.focus();
+  };
+  $('crNewSession').onclick=()=>{try{queue.newSession();$('crReview').open=false;render();input.focus();}catch(error){fail(error);}};
   $('crLegacy').onclick=onLegacy;
   function download(json=false) {
     const report=queue.report(),blob=new Blob([json?JSON.stringify(report,null,2):receiptCsv(report)],{type:json?'application/json':'text/csv;charset=utf-8'});
     const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='VANTIS-recepcion-'+report.sessionId+'.'+(json?'json':'csv');link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
   $('crDownload').onclick=()=>download();$('crDownloadJson').onclick=()=>download(true);
-  $('crPendingBackup').onclick=()=>download(true);
   const beforeUnload=event=>{if(queue.pending||queue.selecting){event.preventDefault();event.returnValue='';}};
   const online=()=>{void queue.reconnect().catch(fail);};
   const offline=()=>render();
