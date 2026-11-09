@@ -1,0 +1,33 @@
+name: VANTIS GitHub Local - prueba real 10000
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'local.html'
+      - 'vantis-github-local*'
+      - 'continuous-receive.mjs'
+      - 'continuous-receive-ui.mjs'
+      - 'tests/local-github.e2e.mjs'
+      - '.github/workflows/local-github.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  local-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Confirmar sintaxis del modo local
+        run: |
+          node --check vantis-github-local-db.mjs
+          node --check vantis-github-local.mjs
+          node --check tests/local-github.e2e.mjs
+      - run: npx playwright install chromium --only-shell
+      - name: Abrir en Chrome, comprobar guardado local y 10000 movimientos
+        run: node tests/local-github.e2e.mjs
