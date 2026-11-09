@@ -132,7 +132,7 @@ async function saveReceipt(env,person,input,origin=null){
   // Each db.batch is one SQLite transaction, so simultaneous scanners cannot
   // increment the same receipt twice. changes() gates both stock updates.
   const statements=[
-    env.DB.prepare(\`INSERT INTO receipts(id,session_id,employee,operator_label,sku,label,kind,reversal_of,signature)
+    env.DB.prepare(`INSERT INTO receipts(id,session_id,employee,operator_label,sku,label,kind,reversal_of,signature)
       SELECT ?,?,?,?,?,?,?,?,?
       WHERE EXISTS(SELECT 1 FROM labels WHERE code=? AND active=1 AND dept=?)
         AND EXISTS(SELECT 1 FROM products WHERE code=? AND active=1 AND dept=?)
@@ -142,19 +142,19 @@ async function saveReceipt(env,person,input,origin=null){
         ) AND NOT EXISTS(SELECT 1 FROM receipts WHERE reversal_of=?)
           AND (SELECT stock FROM products WHERE code=?)>0
           AND coalesce((SELECT quantity FROM assignments WHERE sku=? AND label=?),0)>0))
-      ON CONFLICT DO NOTHING\`)
+      ON CONFLICT DO NOTHING`)
       .bind(id,session,person.employee,operator,sku,label,kind,reversal,signature,
         label,DEPT,sku,DEPT,kind,reversal,session,person.employee,sku,label,reversal,sku,sku,label),
     env.DB.prepare('UPDATE products SET stock=stock+? WHERE code=? AND changes()>0 AND stock+?>=0')
       .bind(delta,sku,delta),
-    env.DB.prepare(\`INSERT INTO assignments(sku,label,quantity)
+    env.DB.prepare(`INSERT INTO assignments(sku,label,quantity)
       SELECT ?,?,? WHERE changes()>0
-      ON CONFLICT(sku,label) DO UPDATE SET quantity=assignments.quantity+excluded.quantity\`)
+      ON CONFLICT(sku,label) DO UPDATE SET quantity=assignments.quantity+excluded.quantity`)
       .bind(sku,label,delta),
-    env.DB.prepare(\`UPDATE receipts SET
+    env.DB.prepare(`UPDATE receipts SET
       stock_after=(SELECT stock FROM products WHERE code=?),
       location_after=(SELECT quantity FROM assignments WHERE sku=? AND label=?)
-      WHERE id=? AND stock_after IS NULL\`).bind(sku,sku,label,id)
+      WHERE id=? AND stock_after IS NULL`).bind(sku,sku,label,id)
   ];
   try{await env.DB.batch(statements);}catch(error){throw sqlError(error);}
   const stored=await env.DB.prepare('SELECT * FROM receipts WHERE id=?').bind(id).first();
@@ -169,11 +169,11 @@ async function search(env,term){
   const q=clean(term).slice(0,60);
   if(!q)return [];
   const like='%'+q.replace(/[\\%_]/g,'\\$&')+'%';
-  const result=await env.DB.prepare(\`SELECT p.code,p.description,p.stock,a.label,a.quantity
+  const result=await env.DB.prepare(`SELECT p.code,p.description,p.stock,a.label,a.quantity
     FROM products p LEFT JOIN assignments a ON a.sku=p.code
     WHERE p.code=? OR p.code LIKE ? ESCAPE '\\' OR p.description LIKE ? ESCAPE '\\'
       OR a.label LIKE ? ESCAPE '\\'
-    ORDER BY p.code,a.label LIMIT 140\`).bind(q,like,like,like).all();
+    ORDER BY p.code,a.label LIMIT 140`).bind(q,like,like,like).all();
   const found=new Map();
   for(const row of result.results){
     let value=found.get(row.code);
