@@ -32,12 +32,12 @@ jobs:
         run: |
           set -euo pipefail
           api=https://uphnzyembyrouvqohwys.supabase.co/functions/v1/vantis-team
-          key=sb_publishable_zpUowBh6NatmD7mb1XDRlw_TVpy1LyT
-          curl --fail-with-body --retry 4 --retry-delay 2 --silent --show-error             -H 'Origin: https://gioop92z.github.io' -H "apikey: $key" "$api/api/health" -o health.json
+          key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVwaG56eWVtYnlyb3V2cW9od3lzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI2NjE5NzIsImV4cCI6MjEwODIzNzk3Mn0.UawCQzEB2ITHSLsq33Je1ChFQf25zKH0xwQic9yXn8U
+          curl --fail-with-body --retry 4 --retry-delay 2 --silent --show-error             -H 'Origin: https://gioop92z.github.io' -H "apikey: $key" -H "authorization: Bearer $key" "$api/api/health" -o health.json
           node -e "const h=require('./health.json');if(!h.ok||h.mode!=='vantis-supabase-isolated')process.exit(1)"
-          status="$(curl --silent --show-error -o unauthorized.json -w '%{http_code}'             -H 'Origin: https://gioop92z.github.io' -H "apikey: $key" "$api/api/summary")"
+          status="$(curl --silent --show-error -o unauthorized.json -w '%{http_code}'             -H 'Origin: https://gioop92z.github.io' -H "apikey: $key" -H "authorization: Bearer $key" "$api/api/summary")"
           test "$status" = '401'
           node -e "const x=require('./unauthorized.json');if(!x.error)process.exit(1)"
-          status="$(curl --silent --show-error -o foreign-origin.json -w '%{http_code}'             -H 'Origin: https://attacker.example' -H "apikey: $key" "$api/api/health")"
+          status="$(curl --silent --show-error -o foreign-origin.json -w '%{http_code}'             -H 'Origin: https://attacker.example' -H "apikey: $key" -H "authorization: Bearer $key" "$api/api/health")"
           test "$status" = '403'
           echo 'Remote VANTIS central API is reachable and rejects unauthenticated and foreign-origin requests.'
