@@ -61,21 +61,21 @@ test('marbete switches automatically while continuing SKU scans without confirma
   assert.equal(h.queue.scan('ZAP-402-002').type,'same-location');
 });
 
-test('rapid marbete A → SKU → marbete B → SKU retains original destinations during slow validation',async t=>{
-  const h=await setup(t);await location(h.queue);
+test('apostrophe marbete → SKU → SKU → marbete → UPC keeps each destination during slow validation',async t=>{
+  const h=await setup(t);
   const original=h.settings.api.activate.bind(h.settings.api);
   const pending=[];
   h.settings.api.activate=code=>new Promise((resolve,reject)=>{
     pending.push({code,complete:()=>original(code).then(resolve,reject)});
   });
-  h.queue.scan('402-002');
+  h.queue.scan("ZAP'405'085");
   h.queue.scan(SKU);
-  h.queue.scan('402-003');
+  h.queue.scan(SKU);
+  h.queue.scan("ZAP'402'003");
   h.queue.scan(UPC);
   assert.equal(h.queue.state.pendingSwitch,null);
   assert.equal(h.queue.state.pendingLabels.length,2);
-  assert.equal(h.queue.rows[0].location,'ZAP-402-002');
-  assert.equal(h.queue.rows[1].location,'ZAP-402-003');
+  assert.deepEqual(h.queue.rows.map(r=>r.location),['ZAP-405-085','ZAP-405-085','ZAP-402-003']);
   assert.ok(h.queue.rows.every(r=>r.locationVerified===false));
   assert.equal(h.db.movements.length,0);
   await until(()=>pending.length===1);
@@ -84,9 +84,9 @@ test('rapid marbete A → SKU → marbete B → SKU retains original destination
   await pending[1].complete();
   await until(()=>h.queue.state.pendingLabels.length===0);
   await h.queue.flush();
-  assert.equal(h.queue.report().totalPieces,2);
+  assert.equal(h.queue.report().totalPieces,3);
   assert.deepEqual(h.db.movements.map(r=>r.marbete_codigo),
-    ['ZAP-402-002','ZAP-402-003']);
+    ['ZAP-405-085','ZAP-405-085','ZAP-402-003']);
 });
 
 test('malformed location-looking codes cannot become phantom merchandise',async t=>{
@@ -94,39 +94,46 @@ test('malformed location-looking codes cannot become phantom merchandise',async 
   for(const code of ['ZAP*402*12','*ZAP*999*002*','https://example.invalid/not-a-marbete','{"bad":"payload"}']){
     assert.throws(()=>h.queue.scan(code),/marbete no reconocido/i);
   }
+  assert.equal(h.queue.state.active,null);
+  assert.throws(()=>h.queue.scan(SKU),/escanea primero un marbete/i);
   assert.equal(h.queue.rows.length,0);
   assert.equal(h.db.movements.length,0);
 });
 
-test('SKU may be scanned before marbete; pending pieces attach to the first later marbete',async t=>{
+test('SKU and UPC without a marbete leave no journal row, product or movement',async t=>{
   const h=await setup(t);
-  h.queue.scan(SKU);h.queue.scan('UNKNOWN');h.queue.scan(SKU);
-  assert.equal(h.queue.report().awaitingLocation,3);
-  assert.equal(h.db.movements.length,0);
-  h.queue.scan('402-001');await until(()=>!h.queue.selecting);
+  assert.throws(()=>h.queue.scan(SKU),/escanea primero un marbete/i);
+  assert.throws(()=>h.queue.scan(UPC),/escanea primero un marbete/i);
+  assert.throws(()=>h.queue.scan('0012990032'),/escanea primero un marbete/i);
   await h.queue.flush();
-  assert.equal(h.queue.report().awaitingLocation,0);
-  assert.equal(h.queue.report().totalPieces,3);
-  assert.equal(h.db.products.some(row=>row.sku==='UNKNOWN'),true);
-  assert.equal(h.db.products.find(row=>row.sku==='UNKNOWN').stock,1);
-  assert.equal(h.db.movements.length,3);
-  assert.ok(h.queue.rows.every(row=>row.location==='ZAP-402-001'));
+  assert.equal(h.queue.rows.length,0);
+  assert.equal(h.db.products.length,2);
+  assert.equal(h.db.movements.length,0);
 });
-test('SKU first can be explicitly registered as general stock without location',async t=>{
+
+test('an unregistered letter code never creates merchandise or sends pieces to the previous marbete',async t=>{
   const h=await setup(t);
-  h.queue.scan('NUEVO-777');h.queue.scan('NUEVO-777');
-  assert.equal(h.queue.report().awaitingLocation,2);
-  h.queue.approveWithoutLocation();await h.queue.flush();
-  assert.equal(h.queue.report().totalPieces,2);
-  assert.equal(h.db.products.find(row=>row.sku==='NUEVO-777').stock,2);
-  assert.equal(h.db.movements.length,2);
-  assert.equal(h.db.movements[0].marbete_codigo,null);
+  await location(h.queue);
+  assert.equal(h.queue.scan('BODEGA99').type,'location');
+  h.queue.scan(SKU);
+  await until(()=>!h.queue.selecting);
+  assert.equal(h.queue.state.active,null);
+  assert.match(h.queue.error,/no registrado/i);
+  assert.throws(()=>h.queue.scan(SKU),/escanea primero un marbete/i);
+  await location(h.queue,"ZAP'405'085");
+  h.queue.scan(SKU);
+  await h.queue.flush();
+  assert.equal(h.queue.rows[0].location,'BODEGA99');
+  assert.equal(h.queue.rows[0].locationRejected,true);
+  assert.equal(h.db.products.some(row=>row.sku==='BODEGA99'),false);
+  assert.deepEqual(h.db.movements.map(row=>row.marbete_codigo),['ZAP-405-085']);
 });
+
 test('same unknown SKU receives every physical piece and maintains a single provisional identity',async t=>{
   const h=await setup(t);await location(h.queue);
-  for(let i=0;i<7;i++)h.queue.scan('NUEVO-MENSUAL-32');
+  for(let i=0;i<7;i++)h.queue.scan('0012990032');
   await h.queue.flush();
-  const products=h.db.products.filter(row=>row.sku==='NUEVO-MENSUAL-32');
+  const products=h.db.products.filter(row=>row.sku==='0012990032');
   assert.equal(products.length,1);
   assert.equal(products[0].stock,7);
   assert.equal(h.queue.report().totalPieces,7);
@@ -135,19 +142,23 @@ test('same unknown SKU receives every physical piece and maintains a single prov
   products[0].descripcion='Zapato infantil nuevo';
   products[0].precio=199;
   assert.equal(h.db.products.find(row=>row.id===initialId).stock,7);
-  assert.equal(h.db.products.filter(row=>row.sku==='NUEVO-MENSUAL-32').length,1);
+  assert.equal(h.db.products.filter(row=>row.sku==='0012990032').length,1);
 });
-test('SKU-first unlocated reads cannot be hidden by finalizing the session',async t=>{
-  const h=await setup(t);h.queue.scan('SIN-UBICACION-2026');
-  assert.equal(h.queue.report().awaitingLocation,1);
-  assert.throws(()=>h.queue.finish(),/sin ubicación/i);
-  h.queue.approveWithoutLocation();await h.queue.flush();
-  assert.equal(h.queue.report().totalPieces,1);
-  assert.doesNotThrow(()=>h.queue.finish());
+test('an ambiguous numeric code or unmatched UPC cannot create or confirm stock',async t=>{
+  const h=await setup(t);await location(h.queue);
+  h.db.products[1].upc=SKU;
+  h.queue.scan(SKU);
+  h.queue.scan('0200000000009');
+  await h.queue.flush();
+  assert.equal(h.queue.report().pending,2);
+  assert.equal(h.db.products.length,2);
+  assert.equal(h.db.movements.length,0);
+  assert.match(h.queue.rows[0].error,/ambiguo/i);
+  assert.match(h.queue.rows[1].error,/sin coincidencia/i);
 });
 test('unknown SKU is retained if the server does not allow catalog creation',async t=>{
   const h=await setup(t);await location(h.queue);
-  h.db.failCreate=true;h.queue.scan('UNKNOWN-PENDING');await h.queue.flush();
+  h.db.failCreate=true;h.queue.scan('0012990033');await h.queue.flush();
   assert.equal(h.queue.report().pending,1);
   assert.equal(h.queue.report().totalPieces,0);
   assert.equal(h.db.movements.length,0);
@@ -205,10 +216,10 @@ test('undo adds an auditable compensating movement and cannot subtract the same 
 });
 
 test('finalization reports confirmed/pending/failed without adding inventory again',async t=>{
-  const h=await setup(t);await location(h.queue);h.queue.scan(SKU);h.queue.scan('UNKNOWN');await h.queue.flush();
+  const h=await setup(t);await location(h.queue);h.queue.scan(SKU);h.queue.scan('0012990034');await h.queue.flush();
   const before=h.db.movements.length,report=h.queue.finish();assert.equal(h.db.movements.length,before);
   assert.equal(report.totalPieces,2);assert.equal(report.failed,0);assert.equal(report.confirmed,2);assert.ok(report.endedAt);
-  assert.throws(()=>h.queue.scan(SKU));const csv=receiptCsv(report);assert.match(csv,/UNKNOWN/);assert.match(csv,/Empleado 123/);
+  assert.throws(()=>h.queue.scan(SKU));const csv=receiptCsv(report);assert.match(csv,/0012990034/);assert.match(csv,/Empleado 123/);
   h.queue.resume();h.queue.scan(SKU);await h.queue.flush();assert.equal(h.db.movements.length,3);
 });
 
@@ -254,38 +265,28 @@ test('pending detail survives finish/resume and keeps its same UUID for safe ret
 });
 
 
-test('SKU without marbete stays local without catalog or stock writes until approval',async t=>{
-  const h=await setup(t);
-  h.queue.scan('PENDIENTE-SIN-MARBETE-2026');
-  await h.queue.flush();
-  assert.equal(h.queue.report().awaitingLocation,1);
-  assert.equal(h.db.movements.length,0);
-  assert.equal(h.db.products.some(row=>row.sku==='PENDIENTE-SIN-MARBETE-2026'),false);
-  assert.equal(h.queue.rows[0].status,'queued');
-  assert.equal(h.queue.rows[0].payload,null);
-  assert.equal(h.queue.canApproveWithoutLocation,true);
-  h.queue.approveWithoutLocation();
-  await h.queue.flush();
-  assert.equal(h.queue.rows[0].status,'confirmed');
-  assert.equal(h.queue.rows[0].location,null);
-  assert.equal(h.queue.rows[0].unlocatedApproved,true);
-  assert.equal(h.db.movements.length,1);
-  assert.equal(h.db.movements[0].marbete_codigo,null);
-  assert.equal(h.db.products.find(row=>row.sku==='PENDIENTE-SIN-MARBETE-2026').stock,1);
-});
+test('recovery never sends old misclassified marbetes or replays unlocated attempts',async t=>{
+  const h=await setup(t);await location(h.queue);
+  h.queue.scan(SKU);h.queue.scan(SKU);h.queue.scan(SKU);
+  const [valid,bad,uncertain]=h.queue.rows;
+  Object.assign(valid,{location:null,visitId:null});
+  Object.assign(bad,{code:"ZAP'405'085",location:null,visitId:null,unlocatedApproved:true});
+  Object.assign(uncertain,{location:null,visitId:null,unlocatedApproved:true,status:'sending',attempts:1,payload:{p_marbete:null}});
+  for(const row of h.queue.rows)h.queue.saveRow(row);
+  h.queue.state.active=null;h.queue.saveSession();
+  await h.queue.dispose();
 
-test('approve without marbete remains available during server session recovery',async t=>{
-  const h=await setup(t);
-  h.queue.scan(SKU);
-  h.queue.backend='checking';
-  assert.equal(h.queue.canScan,false);
-  assert.equal(h.queue.canApproveWithoutLocation,true);
-  assert.equal(h.queue.approveWithoutLocation(),1);
-  assert.equal(h.queue.rows[0].unlocatedApproved,true);
+  const restored=new ContinuousReceive(h.settings);t.after(()=>restored.dispose());await restored.start();
+  await restored.flush();
   assert.equal(h.db.movements.length,0);
-  h.queue.backend='ready';
-  await h.queue.flush();
-  assert.equal(h.queue.report().totalPieces,1);
+  assert.equal(restored.report().awaitingLocation,1);
+  assert.throws(()=>restored.finish(),/sin ubicación válida/i);
+  await location(restored,"ZAP'405'085");
+  await restored.flush();
+  assert.deepEqual(h.db.movements.map(row=>[row.id,row.marbete_codigo]),[[valid.id,'ZAP-405-085']]);
+  assert.ok(restored.pendingDetails().every(row=>!row.canSync));
+  assert.equal(restored.rows.find(row=>row.id===uncertain.id).status,'uncertain');
+  assert.equal(restored.rows.find(row=>row.id===bad.id).location,null);
 });
 
 test('a local receipt session error is not mislabeled an expired Auth token',()=>{
@@ -310,8 +311,8 @@ test('expired JWT can be refreshed in a read-only capability probe without losin
   const h=await setup(t,{shared:fixture,api});
   assert.equal(h.queue.backend,'ready');
   assert.equal(refreshes,1);
+  await location(h.queue);
   h.queue.scan(SKU);
-  h.queue.approveWithoutLocation();
   await h.queue.flush();
   assert.equal(h.queue.report().totalPieces,1);
   assert.equal(fixture.db.movements.length,1);
@@ -325,6 +326,7 @@ test('failed JWT refresh leaves the current UUID and scan protected for later re
   const h=await setup(t,{shared:fixture,api});
   assert.equal(h.queue.backend,'offline');
   assert.match(h.queue.error,/autoriza|renovar/i);
+  h.queue.scan("ZAP'405'085");
   const id=h.queue.scan(SKU).id;
   assert.equal(h.queue.rows[0].id,id);
   assert.equal(h.queue.rows[0].status,'queued');
@@ -333,24 +335,23 @@ test('failed JWT refresh leaves the current UUID and scan protected for later re
 
 
 test('operator can cancel one staged SKU and preserve an audit record without stock writes',async t=>{
-  const h=await setup(t);
-  const first=h.queue.scan('CANCELAR-1').id;
-  h.queue.scan('CONSERVAR-2');
+  const h=await setup(t);await location(h.queue);
+  const first=h.queue.scan('0012990035').id;
+  h.queue.scan('0012990036');
   assert.equal(h.queue.cancelPending(first),true);
   assert.equal(h.queue.rows.find(row=>row.id===first).status,'cancelled');
   assert.equal(h.queue.report().pending,1);
-  assert.equal(h.queue.report().awaitingLocation,1);
+  assert.equal(h.queue.report().awaitingLocation,0);
   assert.equal(h.queue.pendingDetails().length,1);
-  h.queue.approveWithoutLocation();
   await h.queue.flush();
   assert.equal(h.db.movements.length,1);
-  assert.equal(h.db.products.some(row=>row.sku==='CANCELAR-1'),false);
-  assert.equal(h.db.products.find(row=>row.sku==='CONSERVAR-2').stock,1);
+  assert.equal(h.db.products.some(row=>row.sku==='0012990035'),false);
+  assert.equal(h.db.products.find(row=>row.sku==='0012990036').stock,1);
 });
 
 test('reset only unsent pieces and keep uncertain movements for reconciliation',async t=>{
-  const h=await setup(t);
-  h.queue.scan('ERROR-1');h.queue.scan('ERROR-2');
+  const h=await setup(t);await location(h.queue);
+  h.queue.scan(SKU);h.queue.scan(UPC);
   assert.equal(h.queue.resetUnsent(),2);
   assert.equal(h.queue.report().pending,0);
   assert.equal(h.queue.report().awaitingLocation,0);
@@ -361,7 +362,7 @@ test('reset only unsent pieces and keep uncertain movements for reconciliation',
 });
 
 test('a scan already sent or with uncertain response cannot be cancelled',async t=>{
-  const h=await setup(t);
+  const h=await setup(t);await location(h.queue);
   const id=h.queue.scan(SKU).id;
   h.queue.rows[0].attempts=1;
   h.queue.rows[0].status='uncertain';
@@ -373,7 +374,8 @@ test('a scan already sent or with uncertain response cannot be cancelled',async 
 test('cancelled entries survive journal recovery and are not restored as pending',async t=>{
   const storage=durableMemory(),shared=receivingDb();
   const first=await setup(t,{storage,shared});
-  first.queue.scan('CANCELAR-PERSISTENTE');
+  await location(first.queue);
+  first.queue.scan(SKU);
   first.queue.resetUnsent();
   await first.queue.dispose();
   const second=await setup(t,{storage,shared});

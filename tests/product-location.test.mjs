@@ -101,6 +101,9 @@ test('QR payloads and printed marbete barcodes resolve to one canonical code',()
     ['ZAP-402-001','ZAP-402-001'],
     ['ZAP*402*002','ZAP-402-002'],
     ['*ZAP*402*002*','ZAP-402-002'],
+    ["ZAP'405'085",'ZAP-405-085'],
+    ['zap’402’003','ZAP-402-003'],
+    ['*ZAP´405´085*','ZAP-405-085'],
     ['{"marbete":"ZAP*405*010"}','ZAP-405-010'],
     ['https://example.com/ubicacion?marbete=ZAP*459*100','ZAP-459-100'],
     ['zap-405-010','ZAP-405-010'],
@@ -113,7 +116,9 @@ test('QR payloads and printed marbete barcodes resolve to one canonical code',()
   ];
   for(const [payload,code] of examples) assert.equal(parseMarbeteScan(payload),code);
 });
-test('invalid QR or ordinary SKU never creates an invented location',()=>{
-  const invalid=['','1200768112','https://example.com/hello','{"foo":"1200768112"}','<script>evil</script>'];
+test('invalid or ambiguous QR and ordinary SKU never create an invented location',()=>{
+  const invalid=['','1200768112','https://example.com/hello','{"foo":"1200768112"}','<script>evil</script>',
+    'ZAP*402*001 ZAP*405*085','{"marbete":"ZAP-402-001","codigo":"ZAP-405-085"}',
+    'https://example.com/ubicacion?marbete=ZAP-402-001&marbete=ZAP-405-085'];
   for(const candidate of invalid)assert.throws(()=>parseMarbeteScan(candidate),e=>e.code==='INVALID_CODE');
 });

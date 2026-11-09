@@ -93,7 +93,7 @@ async function chunks(values, makeQuery) {
   return out;
 }
 
-export async function lookupSupportCodes(sb, codes, deptId) {
+export async function lookupSupportCodes(sb, codes, deptId, {rejectCollisions=false}={}) {
   const unique = [...new Set(codes.map(cleanSupportCode))];
   const variants = new Map(unique.map(code => [code, codeVariants(code)]));
   const skus = [...new Set([...variants.values()].flatMap(x => x.sku))];
@@ -104,8 +104,10 @@ export async function lookupSupportCodes(sb, codes, deptId) {
   const found = new Map();
   for (const [code, choices] of variants) {
     let matches = [...products.values()].filter(p => p.sku === code);
-    if (!matches.length) matches = [...products.values()].filter(p => choices.upc.includes(String(p.upc)));
-    found.set(code, matches.length === 1 ? {product:matches[0], locations:[]} : {product:null, locations:[], error:matches.length ? 'UPC ambiguo: usa el SKU exacto de la variante.' : 'No encontrado en este departamento. Revisa el código o el catálogo.'});
+    if (rejectCollisions || !matches.length) matches = [...products.values()].filter(p =>
+      (rejectCollisions && p.sku === code) || choices.upc.includes(String(p.upc)));
+    const ambiguity = rejectCollisions ? 'Código ambiguo: coincide con varios artículos. Escanea el SKU específico.' : 'UPC ambiguo: usa el SKU exacto de la variante.';
+    found.set(code, matches.length === 1 ? {product:matches[0], locations:[]} : {product:null, locations:[], error:matches.length ? ambiguity : 'No encontrado en este departamento. Revisa el código o el catálogo.'});
   }
   const productSkus = [...new Set([...found.values()].filter(x => x.product).map(x => x.product.sku))];
   const locations = await chunks(productSkus, values => sb.from('producto_marbetes').select('sku,marbete_codigo,cantidad,marbetes(zona,descripcion,activo,departamento_id)').in('sku', values).order('sku').order('marbete_codigo'));

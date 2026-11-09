@@ -75,3 +75,5 @@ body:has(.cr-standalone .continuous-receive) .page-title:before{display:none}
 .cr-pending-actions{margin-top:7px;gap:6px}
 .cr-pending-actions button{min-height:34px;font-size:11px}
 #crResetPending{min-height:30px}
+#crLocation[data-state="pending"]{background:#fff0d3;color:#875100!important}
+#crLocation[data-state="active"]{background:#e4f7eb;color:#126b3a!important}

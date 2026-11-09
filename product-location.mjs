@@ -12,26 +12,34 @@ export function normalizeMarbete(value) {
   return code;
 }
 
+function singlePayload(values) {
+  const candidates = [...new Set(values)];
+  if (candidates.length > 1) throw new LocationError('INVALID_CODE', 'El QR contiene varios códigos de marbete.');
+  return candidates[0];
+}
 
 // Interpret the payload of either a printed 1-D barcode or the QR on a
 // location sticker. Never fetch a QR's URL or execute its contents.
 // Product SKU/UPC scanning stays separate from this location-only parser.
-export function parseMarbeteScan(value) {
+export function parseMarbeteScan(value, {allowCatalogCode=false}={}) {
   const raw = String(value ?? '').replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
   if (!raw || raw.length > 2048 || /[\x00-\x1F\x7F]/.test(raw)) {
     throw new LocationError('INVALID_CODE', 'QR o marbete vacío o no válido.');
   }
+  const isUrl = /^https?:\/\//i.test(raw);
   let payload = raw;
-  if (/^https?:\/\//i.test(raw)) {
+  let hasLocationPayload = !isUrl;
+  if (isUrl) {
     let url;
     try { url = new URL(raw); } catch {
       throw new LocationError('INVALID_CODE', 'El QR contiene una dirección no válida.');
     }
     const keys = ['marbete','marbete_codigo','codigo','code','ubicacion','location','id'];
-    const params = keys.map(key => url.searchParams.get(key)).filter(Boolean);
+    const params = keys.flatMap(key => url.searchParams.getAll(key)).filter(Boolean);
+    hasLocationPayload = params.length > 0;
     // Only consider the last path component as a label when no explicit
     // query parameter exists; don't accidentally capture a random URL.
-    payload = params[0] || decodeURIComponent(url.pathname.split('/').filter(Boolean).at(-1) || '');
+    payload = singlePayload(params) || decodeURIComponent(url.pathname.split('/').filter(Boolean).at(-1) || '');
   } else if (raw.startsWith('{')) {
     let data;
     try { data = JSON.parse(raw); } catch {
@@ -40,24 +48,27 @@ export function parseMarbeteScan(value) {
     if (!data || Array.isArray(data) || typeof data !== 'object') {
       throw new LocationError('INVALID_CODE', 'El QR no tiene un código de marbete.');
     }
-    payload = ['marbete','marbete_codigo','codigo','code','ubicacion','location']
-      .map(key => data[key]).find(x => typeof x === 'string') || '';
+    payload = singlePayload(['marbete','marbete_codigo','codigo','code','ubicacion','location']
+      .map(key => data[key]).filter(x => typeof x === 'string' && x.trim())) || '';
   }
-  // Some portable Code39 readers include the printed * delimiters or
-  // return ZAP*402*002. These are locations, never product SKUs.
-  const text = String(payload).trim().toUpperCase().normalize('NFKC')
-    .replace(/^\*+(?=ZAP[\s*:/.-])/, '').replace(/\*+$/, '');
-  const exact = text.match(/^ZAP[-\s*:/\.]+(402|405|459)[-\s*:/\.]+(\d{3,4})$/);
+  // Portable readers can send ZAP*402*002 or ZAP'405'085 for a printed label.
+  const text = String(payload).trim().toUpperCase().replace(/´/g, "'").normalize('NFKC').replace(/\*+$/, '');
+  const zap = text.replace(/['‘’]/g, '*').replace(/^\*+(?=ZAP[\s*:/.-])/, '');
+  const exact = zap.match(/^ZAP[-\s*:/\.]+(402|405|459)[-\s*:/\.]+(\d{3,4})$/);
   if (exact) return 'ZAP-' + exact[1] + '-' + exact[2];
   const numbered = text.match(/^(402|405|459)[-\s]+(\d{3,4})$/);
   if (numbered) return 'ZAP-' + numbered[1] + '-' + numbered[2];
   // QR generators can embed visible labels such as
   // "SECCIÓN 402 · CAJÓN 001 · MARBETE: ZAP-402-001".
-  const embedded = text.match(/(?:^|[^A-Z0-9])ZAP[-\s*:/\.]+(402|405|459)[-\s*:/\.]+(\d{3,4})(?=$|[^0-9])/);
-  if (embedded) return 'ZAP-' + embedded[1] + '-' + embedded[2];
+  const embedded = singlePayload([...zap.matchAll(/(?:^|[^A-Z0-9_-])ZAP[-\s*:/\.]+(402|405|459)[-\s*:/\.]+(\d{3,4})(?=$|[^A-Z0-9_-])/g)]
+    .map(match => 'ZAP-' + match[1] + '-' + match[2]));
+  if (embedded) return embedded;
+  // Continuous receiving validates these literal codes against the catalog.
+  const literal = String(payload).trim();
+  if (allowCatalogCode && hasLocationPayload && /^(?=.*[A-Z0-9])(?!\d+$)[A-Z0-9_-]{1,120}$/i.test(literal)) return literal;
   // Backwards compatibility for non-ZAP locations using a direct,
   // unambiguous barcode. Do not register untrusted prose or a URL.
-  if (!/^https?:\/\//i.test(raw) && /^(?=.*[-_])[A-Z0-9_-]{3,120}$/.test(text)) return text;
+  if (!isUrl && /^(?=.*[-_])[A-Z0-9_-]{3,120}$/.test(text)) return text;
   throw new LocationError('INVALID_CODE', 'El QR no contiene un marbete reconocible.');
 }
 

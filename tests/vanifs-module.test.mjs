@@ -30,7 +30,8 @@ test('VANIFS opens the existing collaborative service without migrating inventor
 });
 
 test('VANTIS loads cache-busted navigation and does not redirect every user automatically', () => {
-  assert.match(index, /app\.js\?v=5\.12\.1/);
+  const release = app.match(/const APP_VERSION = '([^']+)'/)?.[1];
+  assert.ok(release && index.includes(`app.js?v=${release}`));
   assert.match(index, /vantis-command-hub\.css\?v=5\.12\.1/);
   assert.match(portal, /id="show-embedded"/);
   assert.match(portal, /id="open-reception"/);
