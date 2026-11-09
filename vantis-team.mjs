@@ -1,4 +1,10 @@
 import {TeamInventoryApi,openTeamSession,setupTeamAdmin,teamConfigured,TEAM_DEPARTMENT} from './vantis-team-api.mjs';
+import {createClient} from 'https://esm.sh/@supabase/supabase-js@2.57.4';
+const OWNER_EMAIL='trofeosgiova7@gmail.com';
+const emailAuth=createClient('https://uphnzyembyrouvqohwys.supabase.co',
+  'sb_publishable_zpUowBh6NatmD7mb1XDRlw_TVpy1LyT',
+  {auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storageKey:'vantis-team-owner-verify'}});
+
 import {ContinuousReceive} from './continuous-receive.mjs?v=5.13.0';
 import {mountContinuousReceive} from './continuous-receive-ui.mjs?v=5.13.0';
 import {startScanner,stopScanner} from './scanner.js?v=5.13.0';
@@ -193,32 +199,74 @@ $('teamLogin').addEventListener('submit',event=>{
     $('teamLoginError').hidden=false;
   }).finally(()=>{button.disabled=false;$('teamPin').value='';});
 });
+
+const emailStatus=message=>{$('teamEmailStatus').textContent=message;};
+async function ownerEmailToken(){
+  const {data,error}=await emailAuth.auth.getSession();
+  if(error||!data?.session?.access_token)throw Error('Primero verifica tu correo electrónico con el enlace o código recibido.');
+  const {data:profile,error:profileError}=await emailAuth.auth.getUser();
+  if(profileError||profile?.user?.email?.toLowerCase()!==OWNER_EMAIL)
+    throw Error('La sesión no corresponde al correo autorizado.');
+  return data.session.access_token;
+}
+$('teamSendEmail').addEventListener('click',()=>{
+  const button=$('teamSendEmail');
+  button.disabled=true;
+  emailStatus('Solicitando enlace al correo autorizado…');
+  void emailAuth.auth.signInWithOtp({
+    email:OWNER_EMAIL,
+    options:{emailRedirectTo:location.origin+location.pathname,shouldCreateUser:true}
+  }).then(({error})=>{
+    if(error)throw error;
+    emailStatus('Solicitud enviada. Abre el mensaje de Supabase y su enlace. Si vuelves a esta pantalla, continúa con «Activar mi cuenta».');
+  }).catch(error=>emailStatus(error.message||String(error)))
+    .finally(()=>button.disabled=false);
+});
+$('teamVerifyEmail').addEventListener('click',()=>{
+  const input=$('teamVerifyEmailInput').value.trim(),button=$('teamVerifyEmail');
+  button.disabled=true;emailStatus('Verificando correo…');
+  void (async()=>{
+    if(!input){await ownerEmailToken();return;}
+    if(/^\d{6,10}$/.test(input)){
+      const {error}=await emailAuth.auth.verifyOtp({email:OWNER_EMAIL,token:input,type:'email'});
+      if(error)throw error;
+    }else{
+      let parsed;
+      try{parsed=new URL(input);}catch{throw Error('Pega el enlace completo o un código numérico del correo.');}
+      const fragment=new URLSearchParams(parsed.hash.replace(/^#/,'')),params=parsed.searchParams;
+      if(fragment.get('access_token')&&fragment.get('refresh_token')){
+        const {error}=await emailAuth.auth.setSession({
+          access_token:fragment.get('access_token'),
+          refresh_token:fragment.get('refresh_token')
+        });
+        if(error)throw error;
+      }else{
+        const token=params.get('token_hash')||params.get('token');
+        const kind=params.get('type')||'email';
+        if(!token)throw Error('El enlace no contiene un código de verificación.');
+        const {error}=await emailAuth.auth.verifyOtp({token_hash:token,type:kind==='magiclink'?'magiclink':'email'});
+        if(error)throw error;
+      }
+    }
+    await ownerEmailToken();
+    emailStatus('Correo verificado. Ya puedes activar tu cuenta administradora.');
+  })().catch(error=>emailStatus(error.message||String(error)))
+    .finally(()=>button.disabled=false);
+});
 $('teamSetupForm').addEventListener('submit',event=>{
   event.preventDefault();
   const form=event.currentTarget;
   const b=Object.fromEntries(new FormData(form));
-  const node=$('teamSetupStatus');
-  node.textContent='Configurando primera cuenta…';
-  const button=form.querySelector('button');button.disabled=true;
-  void setupTeamAdmin(b).then(()=>{
-    node.textContent='Cuenta creada. Ingresa con tu número y PIN.';
-    $('teamEmployee').value=b.employee;form.reset();
-  }).catch(error=>node.textContent=error.message)
+  const node=$('teamSetupStatus'),button=form.querySelector('button');
+  node.textContent='Verificando identidad y creando la cuenta…';button.disabled=true;
+  void ownerEmailToken().then(emailToken=>setupTeamAdmin({...b,emailToken})).then(async()=>{
+    node.textContent='Cuenta creada. Iniciando sesión…';
+    const v=await openTeamSession(b.employee,b.pin);
+    putSession(v);await mount(v);
+    await emailAuth.auth.signOut().catch(()=>{});
+    form.reset();
+  }).catch(error=>node.textContent=error.message||String(error))
     .finally(()=>button.disabled=false);
-});
-$('teamImportLocal').addEventListener('click',()=>{
-  if(session?.role!=='admin'||importingLocal)return;
-  $('teamImportStatus').textContent='Leyendo los registros locales confirmados…';
-  void new LocalInventoryApi().exportBackup().then(migrateLocalBackup)
-    .catch(error=>$('teamImportStatus').textContent=error.message||String(error));
-});
-$('teamImportBackup').addEventListener('change',event=>{
-  const file=event.target.files?.[0];
-  if(!file||session?.role!=='admin'||importingLocal)return;
-  $('teamImportStatus').textContent='Leyendo el respaldo seleccionado…';
-  void file.text().then(JSON.parse).then(migrateLocalBackup)
-    .catch(error=>$('teamImportStatus').textContent=error.message||String(error))
-    .finally(()=>event.target.value='');
 });
 
 $('teamLogout').addEventListener('click',()=>{
