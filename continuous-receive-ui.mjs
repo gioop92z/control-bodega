@@ -64,7 +64,7 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
         return status;
       }
       const pending=Boolean(queue.state.candidate);
-      const status=(pending?'Marbete en validación · ':'✓ Marbete activo · ')+result.location;
+      const status=(pending?'Marbete detectado · guardando · ':'✓ Marbete activo · ')+result.location;
       feedback(status,pending?'info':'success');
       return status;
     } finally {scheduleRender();}
@@ -98,11 +98,11 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     const modalHtml=pendingRows.length?'<h3>Lectura'+(pendingRows.length===1?'':'s')+' pendiente'+(pendingRows.length===1?'':'s')+': '+num(pendingRows.length)+'</h3>'+
       '<p>Las piezas se suman cuando el servidor confirma el guardado.</p>'+pendingMarkup(pendingRows,false):'';
     if(modalHtml!==lastModalPending){modalPending.innerHTML=modalHtml;lastModalPending=modalHtml;}
-    $('crLocationLabel').textContent=pending?'Marbete por validar':active?'Marbete activo':'Marbete requerido';
+    $('crLocationLabel').textContent=queue.backend==='denied'?'Guardado bloqueado':pending?'Marbete detectado':active?'Marbete activo':'Marbete requerido';
     $('crLocation').textContent=active?.code||'Sin asignar';
     $('crLocation').dataset.state=pending?'pending':active?'active':'';
     $('crInstruction').textContent=active?'Escanea la siguiente pieza':'Escanea primero un marbete';
-    $('crLocationState').textContent=pending?'Puedes seguir escaneando SKU o UPC mientras se valida este marbete.'
+    $('crLocationState').textContent=queue.backend==='denied'?'No escanees más: el servidor rechazó el guardado. Conservamos las lecturas anteriores en este dispositivo.':pending?'Ubicación reconocida. Las piezas siguientes se asociarán aquí cuando el servidor confirme el guardado.'
       :active?'Otro marbete cambia la ubicación automáticamente.'
       :'Después del marbete, escanea el SKU o UPC de cada pieza.';
     if(active&&!pending&&active.visitId!==confirmedVisit){
