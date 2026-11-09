@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#e5007d">
+  <meta name="description" content="VANTIS Equipo · Inventario central con consulta y escaneo colaborativo.">
+  <title>VANTIS · Inventario compartido</title>
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./continuous-receive.css?v=5.13.0">
+  <link rel="stylesheet" href="./floating-receive.css?v=5.13.0">
+  <link rel="stylesheet" href="./scanner-pro.css?v=5.13.0">
+  <link rel="stylesheet" href="./vantis-github-local.css?v=5.13.0">
+  <link rel="stylesheet" href="./vantis-team.css?v=5.14.0">
+</head>
+<body>
+  <header class="vantis-local-top">
+    <div class="vantis-local-mark">V</div>
+    <div><strong>VANTIS</strong><small>Inventario compartido · edición de equipo</small></div>
+    <span class="vantis-local-tag">Base central · acceso seguro</span>
+  </header>
+  <main class="team-shell">
+    <section id="teamUnavailable" class="vantis-local-welcome" hidden>
+      <h1>Falta conectar el servidor</h1>
+      <p>El inventario compartido todavía no está activo. No escanees aquí hasta que se configure el Worker y la base central. La versión local mantiene todos sus datos.</p>
+      <a href="./local.html">Abrir inventario local</a>
+    </section>
+    <section id="teamLoginSection" class="vantis-local-welcome" hidden>
+      <h1>Acceso al inventario de equipo</h1>
+      <p>Todos los empleados autorizados consultan el mismo inventario. Cada persona entra con su propio gafete y PIN.</p>
+      <form id="teamLogin">
+        <label for="teamEmployee">Número de empleado</label>
+        <input id="teamEmployee" inputmode="numeric" autocomplete="username" pattern="[0-9]{4,12}" required>
+        <label for="teamPin">PIN personal de 6 a 12 dígitos</label>
+        <input id="teamPin" type="password" inputmode="numeric" autocomplete="current-password" minlength="6" maxlength="12" pattern="[0-9]{6,12}" required>
+        <button type="submit" class="vantis-local-primary">Entrar a VANTIS</button>
+      </form>
+      <p id="teamLoginError" class="vantis-local-error" role="alert" hidden></p>
+      <details class="team-setup">
+        <summary>Primera configuración del administrador</summary>
+        <p>Solo necesitas hacerlo una vez. Para impedir que otra persona reclame el inventario, verifica la cuenta de correo del propietario mediante Supabase Auth.</p>
+        <p><strong>Correo autorizado:</strong> trofeosgiova7@gmail.com</p>
+        <button id="teamSendEmail" type="button">Enviar enlace de verificación al correo</button>
+        <label>Código recibido o enlace completo (si el correo ofrece uno)
+          <input id="teamVerifyEmailInput" type="text" autocomplete="one-time-code" placeholder="Código o enlace del correo">
+        </label>
+        <button id="teamVerifyEmail" type="button">Verificar correo</button>
+        <p id="teamEmailStatus" role="status"></p>
+        <form id="teamSetupForm">
+          <label>Número de empleado administrador<input name="employee" inputmode="numeric" pattern="[0-9]{4,12}" required></label>
+          <label>Nombre<input name="name" maxlength="80" required></label>
+          <label>PIN personal (6–12 dígitos)<input name="pin" type="password" inputmode="numeric" minlength="6" maxlength="12" pattern="[0-9]{6,12}" autocomplete="new-password" required></label>
+          <button type="submit" class="vantis-local-primary">Activar mi cuenta administradora</button>
+        </form>
+        <p id="teamSetupStatus" role="status"></p>
+      </details>
+
+      <p class="team-note">El número de empleado por sí solo no concede acceso. Solicita al administrador que te cree una cuenta.</p>
+    </section>
+    <section id="teamApp" hidden>
+      <div class="team-bar"><div><b id="teamGreeting">VANTIS Equipo</b><span id="teamRole"></span></div><button id="teamLogout" type="button">Cerrar sesión</button></div>
+      <div class="vantis-local-banner"><strong>Inventario central</strong><span>Las lecturas confirmadas quedan disponibles para los demás empleados. Las pendientes no aumentan existencias.</span></div>
+      <section class="team-stats" id="teamStats" aria-live="polite">Consultando existencias…</section>
+      <section class="team-panel">
+        <h2>Buscar mercancía</h2>
+        <p>Consulta por SKU, UPC, descripción o marbete para encontrar existencias y ubicación.</p>
+        <form id="teamSearchForm" class="team-search"><input id="teamSearch" type="search" enterkeyhint="search" autocomplete="off" placeholder="SKU, UPC, nombre o marbete" aria-label="Buscar artículo"><button type="submit" class="vantis-local-primary">Buscar</button></form>
+        <p id="teamSearchStatus" role="status" class="team-muted"></p>
+        <div id="teamResults" class="team-results"></div>
+      </section>
+      <section id="teamScanSection" hidden>
+        <h2 class="team-section-title">Recepción continua</h2>
+        <p class="team-muted">Marbete → SKU/UPC → SKU/UPC → siguiente marbete. Confirmación por pieza, sin sincronizar manualmente.</p>
+        <div id="teamReceiveRoot" class="cr-standalone"></div>
+        <p class="team-note">Las fotos de cámara permanecen en el dispositivo que las capturó. Los movimientos y existencias sí son compartidos.</p>
+      </section>
+      <section id="teamImportSection" class="team-panel" hidden>
+        <h2>Migrar inventario guardado en tu iPhone</h2>
+        <p>Solo para administradores. Copia las lecturas confirmadas de la edición local a la base compartida. El inventario local <strong>no se borra</strong> y los folios repetidos no se vuelven a sumar.</p>
+        <div class="team-import-actions">
+          <button id="teamImportLocal" type="button" class="vantis-local-primary">Importar desde este dispositivo</button>
+          <label class="team-import-file">Elegir respaldo JSON<input id="teamImportBackup" type="file" accept=".json,application/json" hidden></label>
+        </div>
+        <progress id="teamImportProgress" max="100" value="0" hidden></progress>
+        <p id="teamImportStatus" role="status" aria-live="polite" class="team-muted"></p>
+      </section>
+      <section class="team-panel">
+        <h2>Movimientos recientes</h2>
+        <div id="teamHistory" class="team-history">Consultando movimientos…</div>
+      </section>
+      <section id="teamPeopleSection" class="team-panel" hidden>
+        <h2>Administrar acceso</h2>
+        <p>Da un usuario y PIN independiente a cada colaborador. «Consulta» permite buscar sin modificar mercancía.</p>
+        <form id="teamAddUser" class="team-person-form">
+          <label>Número de empleado<input name="employee" inputmode="numeric" required pattern="[0-9]{4,12}"></label>
+          <label>Nombre<input name="name" maxlength="80" required></label>
+          <label>PIN inicial<input name="pin" type="password" autocomplete="new-password" pattern="[0-9]{6,12}" required></label>
+          <label>Permisos<select name="role"><option value="viewer">Consulta</option><option value="scanner">Escaneo</option><option value="admin">Administrador</option></select></label>
+          <button class="vantis-local-primary" type="submit">Crear empleado</button>
+        </form>
+        <p id="teamPeopleStatus" role="status"></p>
+        <div id="teamPeopleList"></div>
+      </section>
+      <p id="teamGlobalError" class="vantis-local-error" role="alert" hidden></p>
+      <p class="vantis-local-bottom">La disponibilidad de este inventario depende de la conexión y del servidor. Si una lectura aparece como pendiente, conserva el navegador y reintenta con el mismo folio; no la cuentes dos veces.</p>
+    </section>
+  </main>
+  <script type="module" src="./vantis-team.mjs?v=5.14.0"></script>
+</body>
+</html>

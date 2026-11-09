@@ -1,0 +1,43 @@
+name: VANTIS Equipo - prueba de API publicada
+on:
+  push:
+    branches: [main, 'feat/vantis-equipo-cloudflare-20261109']
+    paths:
+      - 'team.html'
+      - 'team-config.mjs'
+      - 'vantis-team*'
+      - '.github/workflows/vantis-supabase-smoke.yml'
+  pull_request:
+    paths:
+      - 'team.html'
+      - 'team-config.mjs'
+      - 'vantis-team*'
+      - '.github/workflows/vantis-supabase-smoke.yml'
+permissions:
+  contents: read
+jobs:
+  api-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate frontend syntax and HTTPS URL
+        run: |
+          node --check vantis-team.mjs
+          node --check vantis-team-api.mjs
+          node --check team-config.mjs
+          grep -Fq 'https://uphnzyembyrouvqohwys.supabase.co/functions/v1/vantis-team' team-config.mjs
+      - name: Verify remote public health and protected inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          api=https://uphnzyembyrouvqohwys.supabase.co/functions/v1/vantis-team
+          key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVwaG56eWVtYnlyb3V2cW9od3lzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI2NjE5NzIsImV4cCI6MjEwODIzNzk3Mn0.UawCQzEB2ITHSLsq33Je1ChFQf25zKH0xwQic9yXn8U
+          curl --fail-with-body --retry 4 --retry-delay 2 --silent --show-error             -H 'Origin: https://gioop92z.github.io' -H "apikey: $key" -H "authorization: Bearer $key" "$api/api/health" -o health.json
+          node -e "const h=require('./health.json');if(!h.ok||h.mode!=='vantis-supabase-isolated')process.exit(1)"
+          status="$(curl --silent --show-error -o unauthorized.json -w '%{http_code}'             -H 'Origin: https://gioop92z.github.io' -H "apikey: $key" -H "authorization: Bearer $key" "$api/api/summary")"
+          test "$status" = '401'
+          node -e "const x=require('./unauthorized.json');if(!x.error)process.exit(1)"
+          status="$(curl --silent --show-error -o foreign-origin.json -w '%{http_code}'             -H 'Origin: https://attacker.example' -H "apikey: $key" -H "authorization: Bearer $key" "$api/api/health")"
+          test "$status" = '403'
+          echo 'Remote VANTIS central API is reachable and rejects unauthenticated and foreign-origin requests.'
