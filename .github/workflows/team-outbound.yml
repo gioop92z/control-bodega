@@ -1,0 +1,36 @@
+name: VANTIS Equipo - salidas de bodega
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'team.html'
+      - 'vantis-team.mjs'
+      - 'vantis-team-api.mjs'
+      - 'vantis-outbound.mjs'
+      - 'tests/team-outbound.e2e.mjs'
+      - '.github/workflows/team-outbound.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  outbound:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install webkit chromium --with-deps
+      - name: Wait for updated site
+        run: |
+          set -euo pipefail
+          ready=0
+          for i in $(seq 1 50); do
+            if curl -fsSL -H 'Cache-Control: no-cache' 'https://gioop92z.github.io/control-bodega/team.html?outbound=5.16.0' | grep -q 'vantis-team.mjs?v=5.16.0'; then ready=1;break;fi
+            sleep 6
+          done
+          test "$ready" = 1
+      - run: node tests/team-outbound.e2e.mjs
