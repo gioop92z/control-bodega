@@ -22,7 +22,7 @@
   <main class="team-shell">
     <section id="teamUnavailable" class="vantis-local-welcome" hidden>
       <h1>Falta conectar el servidor</h1>
-      <p>El inventario compartido todavía no está activo. No escanees aquí hasta que se configure el Worker y la base central. La versión local mantiene todos sus datos.</p>
+      <p>El inventario compartido todavía no está activo. No escanees hasta comprobar que la base de datos compartida está disponible. La versión local mantiene todos sus datos.</p>
       <a href="./local.html">Abrir inventario local</a>
     </section>
     <section id="teamLoginSection" class="vantis-local-welcome" hidden>
@@ -38,15 +38,9 @@
       <p id="teamLoginError" class="vantis-local-error" role="alert" hidden></p>
       <details class="team-setup">
         <summary>Primera configuración del administrador</summary>
-        <p>Solo necesitas hacerlo una vez. Para impedir que otra persona reclame el inventario, verifica la cuenta de correo del propietario mediante Supabase Auth.</p>
-        <p><strong>Correo autorizado:</strong> trofeosgiova7@gmail.com</p>
-        <button id="teamSendEmail" type="button">Enviar enlace de verificación al correo</button>
-        <label>Código recibido o enlace completo (si el correo ofrece uno)
-          <input id="teamVerifyEmailInput" type="text" autocomplete="one-time-code" placeholder="Código o enlace del correo">
-        </label>
-        <button id="teamVerifyEmail" type="button">Verificar correo</button>
-        <p id="teamEmailStatus" role="status"></p>
+        <p>Activa tu cuenta administradora una sola vez con el código privado de instalación. El código no está almacenado en esta página ni en GitHub.</p>
         <form id="teamSetupForm">
+          <label>Código privado de instalación<input name="key" type="password" autocomplete="off" required></label>
           <label>Número de empleado administrador<input name="employee" inputmode="numeric" pattern="[0-9]{4,12}" required></label>
           <label>Nombre<input name="name" maxlength="80" required></label>
           <label>PIN personal (6–12 dígitos)<input name="pin" type="password" inputmode="numeric" minlength="6" maxlength="12" pattern="[0-9]{6,12}" autocomplete="new-password" required></label>
