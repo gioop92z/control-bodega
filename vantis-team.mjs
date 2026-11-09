@@ -74,6 +74,70 @@ async function refreshPeople(){
     (p.employee===session.employee?'':('<button data-employee="'+esc(p.employee)+'" data-role="'+esc(p.role)+'" data-active="'+(p.active?0:1)+'" type="button">'+(p.active?'Suspender':'Reactivar')+'</button>'))+
     '</div>').join('');
 }
+
+let importingLocal=false;
+function orderedLocalReceipts(backup){
+  if(backup?.format!=='vantis-github-local-backup'||backup?.version!==1||
+      backup?.department!==TEAM_DEPARTMENT||!Array.isArray(backup.items?.receipts))
+    throw Error('El respaldo no corresponde al inventario local de VANTIS Zapatería Infantil.');
+  const rows=backup.items.receipts;
+  if(rows.length>120000)throw Error('El respaldo contiene demasiados movimientos.');
+  const byId=new Map();
+  for(const row of rows){
+    const id=row?.payload?.p_id;
+    if(!id||row?.receipt?.id!==id||byId.has(id)||!row.payload.p_producto||!row.payload.p_marbete)
+      throw Error('El respaldo contiene folios repetidos o movimientos incompletos.');
+    byId.set(id,row);
+  }
+  const sorted=[...rows].sort((a,b)=>
+    String(a.receipt?.stored_at||'').localeCompare(String(b.receipt?.stored_at||'')));
+  const state=new Map(),ordered=[];
+  function visit(row){
+    const id=row.payload.p_id;
+    if(state.get(id)===2)return;
+    if(state.get(id)===1)throw Error('El respaldo tiene referencias de reversa circulares.');
+    state.set(id,1);
+    const previous=byId.get(row.payload.p_reversa);
+    if(previous)visit(previous);
+    state.set(id,2);ordered.push(row);
+  }
+  for(const row of sorted)visit(row);
+  return ordered;
+}
+async function migrateLocalBackup(backup){
+  if(session?.role!=='admin'||!api||importingLocal)return;
+  const rows=orderedLocalReceipts(backup),total=rows.length;
+  const status=$('teamImportStatus'),progress=$('teamImportProgress');
+  if(!total){status.textContent='No hay movimientos confirmados para importar.';return;}
+  if(!confirm('Se copiarán '+num(total)+' movimientos al inventario compartido. No se borrará nada del iPhone. Los folios existentes se omitirán. ¿Continuar?'))return;
+  importingLocal=true;
+  $('teamImportLocal').disabled=true;
+  $('teamImportBackup').disabled=true;
+  progress.hidden=false;progress.value=0;
+  let imported=0,repeated=0,processed=0;
+  try{
+    for(let i=0;i<total;i+=5){
+      const batch=rows.slice(i,i+5);
+      const result=await api.request('/api/import',{method:'POST',body:{items:batch}});
+      imported+=Number(result.imported||0);
+      repeated+=Number(result.repeated||0);
+      processed+=batch.length;
+      progress.value=Math.round(processed/total*100);
+      status.textContent='Importados '+num(processed)+' de '+num(total)+' movimientos; '+num(repeated)+' ya existían.';
+    }
+    status.textContent='Migración terminada: '+num(imported)+' movimientos nuevos y '+num(repeated)+' repetidos omitidos. El inventario local sigue intacto.';
+    await Promise.all([refreshSummary(),refreshHistory()]);
+  }catch(error){
+    status.textContent='Importación interrumpida tras '+num(processed)+' movimientos. '+(error?.message||error)+
+      ' Puedes repetirla: los folios ya importados no se duplican.';
+    throw error;
+  }finally{
+    importingLocal=false;
+    $('teamImportLocal').disabled=false;
+    $('teamImportBackup').disabled=false;
+  }
+}
+
 async function mount(v){
   session=v;api=new TeamInventoryApi(v.token,()=>alertGlobal('Tu sesión necesita renovarse. Conserva esta pestaña y vuelve a iniciar sesión con el mismo gafete.'));
   const profile=await api.request('/api/me');
@@ -83,6 +147,7 @@ async function mount(v){
   $('teamGreeting').textContent=profile.name+' · '+profile.employee;
   $('teamRole').textContent={admin:'Administrador',scanner:'Escaneo',viewer:'Consulta'}[profile.role];
   $('teamPeopleSection').hidden=profile.role!=='admin';
+  $('teamImportSection').hidden=profile.role!=='admin';
   $('teamScanSection').hidden=profile.role==='viewer';
   alertGlobal('');
   if(profile.role!=='viewer'){
@@ -141,6 +206,21 @@ $('teamSetupForm').addEventListener('submit',event=>{
   }).catch(error=>node.textContent=error.message)
     .finally(()=>button.disabled=false);
 });
+$('teamImportLocal').addEventListener('click',()=>{
+  if(session?.role!=='admin'||importingLocal)return;
+  $('teamImportStatus').textContent='Leyendo los registros locales confirmados…';
+  void new LocalInventoryApi().exportBackup().then(migrateLocalBackup)
+    .catch(error=>$('teamImportStatus').textContent=error.message||String(error));
+});
+$('teamImportBackup').addEventListener('change',event=>{
+  const file=event.target.files?.[0];
+  if(!file||session?.role!=='admin'||importingLocal)return;
+  $('teamImportStatus').textContent='Leyendo el respaldo seleccionado…';
+  void file.text().then(JSON.parse).then(migrateLocalBackup)
+    .catch(error=>$('teamImportStatus').textContent=error.message||String(error))
+    .finally(()=>event.target.value='');
+});
+
 $('teamLogout').addEventListener('click',()=>{
   if(queue?.pending){
     alertGlobal('Hay '+queue.pending+' lecturas sin confirmar. No cierres sesión hasta que todas se guarden.');
