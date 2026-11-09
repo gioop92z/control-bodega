@@ -222,6 +222,10 @@ $('teamImportBackup').addEventListener('change',event=>{
 });
 
 $('teamLogout').addEventListener('click',()=>{
+  if(importingLocal){
+    alertGlobal('La importación aún está en curso. Conserva esta sesión hasta que termine o falle.');
+    return;
+  }
   if(queue?.pending){
     alertGlobal('Hay '+queue.pending+' lecturas sin confirmar. No cierres sesión hasta que todas se guarden.');
     return;
