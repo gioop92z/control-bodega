@@ -30,12 +30,13 @@
       <p>Todos los empleados autorizados consultan el mismo inventario. Cada persona entra con su propio gafete y PIN.</p>
       <form id="teamLogin">
         <label for="teamEmployee">Número de empleado</label>
-        <input id="teamEmployee" inputmode="numeric" autocomplete="username" pattern="[0-9]{4,12}" required>
+        <input id="teamEmployee" inputmode="numeric" autocomplete="username" pattern="[0-9]{4,12}" minlength="4" maxlength="12" required>
         <label for="teamPin">PIN personal de 6 a 12 dígitos</label>
         <input id="teamPin" type="password" inputmode="numeric" autocomplete="current-password" minlength="6" maxlength="12" pattern="[0-9]{6,12}" required>
         <button type="submit" class="vantis-local-primary">Entrar a VANTIS</button>
       </form>
-      <p id="teamLoginError" class="vantis-local-error" role="alert" hidden></p>
+      <p id="teamLoginError" class="vantis-local-error" role="alert" aria-live="assertive" hidden></p>
+      <p class="team-note">Usa el <strong>mismo número de empleado y PIN de tu computadora</strong>. El inventario es compartido; cada dispositivo inicia su propia sesión. Versión móvil 5.15.1.</p>
       <details class="team-setup">
         <summary>Primera configuración del administrador</summary>
         <p>Activa tu cuenta administradora una sola vez con el código privado de instalación. El código no está almacenado en esta página ni en GitHub.</p>
@@ -99,6 +100,6 @@
       <p class="vantis-local-bottom">La disponibilidad de este inventario depende de la conexión y del servidor. Si una lectura aparece como pendiente, conserva el navegador y reintenta con el mismo folio; no la cuentes dos veces.</p>
     </section>
   </main>
-  <script type="module" src="./vantis-team.mjs?v=5.14.0"></script>
+  <script type="module" src="./vantis-team.mjs?v=5.15.1"></script>
 </body>
 </html>
