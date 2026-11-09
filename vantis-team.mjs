@@ -1,4 +1,4 @@
-import {TeamInventoryApi,openTeamSession,setupTeamAdmin,teamConfigured,TEAM_DEPARTMENT} from './vantis-team-api.mjs';
+import {TeamInventoryApi,openTeamSession,setupTeamAdmin,teamConfigured,TEAM_DEPARTMENT} from './vantis-team-api.mjs?v=5.15.1';
 import {ContinuousReceive} from './continuous-receive.mjs?v=5.13.0';
 import {mountContinuousReceive} from './continuous-receive-ui.mjs?v=5.13.0';
 import {startScanner,stopScanner} from './scanner.js?v=5.13.0';
@@ -13,12 +13,12 @@ const alertGlobal=message=>{
   const node=$('teamGlobalError');node.textContent=message;node.hidden=!message;
 };
 const reportError=error=>alertGlobal(error?.message||String(error));
-function putSession(value){sessionStorage.setItem(SESSION_KEY,JSON.stringify(value));}
+function putSession(value){try{sessionStorage.setItem(SESSION_KEY,JSON.stringify(value));}catch{/* Safari private mode: login still works for this tab */}}
 function getSession(){
   try{return JSON.parse(sessionStorage.getItem(SESSION_KEY)||'null');}catch{return null;}
 }
 function clearSession(){
-  sessionStorage.removeItem(SESSION_KEY);session=null;
+  try{sessionStorage.removeItem(SESSION_KEY);}catch{} session=null;
   clearInterval(refreshTimer);refreshTimer=null;
   unmount?.();unmount=null;queue=null;api=null;
   $('teamApp').hidden=true;
@@ -172,7 +172,11 @@ async function mount(v){
       if(queue.report().confirmed%20===0){void refreshSummary().catch(reportError);void refreshHistory().catch(reportError);}
     };
   }
-  await Promise.all([refreshSummary(),refreshHistory(),...(profile.role==='admin'?[refreshPeople()]:[])]);
+  // A slow or temporarily unavailable summary must not undo a valid mobile login.
+  const updates=await Promise.allSettled([refreshSummary(),refreshHistory(),...(profile.role==='admin'?[refreshPeople()]:[])]);
+  const failure=updates.find(r=>r.status==='rejected');
+  if(failure)alertGlobal('Sesión iniciada. Algunas consultas no respondieron: '+(failure.reason?.message||'intenta actualizar la página.'));
+
   refreshTimer=setInterval(()=>{
     if(document.visibilityState!=='visible'||!api)return;
     void refreshSummary().catch(reportError);
@@ -180,18 +184,40 @@ async function mount(v){
     if($('teamSearch').value.trim())void search().catch(reportError);
   },20000);
 }
-$('teamLogin').addEventListener('submit',event=>{
+
+const loginForm=$('teamLogin');
+loginForm.addEventListener('invalid',event=>{
+  $('teamLoginError').textContent='Revisa los datos: el número de empleado debe tener 4 a 12 dígitos y el PIN de 6 a 12 dígitos numéricos.';
+  $('teamLoginError').hidden=false;
+},true);
+loginForm.addEventListener('submit',event=>{
   event.preventDefault();
   const employee=$('teamEmployee').value.trim(),pin=$('teamPin').value;
-  $('teamLoginError').hidden=true;
-  const button=$('teamLogin button');button.disabled=true;
-  void openTeamSession(employee,pin).then(async v=>{
-    putSession(v);
+  const errorNode=$('teamLoginError'),button=loginForm.querySelector('button[type="submit"]');
+  if(button.disabled)return;
+  errorNode.hidden=false;
+  errorNode.textContent='Validando tu acceso al inventario compartido…';
+  button.disabled=true;
+  const buttonText=button.textContent;
+  button.textContent='Conectando…';
+  void (async()=>{
+    const v=await openTeamSession(employee,pin);
     await mount(v);
-  }).catch(error=>{
-    $('teamLoginError').textContent=error.message;
-    $('teamLoginError').hidden=false;
-  }).finally(()=>{button.disabled=false;$('teamPin').value='';});
+    putSession(v);
+  })().catch(error=>{
+    errorNode.textContent=(error?.message||'No se pudo iniciar sesión. Intenta de nuevo.');
+    errorNode.hidden=false;
+    // If an unsupported mobile scanner module failed after authentication,
+    // return to a usable login surface rather than trapping the user.
+    if($('teamApp').hidden===false&&session?.employee!==employee) {
+      $('teamApp').hidden=true;
+      $('teamLoginSection').hidden=false;
+    }
+  }).finally(()=>{
+    button.disabled=false;
+    button.textContent=buttonText;
+    $('teamPin').value='';
+  });
 });
 
 $('teamSetupForm').addEventListener('submit',event=>{
@@ -253,7 +279,7 @@ async function start(){
   const saved=getSession();
   if(saved?.token&&saved?.employee){
     try{await mount(saved);return;}
-    catch{sessionStorage.removeItem(SESSION_KEY);}
+    catch{try{sessionStorage.removeItem(SESSION_KEY);}catch{}}
   }
   $('teamLoginSection').hidden=false;
 }
