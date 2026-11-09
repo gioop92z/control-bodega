@@ -427,3 +427,26 @@ test('RLS 42501 on a new marbete preserves the real scan, blocks new input and s
   await restored.reconnect();
   assert.equal(shared.db.movements.length,1,'reconnect must never double count');
 });
+
+test('IndexedDB write failure stops scanning without confirming or forgetting an event',async t=>{
+  const fixture=receivingDb(),api=fixture.api('user1'),original=api.receive.bind(api);
+  api.mode='local';api.acceptAnyNumericCode=true;
+  const h=await setup(t,{shared:fixture,api});
+  await location(h.queue,"ZAP'405'085");
+  api.receive=async()=>{throw Object.assign(Error('QuotaExceededError'),{code:'LOCAL_STORAGE_ERROR'});};
+  const id=h.queue.scan(SKU).id;
+  await h.queue.flush();
+  assert.equal(h.queue.backend,'denied');
+  assert.equal(h.queue.canScan,false);
+  assert.equal(h.queue.report().totalPieces,0);
+  assert.equal(h.queue.pending,1);
+  assert.equal(h.queue.rows[0].id,id);
+  assert.equal(h.queue.rows[0].status,'uncertain');
+  assert.equal(fixture.db.movements.length,0);
+  api.receive=original;
+  await h.queue.reconnect();
+  assert.equal(h.queue.report().totalPieces,1);
+  assert.equal(h.queue.pending,0);
+  assert.equal(fixture.db.movements.length,1);
+  assert.equal(h.queue.rows[0].id,id);
+});
