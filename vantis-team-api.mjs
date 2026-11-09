@@ -11,10 +11,10 @@ export class TeamInventoryApi {
     this.token=token;this.onUnauthorized=onUnauthorized;
     this.acceptAnyNumericCode=true;this.mode='team';this.deptId=TEAM_DEPARTMENT;
   }
-  async request(path,{method='GET',body}={}){
+  async request(path,{method='GET',body,signal}={}){
     let response;
     try{
-      response=await fetch(BASE+path,{method,cache:'no-store',
+      response=await fetch(BASE+path,{method,signal,cache:'no-store',
         headers:{...gatewayHeaders(),'x-vantis-token':this.token,...(body?{'content-type':'application/json'}:{})},
         body:body?JSON.stringify(body):undefined});
     }catch{throw Object.assign(Error('No hay conexión con el inventario central. La lectura se conserva para reintentar.'),{code:'NETWORK_ERROR'});}
