@@ -358,7 +358,15 @@ export class ContinuousReceive {
       }
       this.error='';this.saveSession();
     }catch(error){
-      this.error='Marbete pendiente de validar: '+message(error);
+      // Permission failures are configuration problems, not invalid labels.
+      // Keep the active candidate and every locally journaled piece intact.
+      // Never discard their location or claim that the server stored them.
+      if(String(error?.code)==='42501'||/row.level.security|permission denied|violates.*policy/i.test(message(error))){
+        this.backend='denied';
+        this.error='El servidor bloqueó el guardado del marbete por permisos. Tus lecturas siguen en este dispositivo; no borres los datos de VANTIS. Un administrador debe restablecer el acceso a este departamento.';
+        return;
+      }
+      this.error='No se pudo guardar el marbete: '+message(error);
       if(permanent(error)||['NOT_REGISTERED','WRONG_DEPARTMENT','INACTIVE'].includes(error?.code)){
         for(const row of this.rows.filter(row=>row.visitId===target.visitId&&!row.payload&&row.status!=='cancelled')){
           const updated={...row,locationVerified:false,locationRejected:true,status:'queued',
