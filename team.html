@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="./floating-receive.css?v=5.13.0">
   <link rel="stylesheet" href="./scanner-pro.css?v=5.13.0">
   <link rel="stylesheet" href="./vantis-github-local.css?v=5.13.0">
-  <link rel="stylesheet" href="./vantis-team.css?v=5.14.0">
+  <link rel="stylesheet" href="./vantis-team.css?v=5.16.0">
 </head>
 <body>
   <header class="vantis-local-top">
@@ -64,10 +64,12 @@
         <div id="teamResults" class="team-results"></div>
       </section>
       <section id="teamScanSection" hidden>
-        <h2 class="team-section-title">Recepción continua</h2>
+        <div class="team-mode-switch" role="group" aria-label="Tipo de movimiento"><button id="teamModeReceive" type="button" class="active">Ingresar mercancía</button><button id="teamModeOutbound" type="button">Sacar mercancía</button></div>
+        <div id="teamReceiveSection"><h2 class="team-section-title">Recepción continua</h2>
         <p class="team-muted">Marbete → SKU/UPC → SKU/UPC → siguiente marbete. Confirmación por pieza, sin sincronizar manualmente.</p>
         <div id="teamReceiveRoot" class="cr-standalone"></div>
-        <p class="team-note">Las fotos de cámara permanecen en el dispositivo que las capturó. Los movimientos y existencias sí son compartidos.</p>
+        <p class="team-note">Las fotos de cámara permanecen en el dispositivo que las capturó. Los movimientos y existencias sí son compartidos.</p></div>
+        <div id="teamOutboundSection" hidden><h2 class="team-section-title">Salida continua de mercancía</h2><p class="team-muted">Escanea el marbete y luego cada SKU/UPC que retiras. Solo se descuenta al confirmar el servidor.</p><div id="teamOutboundRoot"></div></div>
       </section>
       <section id="teamImportSection" class="team-panel" hidden>
         <h2>Migrar inventario guardado en tu iPhone</h2>
@@ -100,6 +102,6 @@
       <p class="vantis-local-bottom">La disponibilidad de este inventario depende de la conexión y del servidor. Si una lectura aparece como pendiente, conserva el navegador y reintenta con el mismo folio; no la cuentes dos veces.</p>
     </section>
   </main>
-  <script type="module" src="./vantis-team.mjs?v=5.15.1"></script>
+  <script type="module" src="./vantis-team.mjs?v=5.16.0"></script>
 </body>
 </html>
