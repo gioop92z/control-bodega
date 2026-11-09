@@ -119,7 +119,7 @@ export function mountContinuousReceive(root,queue,{startScanner,stopScanner,isCu
     const storageStatus=queue.storageError||['missing','invalid','denied'].includes(queue.backend)?'Guardado no disponible'
       :queue.backend==='checking'?'Comprobando servidor…'
       :!connected?'Sin conexión · Guardado local'
-      :queue.backend==='offline'?'Recuperando conexión…':'Guardado automático';
+      :queue.backend==='offline'?(queue.api.mode==='local'?'Almacenamiento local no disponible':'Recuperando conexión…'):(queue.api.mode==='local'?'Guardado local automático':'Guardado automático');
     const pendingStatus=report.pending?' · '+num(report.pending)+(report.pending===1?' pendiente':' pendientes'):'';
     $('crSync').textContent=storageStatus+pendingStatus+(report.failed?' · '+num(report.failed)+' sin registrar':'');
     $('crSync').className=report.pending?'cr-pending-text':'cr-confirmed-text';
