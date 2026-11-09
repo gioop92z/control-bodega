@@ -8,13 +8,13 @@ function getSpreadsheet(){
   return spreadsheetPromise;
 }
 import { startScanner, stopScanner } from './scanner.js?v=5.8.3';
-import { getMarbete, normalizeMarbete, parseMarbeteScan, assignProductLocation, registerMarbete, locationQuery } from './product-location.mjs?v=5.12.0';
+import { getMarbete, normalizeMarbete, parseMarbeteScan, assignProductLocation, registerMarbete, locationQuery } from './product-location.mjs?v=5.12.2';
 import { FastExitQueue } from './exit-queue.mjs?v=3.8.0';
 import { mountFastExit } from './exit-queue-ui.mjs?v=3.8.0';
 import { ReceiveQueue } from './receive-queue.mjs?v=3.9.5';
 import { mountFastReceive } from './receive-queue-ui.mjs?v=3.9.5';
-import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?v=5.12.0';
-import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=5.12.0';
+import { ContinuousReceive, SupabaseReceiptApi } from './continuous-receive.mjs?v=5.12.2';
+import { mountContinuousReceive } from './continuous-receive-ui.mjs?v=5.12.2';
 import { mountOperations } from './operations-v4.mjs?v=5.0.0';
 import { ScanEvidence, listSkuEvidence, listLocalSkuEvidence } from './scan-evidence.mjs?v=5.8.3';
 import {listLocalSkuAudit,listServerSkuAudit,captureMethodLabel} from './receiving-audit.mjs?v=5.8.3';
@@ -33,7 +33,7 @@ const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
 const esc = (s='') => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const APP_VERSION = '5.12.0';
+const APP_VERSION = '5.12.2';
 const VISUAL_CLEANUP_CUTOFF = '2026-09-28T05:38:00.000Z';
 const HISTORY_RESTART_CUTOFF = '2026-10-15T22:15:00.000Z';
 

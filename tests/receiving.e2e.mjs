@@ -87,11 +87,34 @@ try {
   assert.equal(await page.locator('#vantisOverview .vantis-metric').count(),2,'home must display only the two useful operating KPIs');
   assert.doesNotMatch(await page.locator('#vantisOverview').innerText(),/Productos|Stock bajo/i);
   await page.locator('[data-act="ENTRADA"]').click();await page.locator('#crScan:not(:disabled)').waitFor();
-  assert.match(await page.locator('#crInstruction').innerText(),/SKU O MARBETE/i);
+  assert.match(await page.locator('#crInstruction').innerText(),/primero un marbete/i);
+  async function portable(code){
+    await page.keyboard.type(code);
+    await page.waitForFunction(()=>document.getElementById('crScan').value==='');
+  }
+  await portable('0012345678');
+  assert.match(await page.locator('#crFeedback[data-tone="error"]').innerText(),/primero un marbete/i);
+  assert.equal(await page.evaluate(()=>window.__receiptFixture.movements.length),0);
+  // Replay the reader's apostrophes and the full five-frame sequence without Enter.
+  await portable("ZAP'405'085");
+  await page.waitForFunction(()=>document.getElementById('crLocation').textContent==='ZAP-405-085'
+    &&document.getElementById('crLocation').dataset.state==='active');
+  assert.equal(await page.locator('#crLocation').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(228, 247, 235)');
+  await portable('0012345678');
+  await page.locator('#crFeedback[data-tone="success"]').filter({hasText:'SKU 0012345678'}).waitFor({state:'visible'});
+  await portable('0012345678');
+  await portable("ZAP'402'003");
+  await portable('0200000000001');
+  await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='3');
+  await page.locator('#crFeedback[data-tone="success"]').filter({hasText:'UPC 0200000000001'}).waitFor({state:'visible'});
+  assert.deepEqual(await page.evaluate(()=>window.__receiptFixture.movements.map(row=>[row.sku,row.marbete_codigo])),
+    [['0012345678','ZAP-405-085'],['0012345678','ZAP-405-085'],['0012345678','ZAP-402-003']]);
+  assert.equal(await page.locator('#crVisitCount').innerText(),'1');
+  assert.equal(await page.locator('#crSwitch').isVisible(),false);
   // True keyboard events: no click or field focus between frames.
   await page.keyboard.type('402-001');await page.keyboard.press('Enter');
-  await page.waitForFunction(()=>document.getElementById('crLocationLabel').textContent.toLowerCase()==='marbete activo'&&document.getElementById('crLocation').textContent==='402-001');
-  for(let i=0;i<5;i++){await page.keyboard.type('0012345678');await page.keyboard.press(i%2?'Tab':'Enter');}
+  await page.waitForFunction(()=>document.getElementById('crLocationLabel').textContent.toLowerCase()==='marbete activo'&&document.getElementById('crLocation').textContent==='ZAP-402-001');
+  for(let i=0;i<2;i++){await page.keyboard.type('0012345678');await page.keyboard.press(i%2?'Tab':'Enter');}
   await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='5');
   assert.equal(await page.evaluate(()=>window.__receiptFixture.movements.length),5);
   assert.equal(await page.locator('#crSwitch').isVisible(),false);
@@ -102,7 +125,7 @@ try {
   await page.keyboard.type('ZAP*402*002');await page.keyboard.press('Enter');
   await page.keyboard.type('0012345678');await page.keyboard.press('Enter');
   await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='7'
-    &&document.getElementById('crLocation').textContent==='402-002'
+    &&document.getElementById('crLocation').textContent==='ZAP-402-002'
     &&document.getElementById('crLocationLabel').textContent.toLowerCase()==='marbete activo');
   assert.equal(await page.locator('#crSwitch').isVisible(),false,'location changes must not show a confirmation dialog');
   assert.equal(await page.locator('#crVisitCount').innerText(),'1');
@@ -126,7 +149,7 @@ try {
   assert.ok(audit.some(row=>row.metodo==='scanner'),'HID receipts preserve reader origin');
   assert.equal(await page.evaluate(()=>window.__cameraOpens),1);
   await page.evaluate(()=>window.__scanner.cb('{"marbete":"ZAP-402-003"}'));
-  await page.waitForFunction(()=>document.getElementById('crLocation').textContent==='402-003'&&document.getElementById('crLocationLabel').textContent.toLowerCase()==='marbete activo');
+  await page.waitForFunction(()=>document.getElementById('crLocation').textContent==='ZAP-402-003'&&document.getElementById('crLocationLabel').textContent.toLowerCase()==='marbete activo');
   assert.equal(await page.locator('#crSwitch').isVisible(),false);
   assert.equal(await page.evaluate(()=>window.__cameraOpens),1,'camera must stay open across marbete changes');
   assert.equal(await page.evaluate(()=>document.getElementById('scanner')?.parentElement===document.body),true);
@@ -166,7 +189,7 @@ try {
   const movements=await page.evaluate(()=>window.__receiptFixture.movements.length);
   await page.locator('#crResume').click();assert.equal(await page.evaluate(()=>window.__receiptFixture.movements.length),movements);
   await page.reload({waitUntil:'networkidle'});await page.locator('[data-act="ENTRADA"]').click();await page.locator('#crScan:not(:disabled)').waitFor();
-  assert.equal(await page.locator('#crTotalCount').innerText(),'1,609');assert.equal(await page.locator('#crLocation').innerText(),'402-003');
+  assert.equal(await page.locator('#crTotalCount').innerText(),'1,609');assert.equal(await page.locator('#crLocation').innerText(),'ZAP-402-003');
   // No server response: pending is never presented as a stored success.
   await page.evaluate(()=>window.__receiptFixture.lostResponse=true);await page.keyboard.type('0012345678');await page.keyboard.press('Enter');
   await page.waitForFunction(()=>document.getElementById('crSync').textContent.includes('1 pendientes'));
@@ -181,20 +204,20 @@ try {
   await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='1,610');
   await page.locator('#crResume').click();
   assert.equal(await page.evaluate(()=>window.__receiptFixture.products[0].stock),1620);
-  await page.keyboard.type('UNKNOWN');await page.keyboard.press('Enter');
+  await page.keyboard.type('0012990032');await page.keyboard.press('Enter');
   await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='1,611');
-  assert.equal(await page.evaluate(()=>window.__receiptFixture.products.find(x=>x.sku==='UNKNOWN')?.stock),1);
+  assert.equal(await page.evaluate(()=>window.__receiptFixture.products.find(x=>x.sku==='0012990032')?.stock),1);
   // Mobile/manual regression: the input always accepts typing and submits via its form.
   assert.equal(await page.locator('#crScan').getAttribute('inputmode'),'text');
   await page.locator('#crKeyboard').click();
   assert.equal(await page.locator('#crScan').evaluate(el=>document.activeElement===el),true);
-  await page.locator('#crScan').fill('MANUAL-123');
+  await page.locator('#crScan').fill('0012990033');
   await page.locator('#crScanForm').evaluate(form=>form.requestSubmit());
   await page.waitForFunction(()=>document.getElementById('crTotalCount').textContent==='1,612');
-  assert.equal(await page.evaluate(()=>window.__receiptFixture.products.find(x=>x.sku==='MANUAL-123')?.stock),1);
+  assert.equal(await page.evaluate(()=>window.__receiptFixture.products.find(x=>x.sku==='0012990033')?.stock),1);
   const manualAudit=await page.evaluate(async()=>{
     const {listLocalSkuAudit}=await import('./receiving-audit.mjs?v=5.8.3');
-    return listLocalSkuAudit('dept1','test-user','MANUAL-123');
+    return listLocalSkuAudit('dept1','test-user','0012990033');
   });
   assert.equal(manualAudit.length,1);
   assert.equal(manualAudit[0].metodo,'manual');

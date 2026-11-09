@@ -23,7 +23,11 @@ export class LegacyReceiptApi {
     catch(error){
       if(error.code!=='NOT_REGISTERED')throw error;
       if(!/^ZAP-(402|405|459)-\d{3,4}$/.test(code)) throw error;
-      marbete=await registerMarbete(this.sb,{code,deptId:this.deptId,zona:'BODEGA'});
+      try{marbete=await getMarbete(this.sb,code.slice(4),this.deptId);}
+      catch(aliasError){
+        if(aliasError.code!=='NOT_REGISTERED')throw aliasError;
+        marbete=await registerMarbete(this.sb,{code,deptId:this.deptId,zona:'BODEGA'});
+      }
     }
     return {codigo:marbete.codigo,departamento_id:marbete.departamento_id,activo:marbete.activo};
   }

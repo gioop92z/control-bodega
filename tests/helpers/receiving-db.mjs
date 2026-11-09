@@ -23,11 +23,14 @@ export function receivingDb(overrides={}) {
         if(db.networkError)throw Error('network offline');
         const other=code.replace(/^ZAP-/,'');
         let row=db.marbetes.find(row=>row.codigo===code||row.codigo===other);
-        if(!row){row={codigo:code,departamento_id:'dept1',activo:true,zona:'BODEGA'};db.marbetes.push(row);}
+        if(!row){
+          if(!/^ZAP-(402|405|459)-\d{3,4}$/.test(code))throw Object.assign(Error('Marbete no registrado'),{code:'NOT_REGISTERED'});
+          row={codigo:code,departamento_id:'dept1',activo:true,zona:'BODEGA'};db.marbetes.push(row);
+        }
         if(row.departamento_id!=='dept1'||!row.activo)throw Object.assign(Error('Marbete ajeno o inactivo'),{code:'22023'});
         return structuredClone(row);
       },
-      lookup:codes=>{if(db.networkError)throw Error('network offline');return lookupSupportCodes(sb,codes,'dept1');},
+      lookup:codes=>{if(db.networkError)throw Error('network offline');return lookupSupportCodes(sb,codes,'dept1',{rejectCollisions:true});},
       async ensureProduct(code) {
         if(db.networkError||db.failCreate)throw Error('SKU '+code+' pendiente de alta en catálogo.');
         let product=db.products.find(row=>row.sku===code&&row.departamento_id==='dept1');

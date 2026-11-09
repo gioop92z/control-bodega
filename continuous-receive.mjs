@@ -1,6 +1,6 @@
-import {parseMarbeteScan, locationQuery} from './product-location.mjs?v=5.12.0';
-import {cleanSupportCode, lookupSupportCodes} from './support-batch.mjs?v=3.8.0';
-import {LegacyReceiptApi} from './legacy-receipt-api.mjs?v=3.10.1';
+import {parseMarbeteScan, locationQuery} from './product-location.mjs?v=5.12.2';
+import {cleanSupportCode, lookupSupportCodes} from './support-batch.mjs?v=5.12.2';
+import {LegacyReceiptApi} from './legacy-receipt-api.mjs?v=5.12.2';
 import {InventoryJournalMirror} from './vantis-offline-idb-v5.mjs?v=5.8.3';
 import {scanMetric,startMetric,serverMetric} from './vantis-telemetry-v5.mjs';
 
@@ -31,10 +31,14 @@ export function withNetworkDeadline(action,label,ms=18000){
     })
   ]).finally(()=>clearTimeout(timer));
 }
-const canonical = code => {
-  try { const value = parseMarbeteScan(code); return /^ZAP-(402|405|459)-\d{3,4}$/.test(value) ? value : null; }
-  catch { return null; }
-};
+const standardMarbete = /^(?:ZAP-)?(402|405|459)-\d{3,4}$/;
+const locationKey = code => standardMarbete.test(code) ? code.replace(/^ZAP-/, '') : code;
+const numericCode = code => /^\d+$/.test(code);
+const canSend = row => Boolean(row.location) && row.locationVerified!==false &&
+  !row.locationRejected && (row.kind==='undo' || numericCode(row.code));
+const awaitingSend = row => ['queued','uncertain'].includes(row.status) && canSend(row);
+const awaitsLocation = row => row.kind==='receive' && row.status==='queued' && row.attempts===0 &&
+  !row.payload && !row.location && !row.locationRejected && numericCode(row.code);
 
 // Each row is written separately, synchronously, BEFORE any network request.
 // A crash between row and session writes is recovered by enumerating the journal.
@@ -75,14 +79,14 @@ export class SupabaseReceiptApi {
       this.mode='legacy'; return result;
     }
   }
-  async activate(code) { return this.mode==='legacy'
+  async activate(code) { return this.mode==='legacy' || !standardMarbete.test(code)
     ? this.legacy.activate(code)
     : locationQuery(this.sb.rpc('vantis_activar_marbete_v1', {p_departamento:this.deptId, p_codigo:code})); }
-  lookup(codes) { return lookupSupportCodes(this.sb, codes, this.deptId); }
+  lookup(codes) { return lookupSupportCodes(this.sb, codes, this.deptId, {rejectCollisions:true}); }
   async ensureProduct(raw){
     const code=cleanSupportCode(raw),before=await this.lookup([code]);
     if(before.get(code)?.product)return before.get(code).product;
-    if(/ambiguo/i.test(before.get(code)?.error||''))throw Error('UPC ambiguo: escanea el SKU específico.');
+    if(/ambiguo/i.test(before.get(code)?.error||''))throw Error(before.get(code).error);
     let failure=null;
     try {await locationQuery(this.sb.rpc('crear_producto_codigo',{p_token:null,p_departamento:this.deptId,p_codigo:code}));}
     catch(error){failure=error;}
@@ -255,32 +259,40 @@ export class ContinuousReceive {
   }
   scan(raw, {eventId, source='unknown'} = {}) {
     if (!this.canScan) throw Error(this.storageError || (this.state.pendingSwitch ? 'Confirma o cancela el cambio de marbete antes de escanear.' : this.error || 'Espera a que el lector esté listo.'));
-    const code = String(raw ?? '').trim(), label = canonical(code);
-    if(label){
+    if (eventId && this.rows.some(row => row.id === eventId)) return {type:'duplicate-event',id:eventId};
+    const code = String(raw ?? '').replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+    let productCode;
+    try { productCode = cleanSupportCode(code); } catch { /* Try the location format below. */ }
+    if(!numericCode(productCode)){
+      let label;
+      try { label = parseMarbeteScan(code,{allowCatalogCode:true}); }
+      catch (error) {
+        // A failed location read must not leave the previous destination armed.
+        this.state.active=null;this.state.candidate=null;
+        if(!this.saveSession())throw Error(this.storageError);
+        throw Error('Marbete no reconocido. '+message(error)+' Escanea un marbete válido para continuar.');
+      }
       const current=this.state.candidate||this.state.active;
-      if(current&&canonical(current.code)===label)return {type:'same-location'};
+      if(current&&locationKey(current.code)===locationKey(label))return {type:'same-location',location:current.code};
       // Non-blocking automatic destination switch; FIFO server validation.
       this.setCandidate(label);
-      return {type:'location'};
+      return {type:'location',location:label};
     }
-    // Never turn malformed Code39 or QR labels into fake merchandise.
-    if(/^\*?ZAP[-*:/\.\s]/i.test(code)||/^https?:\/\//i.test(code)||code.startsWith('{'))
-      throw Error('Marbete no reconocido. Revisa el código antes de seguir.');
+    const location = this.state.candidate || this.state.active;
+    if(!location)throw Error('Escanea primero un marbete. Esta pieza no se registró.');
     // Safari's synchronous localStorage is not an unlimited offline warehouse.
     // Stop safely before an offline backlog can exhaust its quota.
     if(this.rows.length%25===0&&this.pending>=1200)
       throw Error('Hay más de 1,200 lecturas sin confirmar. Sincroniza y guarda un respaldo antes de continuar.');
-    const location = this.state.candidate || this.state.active;
-    const productCode = cleanSupportCode(code), id = eventId || this.makeId();
-    if (eventId && this.rows.some(row => row.id === id)) return {type:'duplicate-event',id};
+    const id = eventId || this.makeId();
     const row = {id,sessionId:this.state.id,sequence:++this.nextSequence,kind:'receive',
-      code:productCode,quantity:1,location:location?.code||null,visitId:location?.visitId||null,
-      locationVerified:!this.state.candidate,unlocatedApproved:false,
+      code:productCode,quantity:1,location:location.code,visitId:location.visitId,
+      locationVerified:!this.state.candidate,
       capturedAt:new Date(this.now()).toISOString(),status:'queued',attempts:0,error:'',product:null,payload:null,
       captureMethod:['camera','manual','scanner'].includes(source)?source:'unknown',operator:this.actor,
       evidenceStatus:source==='camera'?'pending':'none'};
     if (!this.saveRow(row)) { this.nextSequence--; throw Error(this.storageError); }
-    this.rows.push(row); scanMetric(); this.changed(); this.schedule(25); return {type:'piece',id};
+    this.rows.push(row); scanMetric(); this.changed(); this.schedule(25); return {type:'piece',id,location:location.code};
   }
   markEvidence(id,status) {
     const row=this.rows.find(item=>item.id===id&&item.kind==='receive');
@@ -292,9 +304,9 @@ export class ContinuousReceive {
   setCandidate(code) {
     const candidate={code,visitId:this.makeId()};
     if(!this.state.active&&!this.state.candidate){
-      // SKU-first reads attach only to the FIRST scanned marbete.
-      // A rejected label's reads are never silently reassigned.
-      for(const row of this.rows.filter(r=>r.kind==='receive'&&r.status!=='cancelled'&&!r.location&&!r.unlocatedApproved&&!r.locationRejected)){
+      // Recover unsent numeric reads from previous versions only. Rejected
+      // locations and requests that may already have committed stay for review.
+      for(const row of this.rows.filter(awaitsLocation)){
         const updated={...row,location:code,visitId:candidate.visitId,locationVerified:false};
         if(!this.saveRow(updated))throw Error(this.storageError);
         Object.assign(row,updated);
@@ -306,22 +318,6 @@ export class ContinuousReceive {
     if(!this.saveSession())throw Error(this.storageError);
     this.changed();
     if(this.backend==='ready')void this.activateCandidate();
-  }
-  get canApproveWithoutLocation() {
-    return this.owned&&!this.disposed&&!this.storageError&&!this.state.endedAt&&!this.state.pendingSwitch;
-  }
-  approveWithoutLocation(){
-    // Authorizing an already journaled scan is LOCAL. Do not block the
-    // decision merely because Supabase is refreshing its session.
-    if(!this.canApproveWithoutLocation)throw Error('La recepción no está preparada para guardar sin ubicación.');
-    const rows=this.rows.filter(r=>r.kind==='receive'&&!r.location&&!r.unlocatedApproved&&r.status==='queued');
-    if(!rows.length)throw Error('No hay lecturas esperando ubicación.');
-    for(const row of rows){
-      const updated={...row,unlocatedApproved:true};
-      if(!this.saveRow(updated))throw Error(this.storageError);
-      Object.assign(row,updated);
-    }
-    this.changed();this.schedule(0);return rows.length;
   }
   cancelPending(id) {
     if(!this.owned||this.disposed||this.storageError||this.state.endedAt)throw Error('Recepción no disponible.');
@@ -339,12 +335,6 @@ export class ContinuousReceive {
     for(const row of rows)this.cancelPending(row.id);
     return rows.length;
   }
-  confirmSwitch(accept) {
-    const request = this.state.pendingSwitch; if (!request) return;
-    this.state.pendingSwitch = null;
-    if (accept) this.setCandidate(request.code);
-    else { this.saveSession(); this.changed(); }
-  }
   async activateCandidate() {
     if(this.selecting||!this.online()||this.backend!=='ready')return;
     const target=this.state.pendingLabels?.[0]||this.state.candidate;
@@ -352,7 +342,7 @@ export class ContinuousReceive {
     this.selecting=true;this.changed();
     try{
       const location=await withNetworkDeadline(()=>this.api.activate(target.code),'Validación del marbete');
-      if(!location?.codigo||canonical(location.codigo)!==canonical(target.code)||
+      if(!location?.codigo||locationKey(location.codigo)!==locationKey(target.code)||
         location.departamento_id!==this.deptId||location.activo!==true)
         throw Object.assign(Error('El servidor no confirmó el marbete.'),{code:'P0001'});
       // Bind only rows of the validated visit. A newer label can already be active.
@@ -362,15 +352,17 @@ export class ContinuousReceive {
         Object.assign(row,updated);
       }
       this.state.pendingLabels=(this.state.pendingLabels||[]).filter(item=>item.visitId!==target.visitId);
-      this.state.active={...target,code:location.codigo};
-      if(this.state.candidate?.visitId===target.visitId)this.state.candidate=null;
+      if(this.state.candidate?.visitId===target.visitId){
+        this.state.active={...target,code:location.codigo};
+        this.state.candidate=null;
+      }
       this.error='';this.saveSession();
     }catch(error){
       this.error='Marbete pendiente de validar: '+message(error);
-      if(permanent(error)){
+      if(permanent(error)||['NOT_REGISTERED','WRONG_DEPARTMENT','INACTIVE'].includes(error?.code)){
         for(const row of this.rows.filter(row=>row.visitId===target.visitId&&!row.payload&&row.status!=='cancelled')){
-          const updated={...row,location:null,visitId:null,locationVerified:false,locationRejected:true,
-            unlocatedApproved:false,status:'queued',error:'Marbete rechazado. Esta pieza sigue pendiente.'};
+          const updated={...row,locationVerified:false,locationRejected:true,status:'queued',
+            error:'Marbete rechazado. Cancela esta lectura y vuelve a escanear la pieza en su marbete válido.'};
           if(!this.saveRow(updated))break;
           Object.assign(row,updated);
         }
@@ -400,8 +392,7 @@ export class ContinuousReceive {
     finally {
       this.job=null;this.changed();
       await this.compactJournal();
-      const actionable=this.rows.filter(r=>['queued','uncertain'].includes(r.status)&&
-        (r.location||r.unlocatedApproved)&&r.locationVerified!==false);
+      const actionable=this.rows.filter(awaitingSend);
       if(actionable.length&&!this.disposed){
         const retry=Math.min(...actionable.map(r=>Math.max(0,(r.retryAt||0)-this.now())));
         this.schedule(Math.max(1000,Math.min(30000,retry||1000)));
@@ -434,19 +425,24 @@ export class ContinuousReceive {
       if(this.state.pendingLabels?.length||this.state.candidate||this.selecting)return;
     }
     while (!this.disposed && !this.storageError && this.backend === 'ready' && this.online()) {
-      // A SKU without a marbete is staged locally, without catalog writes or
-      // stock changes, until the operator explicitly approves 'sin marbete'.
-      const candidates = this.rows.filter(row => ['queued','uncertain'].includes(row.status) &&
-        (row.location||row.unlocatedApproved) && row.locationVerified!==false &&
+      const candidates = this.rows.filter(row => awaitingSend(row) &&
         (!row.retryAt||row.retryAt<=this.now()) &&
         row.visitId!==this.state.candidate?.visitId).slice(0,75);
       if (!candidates.length) break;
       const unresolved = candidates.filter(row => !row.payload && !row.product && row.kind === 'receive');
       try {
         const codes = [...new Set(unresolved.map(row => row.code))].filter(code => !this.cache.has(code));
-        if (codes.length) for (const [code,result] of await withNetworkDeadline(()=>this.api.lookup(codes),'Consulta de catálogo')) if (result.product) this.cache.set(code,result.product);
+        const results = codes.length ? await withNetworkDeadline(()=>this.api.lookup(codes),'Consulta de catálogo') : new Map();
+        for (const [code,result] of results) if (result.product) this.cache.set(code,result.product);
         const issues=new Map();
         for(const code of new Set(unresolved.filter(r=>!this.cache.has(r.code)).map(r=>r.code))){
+          const issue=results.get(code)?.error;
+          const ambiguous=/ambiguo/i.test(issue||'');
+          if(ambiguous || !/^\d{9,10}$/.test(code)){
+            const reason=ambiguous?'Código ambiguo.':'Código sin coincidencia en el catálogo.';
+            issues.set(code,reason+' Cancela esta lectura antes de volver a escanear el SKU de la pieza.');
+            continue;
+          }
           try{
             if(!this.api.ensureProduct)throw Error('El servidor no admite alta automática de artículos.');
             const product=await withNetworkDeadline(()=>this.api.ensureProduct(code),'Alta de SKU');
@@ -468,10 +464,7 @@ export class ContinuousReceive {
       } catch (error) { this.backend = 'offline'; this.error = 'Lecturas protegidas; catálogo pendiente: ' + message(error); break; }
       // Four requests can be in flight; each transaction locks its product on
       // the server. Input capture remains independent of network latency.
-      const ready=candidates.filter(row=>row.product&&(row.location||row.unlocatedApproved)&&
-        row.locationVerified!==false&&row.status!=='failed'&&row.visitId!==this.state.candidate?.visitId);
-      // SKU-first readings can sit in local staging indefinitely. Do not spin
-      // while there is no server movement ready to commit.
+      const ready=candidates.filter(row=>row.product&&awaitingSend(row)&&row.visitId!==this.state.candidate?.visitId);
       if(!ready.length)break;
       for (let offset = 0; offset < ready.length; offset += 4) {
         if (this.disposed || this.storageError || this.backend !== 'ready' || !this.online()) break;
@@ -481,6 +474,7 @@ export class ContinuousReceive {
     }
   }
   async send(row) {
+    if(!awaitingSend(row))return;
     // El servidor guarda p_operador en la nota del movimiento existente. Añadir
     // una marca no destructiva permite ver el origen desde otros dispositivos
     // sin cambiar firma RPC ni volver a enviar una lectura incierta.
@@ -494,7 +488,7 @@ export class ContinuousReceive {
     // Persist transport choice before sending. If the migration is installed
     // mid-session, old uncertain writes must only be RECONCILED, never sent
     // through the new RPC as fresh inventory.
-    row.writeMode ||= (!row.location||this.compatibility) ? 'legacy' : 'modern';
+    row.writeMode ||= (this.compatibility||!standardMarbete.test(row.location)) ? 'legacy' : 'modern';
     row.status = 'sending'; row.attempts++;
     if (!this.saveRow(row)) return;
     this.changed();
@@ -537,6 +531,7 @@ export class ContinuousReceive {
     const reversed = new Set(this.rows.filter(row => row.kind === 'undo' && row.status !== 'failed').map(row => row.reverses));
     const original = [...this.rows].reverse().find(row => row.kind === 'receive' && row.location && row.status === 'confirmed' && !reversed.has(row.id));
     if (!original) throw Error('No hay una entrada confirmada que se pueda deshacer.');
+    if(original.writeMode==='legacy')throw Error('Esta entrada requiere revisión en el historial para deshacerla.');
     const row = {id:this.makeId(),sessionId:this.state.id,sequence:++this.nextSequence,kind:'undo',
       code:original.code,quantity:1,location:original.location,visitId:original.visitId,reverses:original.id,
       capturedAt:new Date(this.now()).toISOString(),status:'queued',attempts:0,error:'',product:structuredClone(original.product),payload:null};
@@ -565,15 +560,16 @@ export class ContinuousReceive {
     return this.rows.filter(row=>!['confirmed','failed','cancelled'].includes(row.status))
       .map(row=>({id:row.id,sequence:row.sequence,code:row.code,sku:row.product?.sku||row.code,
         descripcion:row.product?.descripcion||'',marbete:row.location||null,
-        status:row.status,error:row.error||'',capturedAt:row.capturedAt,attempts:row.attempts,
+        status:row.status,error:row.error||(row.kind==='receive'&&!numericCode(row.code)
+          ? 'Lectura anterior con formato de marbete. Revisa su folio antes de continuar.' : ''),capturedAt:row.capturedAt,attempts:row.attempts,
         captureMethod:row.captureMethod||'unknown',operator:row.operator||this.actor,
-        canSync:Boolean(row.location||row.unlocatedApproved)}));
+        canSync:canSend(row)}));
   }
   finish() {
     if(this.state.pendingLabels?.length||this.state.candidate||this.selecting)
       throw Error('Hay marbetes pendientes de validación. Espera la confirmación del servidor.');
-    if (this.rows.some(row=>row.kind==='receive'&&!row.location&&!row.unlocatedApproved&&row.status==='queued'))
-      throw Error('Hay piezas sin ubicación. Escanea su marbete o elige registrar sin ubicación antes de finalizar.');
+    if (this.rows.some(row=>row.kind==='receive'&&row.status==='queued'&&(!row.location||row.locationRejected||!numericCode(row.code))))
+      throw Error('Hay lecturas sin ubicación válida. Revisa los pendientes antes de finalizar.');
     this.state.endedAt = new Date(this.now()).toISOString(); this.saveSession(); this.changed();
     return this.report(); // Never dispatch inventory from finalization.
   }
@@ -588,7 +584,7 @@ export class ContinuousReceive {
     let confirmed = 0, failed = 0, pendingCount = 0, net = 0, visit = 0, awaitingLocation=0;
     for (const row of this.rows) {
       if(row.status==='cancelled')continue;
-      if(row.kind==='receive'&&!row.location&&!row.unlocatedApproved&&!['confirmed','cancelled'].includes(row.status))awaitingLocation++;
+      if(awaitsLocation(row))awaitingLocation++;
       const value = locations.get(row.location) || {marbete:row.location,pieces:0,confirmed:0,pending:0,failed:0};
       if (row.status === 'confirmed') {
         const delta = row.kind === 'undo' ? -1 : 1;

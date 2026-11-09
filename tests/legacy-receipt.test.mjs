@@ -6,7 +6,7 @@ import {SupabaseReceiptApi} from '../continuous-receive.mjs';
 function server({modern=false,lost=false}={}){
   const db={
     departments:[{id:'dept1',activo:true}],
-    products:[{id:'item1',sku:'SKU-001',departamento_id:'dept1',activo:true,stock:10}],
+    products:[{id:'item1',sku:'0012345678',departamento_id:'dept1',activo:true,stock:10}],
     labels:[{codigo:'ZAP-402-001',departamento_id:'dept1',activo:true,zona:'BODEGA'}],
     assignments:[],movements:[],writes:0
   };
@@ -63,7 +63,7 @@ const payload=Object.freeze({p_id:'00000000-0000-4000-8000-000000000111',
   p_sesion:'00000000-0000-4000-8000-000000000222',p_departamento:'dept1',
   p_producto:'item1',p_marbete:'ZAP-402-001',p_operador:'Empleado 123',
   p_leida_en:'2026-10-19T19:00:00.000Z',p_reversa:null});
-const opts={allowWrite:true,sku:'SKU-001',userId:'user1'};
+const opts={allowWrite:true,sku:'0012345678',userId:'user1'};
 
 test('legacy capability is distinctly non-atomic and never lies about idempotency',async()=>{
   const {sb,db}=server();const api=new SupabaseReceiptApi(sb,'dept1');
@@ -78,6 +78,28 @@ test('new migration remains preferred when it is installed',async()=>{
   const {sb}=server({modern:true});const api=new SupabaseReceiptApi(sb,'dept1');
   assert.deepEqual(await api.capabilities(),{version:1,atomic:true,idempotent:true});
   assert.equal(api.mode,'modern');
+});
+
+test('registered custom marbete QR uses its exact catalog code without the ZAP RPC',async t=>{
+  const {ContinuousReceive}=await import('../continuous-receive.mjs');
+  const {durableMemory,receiptLocks}=await import('./helpers/receiving-db.mjs');
+  const {sb,db}=server({modern:true});
+  const code='BodegaA1';
+  db.labels.push({codigo:code,departamento_id:'dept1',activo:true,zona:'BODEGA'});
+  const api=new SupabaseReceiptApi(sb,'dept1');
+  api.lookup=async codes=>new Map(codes.map(code=>[code,{product:db.products[0]}]));
+  const queue=new ContinuousReceive({api,storage:durableMemory(),locks:receiptLocks(),
+    userId:'user1',deptId:'dept1',actor:'Empleado 123'});
+  t.after(()=>queue.dispose());
+  await queue.start();
+  assert.equal(queue.scan(JSON.stringify({marbete:code})).type,'location');
+  queue.scan('0012345678');
+  for(let attempts=0;attempts<1000&&queue.selecting;attempts++)await new Promise(resolve=>setTimeout(resolve,1));
+  await queue.flush();
+  assert.equal(queue.report().totalPieces,1);
+  assert.equal(db.movements[0].marbete_codigo,code);
+  assert.equal(db.labels.length,2);
+  assert.throws(()=>queue.undoLast(),/historial/);
 });
 
 test('legacy first send increments one unit and a retry only reads its receipt',async()=>{
@@ -106,7 +128,7 @@ test('an uncertain request is never blindly resent and cannot invent a receipt',
 
 test('conflicting movement identifiers and automated undo fail closed',async()=>{
   const {sb,db}=server();const api=new LegacyReceiptApi(sb,'dept1');
-  db.movements.push({id:payload.p_id,tipo:'SALIDA',sku:'SKU-001',cantidad:1,
+  db.movements.push({id:payload.p_id,tipo:'SALIDA',sku:'0012345678',cantidad:1,
     departamento_id:'dept1',marbete_codigo:'ZAP-402-001',
     stock_resultante:9,user_id:'user1',created_at:new Date().toISOString()});
   await assert.rejects(()=>api.receive(payload,opts),/no coincide/);
@@ -128,15 +150,21 @@ test('continuous queue records a stream of independent legacy receipts without c
   t.after(()=>queue.dispose());
   await queue.start();
   assert.equal(queue.compatibility,true);
-  queue.scan('402-001');
+  db.labels.push({codigo:'405-085',departamento_id:'dept1',activo:true,zona:'BODEGA'});
+  queue.scan("ZAP'402'001");
   for(let attempts=0;attempts<1000&&!queue.state.active;attempts++)await new Promise(resolve=>setTimeout(resolve,1));
   assert.equal(queue.state.active?.code,'ZAP-402-001');
-  for(let i=0;i<100;i++)queue.scan('SKU-001');
+  for(let i=0;i<50;i++)queue.scan('0012345678');
+  queue.scan("ZAP'405'085");
+  for(let i=0;i<50;i++)queue.scan('0012345678');
+  for(let attempts=0;attempts<1000&&queue.selecting;attempts++)await new Promise(resolve=>setTimeout(resolve,1));
+  assert.equal(queue.state.active?.code,'405-085');
   await queue.flush();
   assert.equal(queue.report().totalPieces,100);
   assert.equal(queue.report().pending,0);
   assert.equal(db.products[0].stock,110);
-  assert.equal(db.assignments[0].cantidad,100);
+  assert.deepEqual(db.assignments.map(row=>[row.marbete_codigo,row.cantidad]),[['ZAP-402-001',50],['405-085',50]]);
+  assert.equal(db.labels.length,2);
   assert.equal(db.movements.length,100);
   assert.equal(new Set(db.movements.map(x=>x.id)).size,100);
   assert.ok(queue.rows.every(x=>x.writeMode==='legacy'&&x.status==='confirmed'));
