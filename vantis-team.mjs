@@ -1,4 +1,4 @@
-import {TeamInventoryApi,openTeamSession,teamConfigured,TEAM_DEPARTMENT} from './vantis-team-api.mjs';
+import {TeamInventoryApi,openTeamSession,setupTeamAdmin,teamConfigured,TEAM_DEPARTMENT} from './vantis-team-api.mjs';
 import {ContinuousReceive} from './continuous-receive.mjs?v=5.13.0';
 import {mountContinuousReceive} from './continuous-receive-ui.mjs?v=5.13.0';
 import {startScanner,stopScanner} from './scanner.js?v=5.13.0';
@@ -127,6 +127,19 @@ $('teamLogin').addEventListener('submit',event=>{
     $('teamLoginError').textContent=error.message;
     $('teamLoginError').hidden=false;
   }).finally(()=>{button.disabled=false;$('teamPin').value='';});
+});
+$('teamSetupForm').addEventListener('submit',event=>{
+  event.preventDefault();
+  const form=event.currentTarget;
+  const b=Object.fromEntries(new FormData(form));
+  const node=$('teamSetupStatus');
+  node.textContent='Configurando primera cuenta…';
+  const button=form.querySelector('button');button.disabled=true;
+  void setupTeamAdmin(b).then(()=>{
+    node.textContent='Cuenta creada. Ingresa con tu número y PIN.';
+    $('teamEmployee').value=b.employee;form.reset();
+  }).catch(error=>node.textContent=error.message)
+    .finally(()=>button.disabled=false);
 });
 $('teamLogout').addEventListener('click',()=>{
   if(queue?.pending){
