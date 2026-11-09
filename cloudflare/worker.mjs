@@ -147,10 +147,11 @@ async function saveReceipt(env,person,input,origin=null){
         label,DEPT,sku,DEPT,kind,reversal,session,person.employee,sku,label,reversal,sku,sku,label),
     env.DB.prepare('UPDATE products SET stock=stock+? WHERE code=? AND changes()>0 AND stock+?>=0')
       .bind(delta,sku,delta),
-    env.DB.prepare(`INSERT INTO assignments(sku,label,quantity)
-      SELECT ?,?,? WHERE changes()>0
-      ON CONFLICT(sku,label) DO UPDATE SET quantity=assignments.quantity+excluded.quantity`)
-      .bind(sku,label,delta),
+    (reversal
+      ?env.DB.prepare('UPDATE assignments SET quantity=quantity-1 WHERE sku=? AND label=? AND quantity>0 AND changes()>0').bind(sku,label)
+      :env.DB.prepare(`INSERT INTO assignments(sku,label,quantity)
+          SELECT ?,?,1 WHERE changes()>0
+          ON CONFLICT(sku,label) DO UPDATE SET quantity=assignments.quantity+1`).bind(sku,label)),
     env.DB.prepare(`UPDATE receipts SET
       stock_after=(SELECT stock FROM products WHERE code=?),
       location_after=(SELECT quantity FROM assignments WHERE sku=? AND label=?)
