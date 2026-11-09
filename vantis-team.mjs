@@ -3,12 +3,13 @@ import {ContinuousReceive} from './continuous-receive.mjs?v=5.13.0';
 import {mountContinuousReceive} from './continuous-receive-ui.mjs?v=5.13.0';
 import {startScanner,stopScanner} from './scanner.js?v=5.13.0';
 import {LocalInventoryApi} from './vantis-github-local-db.mjs?v=5.13.0';
+import {mountOutbound} from './vantis-outbound.mjs?v=5.16.0';
 
 const $=id=>document.getElementById(id);
 const SESSION_KEY='vantis.team.session.v1';
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
 const num=value=>Number(value||0).toLocaleString('es-MX');
-let session=null,api=null,queue=null,unmount=null,refreshTimer=null,searchTimer=null;
+let session=null,api=null,queue=null,unmount=null,unmountOutbound=null,refreshTimer=null,searchTimer=null,activeMode='receive';
 const alertGlobal=message=>{
   const node=$('teamGlobalError');node.textContent=message;node.hidden=!message;
 };
@@ -20,7 +21,7 @@ function getSession(){
 function clearSession(){
   try{sessionStorage.removeItem(SESSION_KEY);}catch{} session=null;
   clearInterval(refreshTimer);refreshTimer=null;
-  unmount?.();unmount=null;queue=null;api=null;
+  unmount?.();unmount=null;unmountOutbound?.();unmountOutbound=null;queue=null;api=null;
   $('teamApp').hidden=true;
   $('teamLoginSection').hidden=false;
   $('teamPin').value='';
@@ -153,24 +154,67 @@ async function mount(v){
   if(profile.role!=='viewer'){
     try{await navigator.storage?.persist?.();}catch{}
     const evidence=new LocalInventoryApi();
-    queue=new ContinuousReceive({
-      api,storage:localStorage,userId:v.employee,deptId:TEAM_DEPARTMENT,
-      actor:'Empleado '+v.employee,online:()=>navigator.onLine!==false
-    });
-    unmount=mountContinuousReceive($('teamReceiveRoot'),queue,{
-      startScanner,stopScanner,
-      onLegacy:()=>alertGlobal('Usa el lector continuo; las recepciones por lote no están activadas en esta edición.'),
-      onEvidence:(id,code,frame)=>{
-        Promise.resolve(frame).then(blob=>blob?evidence.saveEvidence(id,blob):false)
-          .then(saved=>queue?.markEvidence(id,saved?'local':'failed'))
-          .catch(()=>queue?.markEvidence(id,'failed'));
-      }
-    });
-    const notify=queue.onConfirmed;
-    queue.onConfirmed=row=>{
-      notify(row);
-      if(queue.report().confirmed%20===0){void refreshSummary().catch(reportError);void refreshHistory().catch(reportError);}
+    const receive=()=>{
+      queue=new ContinuousReceive({
+        api,storage:localStorage,userId:v.employee,deptId:TEAM_DEPARTMENT,
+        actor:'Empleado '+v.employee,online:()=>navigator.onLine!==false
+      });
+      unmount=mountContinuousReceive($('teamReceiveRoot'),queue,{
+        startScanner,stopScanner,
+        onLegacy:()=>alertGlobal('Usa el lector continuo; las recepciones por lote no están activadas en esta edición.'),
+        onEvidence:(id,code,frame)=>{
+          Promise.resolve(frame).then(blob=>blob?evidence.saveEvidence(id,blob):false)
+            .then(saved=>queue?.markEvidence(id,saved?'local':'failed'))
+            .catch(()=>queue?.markEvidence(id,'failed'));
+        }
+      });
+      const notify=queue.onConfirmed;
+      queue.onConfirmed=row=>{
+        notify(row);
+        if(queue.report().confirmed%20===0){void refreshSummary().catch(reportError);void refreshHistory().catch(reportError);}
+      };
     };
+    const outbound=()=>{
+      unmountOutbound=mountOutbound($('teamOutboundRoot'),api,{
+        employee:v.employee,startScanner,stopScanner,
+        onConfirmed:()=>{
+          void refreshSummary().catch(reportError);
+          void refreshHistory().catch(reportError);
+          if($('teamSearch').value.trim())void search().catch(reportError);
+        }
+      });
+    };
+    const switchMode=mode=>{
+      if(mode===activeMode)return;
+      if(mode==='outbound'&&queue?.pending){
+        alertGlobal('Espera a que las lecturas de recepción pendientes se confirmen antes de cambiar a salidas.');
+        return;
+      }
+      if(mode==='receive'&&unmountOutbound){
+        const saved=JSON.parse(localStorage.getItem('vantis.team.outbound.v1/'+v.employee)||'null');
+        if(saved?.queue?.some(x=>['queued','sending','uncertain'].includes(x.status))){
+          alertGlobal('Hay salidas sin confirmar. Reintenta antes de volver a recepción.');
+          return;
+        }
+      }
+      if(activeMode==='receive'){unmount?.();unmount=null;queue=null;}
+      else{unmountOutbound?.();unmountOutbound=null;}
+      activeMode=mode;
+      $('teamReceiveSection').hidden=mode!=='receive';
+      $('teamOutboundSection').hidden=mode!=='outbound';
+      $('teamModeReceive').classList.toggle('active',mode==='receive');
+      $('teamModeOutbound').classList.toggle('active',mode==='outbound');
+      alertGlobal('');
+      if(mode==='receive')receive();else outbound();
+    };
+    $('teamModeReceive').onclick=()=>switchMode('receive');
+    $('teamModeOutbound').onclick=()=>switchMode('outbound');
+    activeMode='receive';
+    $('teamReceiveSection').hidden=false;
+    $('teamOutboundSection').hidden=true;
+    $('teamModeReceive').classList.add('active');
+    $('teamModeOutbound').classList.remove('active');
+    receive();
   }
   // A slow or temporarily unavailable summary must not undo a valid mobile login.
   const updates=await Promise.allSettled([refreshSummary(),refreshHistory(),...(profile.role==='admin'?[refreshPeople()]:[])]);
@@ -243,6 +287,9 @@ $('teamLogout').addEventListener('click',()=>{
     alertGlobal('Hay '+queue.pending+' lecturas sin confirmar. No cierres sesión hasta que todas se guarden.');
     return;
   }
+  try{const saved=JSON.parse(localStorage.getItem('vantis.team.outbound.v1/'+session.employee)||'null');
+    if(saved?.queue?.some(x=>['queued','sending','uncertain'].includes(x.status))){alertGlobal('Hay salidas sin confirmar. Reintenta antes de cerrar sesión.');return;}
+  }catch{alertGlobal('No se pudo comprobar el respaldo de salidas.');return;}
   clearSession();
 });
 $('teamSearchForm').addEventListener('submit',event=>{event.preventDefault();void search().catch(reportError);});
