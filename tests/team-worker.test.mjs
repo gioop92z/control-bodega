@@ -127,3 +127,27 @@ test('stress: 10,000 independent reads across 100 marbetes; exact totals and loc
   assert.equal(target.data.items[0].stock,10000);
   assert.ok(target.data.items[0].ubicaciones.some(x=>x.marbete==='ZAP-402-010'));
 });
+
+test('admin migration copies original scan UUIDs and retries cannot double stock',async()=>{
+  const code='123456789012',label='ZAP-459-777',session=crypto.randomUUID();
+  const first={p_id:crypto.randomUUID(),p_sesion:session,
+    p_departamento:'ZAPATERIA INFANTIL',p_producto:code,p_marbete:label,
+    p_operador:'Empleado 16647313',p_leida_en:new Date().toISOString(),p_reversa:null};
+  const undo={...first,p_id:crypto.randomUUID(),p_reversa:first.p_id};
+  const items=[first,undo].map(p=>({payload:p,receipt:{id:p.p_id}}));
+  let r=await send('/api/import',{items},viewer);
+  assert.equal(r.status,403,'a viewer cannot import inventory');
+  r=await send('/api/import',{items},admin);
+  assert.equal(r.status,200,JSON.stringify(r.data));
+  assert.equal(r.data.imported,2);
+  r=await send('/api/import',{items},admin);
+  assert.equal(r.status,200);
+  assert.equal(r.data.imported,0);
+  assert.equal(r.data.repeated,2);
+  const query=await api('/api/search?q='+code,{token:viewer});
+  assert.equal(query.data.items[0].stock,0);
+  assert.equal(env.DB.direct.prepare('SELECT count(*) AS c FROM receipts WHERE id IN (?,?)')
+    .get(first.p_id,undo.p_id).c,2);
+  assert.equal(env.DB.direct.prepare('SELECT count(*) AS c FROM receipts WHERE operator_label=?')
+    .get(first.p_operador).c,2,'original operator retained for audit');
+});
