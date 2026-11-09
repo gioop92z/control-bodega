@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#e5007d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="description" content="VANTIS Local · Inventario de zapatería sin Supabase, con guardado en el dispositivo.">
+  <title>VANTIS · Inventario Local en GitHub</title>
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./continuous-receive.css?v=5.13.0">
+  <link rel="stylesheet" href="./floating-receive.css?v=5.13.0">
+  <link rel="stylesheet" href="./scanner-pro.css?v=5.13.0">
+  <link rel="stylesheet" href="./vantis-github-local.css?v=5.13.0">
+</head>
+<body>
+  <header class="vantis-local-top">
+    <div class="vantis-local-mark">V</div>
+    <div><strong>VANTIS</strong><small>Zapatería infantil · edición local 5.13.0</small></div>
+    <span class="vantis-local-tag">GitHub · sin Supabase</span>
+  </header>
+  <main id="vantisLocalApp">
+    <section class="vantis-local-welcome" id="localWelcome">
+      <h1>Recepción directa de mercancía</h1>
+      <p>Escanea el marbete y enseguida todos los SKU o UPC. Se guardan automáticamente en el inventario de <strong>este dispositivo</strong>.</p>
+      <form id="localLogin">
+        <label for="localEmployee">Número de empleado</label>
+        <input id="localEmployee" type="text" inputmode="numeric" pattern="[0-9]{4,12}" maxlength="12" autocomplete="off" placeholder="Ej. 16647310" required>
+        <button class="vantis-local-primary" type="submit">Empezar a escanear</button>
+      </form>
+      <p class="vantis-local-warning"><strong>Importante:</strong> GitHub Pages publica la aplicación, pero no guarda sus datos. El inventario es exclusivo de este navegador; no hay sincronización con otros celulares. No borres los datos de Safari. Descarga respaldos frecuentemente.</p>
+      <p id="localWelcomeError" class="vantis-local-error" role="alert" hidden></p>
+    </section>
+    <section id="localWorkspace" hidden>
+      <div class="vantis-local-banner"><strong>Guardado en este iPhone / dispositivo</strong><span>Sin servidor ni cuenta Supabase. Cada lectura debe mostrar «Guardado» antes de considerarse confirmada.</span></div>
+      <div class="vantis-local-actions">
+        <button id="localJson" type="button" class="vantis-local-primary">Respaldar inventario JSON</button>
+        <button id="localCsv" type="button">Exportar inventario CSV</button>
+        <label class="vantis-local-import" for="localImport">Restaurar respaldo (base vacía)</label>
+        <input id="localImport" type="file" accept=".json,application/json" hidden>
+        <button id="localExit" type="button">Cambiar empleado</button>
+      </div>
+      <p id="localBackupStatus" role="status" class="vantis-local-backup-status">Respaldos manuales recomendados cada 500 piezas.</p>
+      <div class="vantis-local-totals" id="localTotals">Consultando inventario local…</div>
+      <section id="localReceiveRoot" class="cr-standalone" aria-label="Escaneo VANTIS Local"></section>
+      <p class="vantis-local-bottom">El respaldo JSON incluye productos, ubicaciones y todos los movimientos confirmados; las fotos capturadas con cámara permanecen en IndexedDB y no se incluyen en el archivo JSON. Nunca uses navegación privada para inventarios de producción.</p>
+    </section>
+  </main>
+  <script type="module" src="./vantis-github-local.mjs?v=5.13.0"></script>
+</body>
+</html>
