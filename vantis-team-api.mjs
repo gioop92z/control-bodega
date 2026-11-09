@@ -4,7 +4,7 @@ export const TEAM_DEPARTMENT='ZAPATERIA INFANTIL';
 const BASE=String(TEAM_API_URL||'').trim().replace(/\/+$/,'');
 const PUBLIC_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVwaG56eWVtYnlyb3V2cW9od3lzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI2NjE5NzIsImV4cCI6MjEwODIzNzk3Mn0.UawCQzEB2ITHSLsq33Je1ChFQf25zKH0xwQic9yXn8U';
 const gatewayHeaders=()=>({'apikey':PUBLIC_ANON_KEY,'authorization':'Bearer '+PUBLIC_ANON_KEY});
-export const teamConfigured=()=>/^https:\/\/[a-z0-9.-]+(?::443)?$/i.test(BASE);
+export const teamConfigured=()=>{try{const u=new URL(BASE);return u.protocol==='https:'&&u.hostname==='uphnzyembyrouvqohwys.supabase.co'&&u.pathname==='/functions/v1/vantis-team'&&!u.username&&!u.password&&!u.search&&!u.hash;}catch{return false;}};
 export class TeamInventoryApi {
   constructor(token,onUnauthorized=()=>{}) {
     if(!teamConfigured())throw Error('No se configuró el servidor compartido de VANTIS.');
