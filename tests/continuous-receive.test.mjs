@@ -383,3 +383,47 @@ test('cancelled entries survive journal recovery and are not restored as pending
   assert.equal(second.queue.rows[0].status,'cancelled');
   assert.equal(second.queue.pendingDetails().length,0);
 });
+
+test('RLS 42501 on a new marbete preserves the real scan, blocks new input and safely resumes after authorization',async t=>{
+  const shared=receivingDb(),storage=durableMemory(),locks=receiptLocks();
+  const api=shared.api('user1'),originalActivate=api.activate.bind(api);
+  let authorized=false;
+  api.activate=code=>authorized?originalActivate(code):Promise.reject(Object.assign(
+    Error('new row violates row-level security policy for table "marbetes"'),{code:'42501'}));
+  const settings={api,storage,locks,userId:'user1',deptId:'dept1',actor:'Empleado 16647310'};
+  const first=new ContinuousReceive(settings);
+  t.after(()=>first.dispose());
+  await first.start();
+  assert.equal(first.scan("ZAP'405'085").type,'location');
+  const read=first.scan('1200768635');
+  assert.equal(read.type,'piece');
+  await until(()=>first.backend==='denied');
+  assert.equal(first.canScan,false);
+  assert.match(first.error,/permiso|bloqueó/i);
+  assert.equal(first.state.candidate.code,'ZAP-405-085');
+  assert.equal(first.rows[0].id,read.id);
+  assert.equal(first.rows[0].location,'ZAP-405-085');
+  assert.equal(first.rows[0].status,'queued');
+  assert.equal(first.rows[0].locationRejected,undefined);
+  assert.equal(first.report().totalPieces,0);
+  assert.equal(shared.db.movements.length,0);
+  assert.throws(()=>first.scan('1200768635'));
+  await first.dispose();
+
+  authorized=true;
+  const restored=new ContinuousReceive(settings);
+  t.after(()=>restored.dispose());
+  await restored.start();
+  await restored.flush();
+  await until(()=>restored.report().totalPieces===1);
+  assert.equal(restored.rows[0].id,read.id,'the same durable event ID must be reused');
+  assert.equal(restored.rows[0].location,'ZAP-405-085');
+  assert.equal(restored.rows[0].status,'confirmed');
+  assert.equal(restored.report().pending,0);
+  assert.equal(shared.db.movements.length,1);
+  assert.equal(shared.db.movements[0].marbete_codigo,'ZAP-405-085');
+  assert.equal(shared.db.movements[0].sku,'1200768635');
+  assert.equal(shared.db.products.find(x=>x.sku==='1200768635').stock,1);
+  await restored.reconnect();
+  assert.equal(shared.db.movements.length,1,'reconnect must never double count');
+});
