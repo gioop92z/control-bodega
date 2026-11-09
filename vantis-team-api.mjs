@@ -4,7 +4,7 @@ export const TEAM_DEPARTMENT='ZAPATERIA INFANTIL';
 const BASE=String(TEAM_API_URL||'').trim().replace(/\/+$/,'');
 const PUBLIC_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVwaG56eWVtYnlyb3V2cW9od3lzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI2NjE5NzIsImV4cCI6MjEwODIzNzk3Mn0.UawCQzEB2ITHSLsq33Je1ChFQf25zKH0xwQic9yXn8U';
 const gatewayHeaders=()=>({'apikey':PUBLIC_ANON_KEY,'authorization':'Bearer '+PUBLIC_ANON_KEY});
-export const teamConfigured=()=>{try{const u=new URL(BASE);return u.protocol==='https:'&&u.hostname==='uphnzyembyrouvqohwys.supabase.co'&&u.pathname==='/functions/v1/vantis-team'&&!u.username&&!u.password&&!u.search&&!u.hash;}catch{return false;}};
+export const teamConfigured=()=>{try{const u=new URL(BASE);return u.protocol==='https:'&&u.hostname==='uphnzyembyrouvqohwys.supabase.co'&&u.pathname==='/functions/v1/vantis-inventory'&&!u.username&&!u.password&&!u.search&&!u.hash;}catch{return false;}};
 export class TeamInventoryApi {
   constructor(token,onUnauthorized=()=>{}) {
     if(!teamConfigured())throw Error('No se configuró el servidor compartido de VANTIS.');
@@ -41,10 +41,10 @@ export class TeamInventoryApi {
   updatePerson(payload){return this.request('/api/people',{method:'PATCH',body:payload});}
   describe(payload){return this.request('/api/products/describe',{method:'PATCH',body:payload});}
 }
-export async function setupTeamAdmin({emailToken,employee,name,pin}){
+export async function setupTeamAdmin({key,employee,name,pin}){
   if(!teamConfigured())throw Error('Servidor compartido sin configurar.');
   const response=await fetch(BASE+'/api/bootstrap',{method:'POST',headers:{...gatewayHeaders(),'content-type':'application/json'},
-    body:JSON.stringify({emailToken,employee,name,pin})}).catch(()=>{throw Error('No se pudo conectar con el servidor.');});
+    body:JSON.stringify({key,employee,name,pin})}).catch(()=>{throw Error('No se pudo conectar con el servidor.');});
   const result=await response.json().catch(()=>({}));
   if(!response.ok)throw Error(result.error||'No se pudo activar la cuenta.');
   return result;
@@ -52,7 +52,7 @@ export async function setupTeamAdmin({emailToken,employee,name,pin}){
 export async function openTeamSession(employee,pin){
   if(!teamConfigured())throw Error('No se configuró el servidor compartido de VANTIS.');
   const response=await fetch(BASE+'/api/login',{method:'POST',cache:'no-store',
-    headers:{'content-type':'application/json'},
+    headers:{...gatewayHeaders(),'content-type':'application/json'},
     body:JSON.stringify({employee,pin})}).catch(()=>{throw Error('No se pudo conectar con el servidor de VANTIS.');});
   const result=await response.json().catch(()=>({}));
   if(!response.ok)throw Error(result.error||'No fue posible iniciar sesión.');
