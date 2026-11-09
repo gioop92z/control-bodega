@@ -29,6 +29,7 @@ jobs:
           node-version: '22'
       - name: Verificar sintaxis
         run: |
+          bash -n cloudflare/deploy.sh
           node --check cloudflare/worker.mjs
           node --check vantis-team-api.mjs
           node --check vantis-team.mjs
