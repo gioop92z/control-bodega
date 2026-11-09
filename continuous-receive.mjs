@@ -446,7 +446,7 @@ export class ContinuousReceive {
         for(const code of new Set(unresolved.filter(r=>!this.cache.has(r.code)).map(r=>r.code))){
           const issue=results.get(code)?.error;
           const ambiguous=/ambiguo/i.test(issue||'');
-          if(ambiguous || !/^\d{9,10}$/.test(code)){
+          if(ambiguous || !(this.api.acceptAnyNumericCode ? /^\d{6,20}$/.test(code) : /^\d{9,10}$/.test(code))){
             const reason=ambiguous?'Código ambiguo.':'Código sin coincidencia en el catálogo.';
             issues.set(code,reason+' Cancela esta lectura antes de volver a escanear el SKU de la pieza.');
             continue;
