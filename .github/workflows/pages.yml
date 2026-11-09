@@ -67,6 +67,8 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: ${{ runner.temp }}/vantis-pages
+      - name: Wait for Pages artifact visibility
+        run: sleep 15
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
