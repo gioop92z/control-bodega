@@ -1,4 +1,4 @@
-import {TeamInventoryApi,openTeamSession,setupTeamAdmin,teamConfigured,TEAM_DEPARTMENT} from './vantis-team-api.mjs?v=5.15.1';
+import {TeamInventoryApi,openTeamSession,setupTeamAdmin,teamConfigured,TEAM_DEPARTMENT} from './vantis-team-api.mjs?v=5.16.0';
 import {ContinuousReceive} from './continuous-receive.mjs?v=5.13.0';
 import {mountContinuousReceive} from './continuous-receive-ui.mjs?v=5.13.0';
 import {startScanner,stopScanner} from './scanner.js?v=5.13.0';
@@ -9,7 +9,7 @@ const $=id=>document.getElementById(id);
 const SESSION_KEY='vantis.team.session.v1';
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
 const num=value=>Number(value||0).toLocaleString('es-MX');
-let session=null,api=null,queue=null,unmount=null,unmountOutbound=null,refreshTimer=null,searchTimer=null,activeMode='receive';
+let session=null,api=null,queue=null,unmount=null,unmountOutbound=null,refreshTimer=null,searchTimer=null,outboundRefreshTimer=null,activeMode='receive';
 const alertGlobal=message=>{
   const node=$('teamGlobalError');node.textContent=message;node.hidden=!message;
 };
@@ -20,7 +20,7 @@ function getSession(){
 }
 function clearSession(){
   try{sessionStorage.removeItem(SESSION_KEY);}catch{} session=null;
-  clearInterval(refreshTimer);refreshTimer=null;
+  clearInterval(refreshTimer);refreshTimer=null;clearTimeout(outboundRefreshTimer);outboundRefreshTimer=null;
   unmount?.();unmount=null;unmountOutbound?.();unmountOutbound=null;queue=null;api=null;
   $('teamApp').hidden=true;
   $('teamLoginSection').hidden=false;
@@ -178,9 +178,13 @@ async function mount(v){
       unmountOutbound=mountOutbound($('teamOutboundRoot'),api,{
         employee:v.employee,startScanner,stopScanner,
         onConfirmed:()=>{
-          void refreshSummary().catch(reportError);
-          void refreshHistory().catch(reportError);
-          if($('teamSearch').value.trim())void search().catch(reportError);
+          // Avoid three network reads per piece during rapid bulk scanning.
+          if(!outboundRefreshTimer)outboundRefreshTimer=setTimeout(()=>{
+            outboundRefreshTimer=null;
+            void refreshSummary().catch(reportError);
+            void refreshHistory().catch(reportError);
+            if($('teamSearch').value.trim())void search().catch(reportError);
+          },1200);
         }
       });
     };
