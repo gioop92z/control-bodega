@@ -68,6 +68,16 @@
         <div id="teamReceiveRoot" class="cr-standalone"></div>
         <p class="team-note">Las fotos de cámara permanecen en el dispositivo que las capturó. Los movimientos y existencias sí son compartidos.</p>
       </section>
+      <section id="teamImportSection" class="team-panel" hidden>
+        <h2>Migrar inventario guardado en tu iPhone</h2>
+        <p>Solo para administradores. Copia las lecturas confirmadas de la edición local a la base compartida. El inventario local <strong>no se borra</strong> y los folios repetidos no se vuelven a sumar.</p>
+        <div class="team-import-actions">
+          <button id="teamImportLocal" type="button" class="vantis-local-primary">Importar desde este dispositivo</button>
+          <label class="team-import-file">Elegir respaldo JSON<input id="teamImportBackup" type="file" accept=".json,application/json" hidden></label>
+        </div>
+        <progress id="teamImportProgress" max="100" value="0" hidden></progress>
+        <p id="teamImportStatus" role="status" aria-live="polite" class="team-muted"></p>
+      </section>
       <section class="team-panel">
         <h2>Movimientos recientes</h2>
         <div id="teamHistory" class="team-history">Consultando movimientos…</div>
