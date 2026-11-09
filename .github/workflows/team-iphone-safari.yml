@@ -1,0 +1,42 @@
+name: VANTIS Equipo - prueba iPhone Safari y escritorio
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'team.html'
+      - 'vantis-team.mjs'
+      - 'vantis-team-api.mjs'
+      - 'team-config.mjs'
+      - 'tests/team-iphone-login.e2e.mjs'
+      - '.github/workflows/team-iphone-safari.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cross-device-login:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install Safari and Chromium browser engines
+        run: npx playwright install webkit chromium --with-deps
+      - name: Wait for the new version on the real GitHub Pages URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          ready=0
+          for i in $(seq 1 50); do
+            if curl -fsSL --retry 2 --retry-delay 2 -H 'Cache-Control: no-cache'               'https://gioop92z.github.io/control-bodega/team.html?v=5.15.1' | grep -q 'vantis-team.mjs?v=5.15.1'; then
+              ready=1
+              break
+            fi
+            sleep 6
+          done
+          test "$ready" = 1
+      - name: Confirm same account works in iPhone Safari and desktop
+        run: node tests/team-iphone-login.e2e.mjs
