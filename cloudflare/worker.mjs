@@ -115,7 +115,7 @@ function receiptReply(row){
     sku:row.sku,marbete_codigo:row.label,quantity:1,kind:row.kind,
     stock_resultante:row.stock_after,location_quantity:row.location_after,stored_at:row.stored_at};
 }
-async function saveReceipt(env,person,input,origin=null){
+async function saveReceipt(env,person,input){
   const id=clean(input.p_id),session=clean(input.p_sesion),sku=clean(input.p_producto);
   const label=normalizeLabel(input.p_marbete),reversal=clean(input.p_reversa)||null;
   if(!idOk(id)||!idOk(session)||!skuOk(sku)||input.p_departamento!==DEPT)
@@ -128,7 +128,7 @@ async function saveReceipt(env,person,input,origin=null){
     return receiptReply(prior);
   }
   const kind=reversal?'undo':'receive',delta=reversal?-1:1;
-  const operator=origin?clean(origin).slice(0,100):(person.name+' · '+person.employee).slice(0,100);
+  const operator=(person.name+' · '+person.employee).slice(0,100);
   // Each db.batch is one SQLite transaction, so simultaneous scanners cannot
   // increment the same receipt twice. changes() gates both stock updates.
   const statements=[
@@ -255,22 +255,6 @@ async function handler(req,env){
     const result=await env.DB.prepare('UPDATE products SET description=? WHERE code=?').bind(description,code).run();
     if(!result.meta.changes)throw fail(404,'SKU no encontrado.');
     return json({ok:true});
-  }
-  if(path==='/api/import'&&method==='POST'){
-    need(person,'admin');const b=await payload(req,10000);
-    if(!Array.isArray(b.items)||!b.items.length||b.items.length>5)throw fail(422,'Importa entre 1 y 5 movimientos por petición.','22023');
-    let imported=0;
-    for(const row of b.items){
-      const p=row?.payload;
-      if(!p||!idOk(clean(p.p_id))||clean(row.receipt?.id)!==clean(p.p_id))
-        throw fail(422,'Respaldo mal formado.','22023');
-      await activate(env,p.p_marbete);
-      await ensureProduct(env,p.p_producto);
-      const prev=await env.DB.prepare('SELECT id FROM receipts WHERE id=?').bind(p.p_id).first();
-      await saveReceipt(env,person,p,clean(p.p_operador));
-      if(!prev)imported++;
-    }
-    return json({imported,repeated:b.items.length-imported});
   }
   throw fail(404,'Ruta desconocida.','NOT_FOUND');
 }
