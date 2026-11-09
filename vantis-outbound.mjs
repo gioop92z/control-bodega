@@ -47,14 +47,15 @@ export function mountOutbound(root,api,{employee,startScanner,stopScanner,onConf
    if(!alive||navigator.onLine===false)break;
    if(!['queued','uncertain'].includes(row.status))continue;
    row.status='sending';if(!save()){row.status='uncertain';break}
+   const controller=new AbortController();const watchdog=setTimeout(()=>controller.abort(),18000);
    try{
-    const r=await api.request('/api/outbound',{method:'POST',body:{p_id:row.id,p_sesion:session,p_departamento:'ZAPATERIA INFANTIL',p_producto:row.sku,p_marbete:row.location}});
+    const r=await api.request('/api/outbound',{method:'POST',signal:controller.signal,body:{p_id:row.id,p_sesion:session,p_departamento:'ZAPATERIA INFANTIL',p_producto:row.sku,p_marbete:row.location}});
     if(r.id!==row.id||r.kind!=='dispatch')throw Error('Respuesta no verificable');
     row.status='confirmed';count++;error='';say('✓ SALIDA CONFIRMADA · −1 pieza · '+row.sku+' · '+row.location);onConfirmed(row);
    }catch(e){
     if([400,403,404,409,422].includes(Number(e.status))){row.status='rejected';say('✕ NO SE DESCONTÓ · '+row.sku+' · '+e.message)}
     else{row.status='uncertain';error='Conexión sin confirmar. Reintenta con el mismo folio para evitar descuentos duplicados.';say('Pendiente de verificar · '+row.sku);break}
-   }finally{save();render()}
+   }finally{clearTimeout(watchdog);save();render()}
   }}finally{busy=false;render()}
  }
  $('outForm').onsubmit=e=>{e.preventDefault();input.flush('manual')};
