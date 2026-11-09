@@ -253,6 +253,10 @@ export class ContinuousReceive {
         this.backend='denied';
         this.error='El servidor no autoriza esta operación en el departamento seleccionado.';
       }
+      else if(this.api.mode==='local'){
+        this.backend='denied';
+        this.error='Inventario local no disponible. No borres los datos del navegador: '+message(error);
+      }
       else { if (this.backend !== 'invalid') this.backend = [1,-1].includes(this.state.backendVersion) ? 'offline' : 'checking'; this.error = message(error); this.schedule(4000); }
     }
     this.changed();
@@ -361,6 +365,11 @@ export class ContinuousReceive {
       // Permission failures are configuration problems, not invalid labels.
       // Keep the active candidate and every locally journaled piece intact.
       // Never discard their location or claim that the server stored them.
+      if(this.api.mode==='local'&&String(error?.code)==='LOCAL_STORAGE_ERROR'){
+        this.backend='denied';
+        this.error='No se pudo guardar el marbete en este dispositivo. Conserva los datos y libera espacio antes de continuar.';
+        return;
+      }
       if(String(error?.code)==='42501'||/row.level.security|permission denied|violates.*policy/i.test(message(error))){
         this.backend='denied';
         this.error='El servidor bloqueó el guardado del marbete por permisos. Tus lecturas siguen en este dispositivo; no borres los datos de VANTIS. Un administrador debe restablecer el acceso a este departamento.';
@@ -469,7 +478,13 @@ export class ContinuousReceive {
             this.onFailure(row);
           }
         }
-      } catch (error) { this.backend = 'offline'; this.error = 'Lecturas protegidas; catálogo pendiente: ' + message(error); break; }
+      } catch (error) {
+        this.backend = this.api.mode==='local' ? 'denied' : 'offline';
+        this.error = this.api.mode==='local'
+          ? 'No se pudo leer el catálogo local. Detén el escaneo y conserva los datos: '+message(error)
+          : 'Lecturas protegidas; catálogo pendiente: '+message(error);
+        break;
+      }
       // Four requests can be in flight; each transaction locks its product on
       // the server. Input capture remains independent of network latency.
       const ready=candidates.filter(row=>row.product&&awaitingSend(row)&&row.visitId!==this.state.candidate?.visitId);
@@ -518,7 +533,13 @@ export class ContinuousReceive {
     } catch (error) {
       serverMetric(started,false);
       row.error = message(error);
-      if (permanent(error)) { row.status = 'failed'; this.onFailure(row); }
+      if(this.api.mode==='local'&&String(error?.code)==='LOCAL_STORAGE_ERROR'){
+        row.status='uncertain';
+        this.backend='denied';
+        this.error='Almacenamiento local bloqueado. Esta pieza conserva su folio y NO está confirmada: '+message(error);
+        this.onFailure(row);
+      }
+      else if (permanent(error)) { row.status = 'failed'; this.onFailure(row); }
       else {
         row.status = 'uncertain'; row.retryAt = this.now() + Math.min(30000,1000 * 2 ** Math.min(row.attempts-1,5));
         if (missing(error)) this.backend = 'missing';
