@@ -1,0 +1,79 @@
+/* VANTIS Equipo 5.17 · Interfaz independiente creada con Mobile Native,
+   Animation Performance, Break UI, Emil Design Engineering, Gestures y Remove Animations.
+   Únicamente CSS. No altera datos, autenticación ni motor de lectura. */
+body.vantis-team-next{--ink:#271e2d;--muted:#716477;--line:#e9dfe9;--pink:#c60072;color:var(--ink);background:#f7f5f9;min-height:100svh;-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent;overscroll-behavior-y:none}
+body.vantis-team-next :is(button,a,summary,[role="button"]){touch-action:manipulation}
+body.vantis-team-next :is(button,summary){-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+body.vantis-team-next :is(button,a,input,select,summary,textarea):focus-visible{outline:3px solid #b90071;outline-offset:3px}
+body.vantis-team-next .vantis-local-top{padding:calc(14px + env(safe-area-inset-top,0px)) max(16px,calc((100% - 1110px)/2)) 14px;background:#fff;border-bottom:1px solid var(--line);box-shadow:0 2px 12px #23102608;-webkit-backdrop-filter:none;backdrop-filter:none}
+body.vantis-team-next .vantis-local-mark{border-radius:15px;box-shadow:0 5px 14px #c6007218}
+body.vantis-team-next .vantis-local-top strong{letter-spacing:.17em;font-size:19px;font-weight:850}
+body.vantis-team-next .vantis-local-top small{font-size:11px;line-height:1.3}
+body.vantis-team-next .vantis-local-tag{color:#9e005f;background:#fcebf4;border:1px solid #f7d5e7;font-size:11px;line-height:1.3;border-radius:18px;padding:8px 11px;max-width:170px;overflow-wrap:anywhere}
+body.vantis-team-next .team-shell{width:min(calc(100% - 32px),1110px);margin:24px auto calc(55px + env(safe-area-inset-bottom,0px))}
+body.vantis-team-next .vantis-local-welcome{max-width:550px;margin:28px auto;border:1px solid var(--line);border-radius:26px;padding:clamp(23px,5vw,44px);box-shadow:0 8px 40px #2a172512;background:#fff}
+body.vantis-team-next #teamLoginSection h1{font-size:clamp(28px,5.2vw,42px);line-height:1.12;letter-spacing:-.035em;margin:0 0 17px;color:var(--ink)}
+body.vantis-team-next #teamLoginSection>p{color:var(--muted);line-height:1.55}
+body.vantis-team-next #teamLoginSection form input{box-sizing:border-box;width:100%;font-size:16px;min-height:54px;border:1px solid #d8c9d8;border-radius:15px;background:#fff}
+body.vantis-team-next #teamLoginSection form input:focus{border-color:var(--pink);box-shadow:0 0 0 3px #ea6bae22}
+body.vantis-team-next #teamLoginSection form button{min-height:52px;font-size:16px;border-radius:15px}
+body.vantis-team-next .team-setup summary{min-height:44px;padding-block:10px}
+body.vantis-team-next .team-bar{padding:13px 16px;border-radius:17px;background:#fff;border:1px solid var(--line);box-shadow:0 2px 10px #26172808}
+body.vantis-team-next .team-bar b{font-size:15px}
+body.vantis-team-next .team-bar button{min-height:44px;font-size:12px;font-weight:700;border:1px solid #e5d8e3;background:#fff}
+body.vantis-team-next .team-next-intro{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:28px 0 8px}
+body.vantis-team-next .team-next-eyebrow{font-size:10px;letter-spacing:.16em;font-weight:850;color:#b60068;display:block}
+body.vantis-team-next .team-next-intro h1{font-size:clamp(30px,5vw,43px);letter-spacing:-.04em;line-height:1.09;color:var(--ink);margin:9px 0}
+body.vantis-team-next .team-next-intro p{font-size:13px;line-height:1.5;margin:0;color:var(--muted)}
+body.vantis-team-next .team-next-cloud{display:inline-flex;align-items:center;gap:7px;color:#604361;background:#fff;border:1px solid var(--line);border-radius:100px;padding:9px 12px;white-space:nowrap;font-size:11px;font-weight:700;flex-shrink:0}
+body.vantis-team-next .team-next-cloud i{width:7px;height:7px;border-radius:50%;background:#be4f92;display:block}
+body.vantis-team-next .vantis-local-banner{background:linear-gradient(115deg,#342338,#4b2f45);color:#fff;border:0;border-radius:20px;padding:17px 19px;box-shadow:none}
+body.vantis-team-next .vantis-local-banner strong{color:#fff}
+body.vantis-team-next .vantis-local-banner span{color:#eee2ec;font-size:12px;line-height:1.55}
+body.vantis-team-next .team-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:17px 0 24px}
+body.vantis-team-next .team-stats>div{min-width:0;display:flex;flex-direction:column;gap:7px;padding:18px 19px;background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 3px 12px #28132305}
+body.vantis-team-next .team-stats b{font-size:clamp(25px,4vw,38px);line-height:1.07;font-variant-numeric:tabular-nums;letter-spacing:-.04em;color:#b40068;overflow-wrap:anywhere}
+body.vantis-team-next .team-stats span{color:var(--muted);font-size:12px;font-weight:650}
+body.vantis-team-next .team-next-actions{margin:20px 0 25px}
+body.vantis-team-next .team-next-actions-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:13px}
+body.vantis-team-next .team-next-actions-heading h2{margin:5px 0 0;font-size:clamp(20px,3.7vw,26px);letter-spacing:-.03em}
+body.vantis-team-next .team-next-actions-hint{font-size:11px;color:var(--muted)}
+body.vantis-team-next .team-next-action-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+body.vantis-team-next .team-next-action{min-width:0;min-height:90px;display:flex;align-items:center;gap:12px;padding:15px;text-align:left;cursor:pointer;background:#fff;border:1px solid var(--line);border-radius:19px;color:var(--ink);box-shadow:0 2px 8px #23122507;transition:border-color 130ms ease,background-color 130ms ease,transform 100ms ease}
+body.vantis-team-next .team-next-icon{display:grid;place-items:center;flex:0 0 43px;height:43px;border-radius:13px;background:#f8e9f2;color:#b60068}
+body.vantis-team-next .team-next-icon svg{width:23px;height:23px}
+body.vantis-team-next .team-next-copy{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
+body.vantis-team-next .team-next-copy strong{font-size:15px;letter-spacing:-.01em;overflow-wrap:anywhere}
+body.vantis-team-next .team-next-copy small{color:var(--muted);font-size:11px;line-height:1.35}
+body.vantis-team-next .team-next-action>b{color:#a790a7;font-size:23px;font-weight:350;flex:0 0 auto}
+body.vantis-team-next .team-next-receive{background:#3d263b;color:#fff;border-color:#3d263b}
+body.vantis-team-next .team-next-receive .team-next-icon{background:#ffffff1d;color:#fff}
+body.vantis-team-next .team-next-receive small{color:#e7d2e1}
+body.vantis-team-next .team-next-action[aria-pressed="true"]{border-color:#d06fa4;box-shadow:0 0 0 1px #dc91b8}
+body.vantis-team-next .team-next-action:active{transform:scale(.985)}
+body.vantis-team-next .team-panel{padding:clamp(17px,3vw,27px);border-radius:22px;border:1px solid var(--line);box-shadow:0 3px 16px #28132307;margin:17px 0;background:#fff}
+body.vantis-team-next .team-panel h2{font-size:clamp(21px,4vw,27px);letter-spacing:-.03em;color:var(--ink);line-height:1.2}
+body.vantis-team-next .team-panel p{color:var(--muted);font-size:13px}
+body.vantis-team-next .team-search input{min-height:51px;font-size:16px;border-radius:14px;background:#faf8fb}
+body.vantis-team-next .team-search button{min-height:51px;padding-inline:22px;background:var(--pink);border-color:var(--pink)}
+body.vantis-team-next .team-mode-switch{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;padding:5px;margin:22px 0 18px;background:#f0e9f0;border:1px solid var(--line);border-radius:17px}
+body.vantis-team-next .team-mode-switch button{min-width:0;min-height:49px;border:0;border-radius:12px;background:transparent;color:#6b5266;padding:10px 13px;font-size:14px;box-shadow:none;transition:background-color 120ms ease,color 120ms ease}
+body.vantis-team-next .team-mode-switch button.active{background:#fff;color:#a50062;box-shadow:0 2px 8px #311c290c}
+body.vantis-team-next .team-section-title{font-size:clamp(24px,4vw,30px);letter-spacing:-.035em;margin:24px 0 8px;color:var(--ink)}
+body.vantis-team-next :is(.team-history-row,.team-result,.team-locations span){min-width:0;overflow-wrap:anywhere}
+body.vantis-team-next .team-result{background:#fdfbfe;border-radius:16px}
+body.vantis-team-next .team-outbound{border:1px solid var(--line);border-radius:20px;box-shadow:0 2px 15px #2b1b2b08}
+body.vantis-team-next :is(#teamSearchPanel,#teamScanSection,#teamHistoryPanel){scroll-margin-top:calc(90px + env(safe-area-inset-top,0px))}
+body.vantis-team-next :is(button,.team-next-action):disabled{opacity:.55;cursor:not-allowed}
+body.vantis-team-next #scanner.scanner-pro{height:100dvh!important;animation:none!important}
+body.vantis-team-next #scanner.scanner-pro .scanner-laser{display:none!important;animation:none!important}
+body.vantis-team-next #scanner.scanner-pro .scanner-live span{animation:none!important;box-shadow:none!important}
+body.vantis-team-next #scanner.scanner-pro .scanner-corner{filter:none!important}
+body.vantis-team-next #scanner.scanner-pro .scanner-receipt{animation:none!important}
+body.vantis-team-next #scanner.scanner-pro .scanner-close{min-width:44px;min-height:44px}
+@media (hover:hover) and (pointer:fine){body.vantis-team-next .team-next-action:hover{border-color:#d8abc9;background:#fff9fd}body.vantis-team-next .team-next-receive:hover{background:#4c3149;color:#fff}}
+@media (hover:none),(pointer:coarse){body.vantis-team-next input:not([type="checkbox"]):not([type="radio"]),body.vantis-team-next select,body.vantis-team-next textarea{font-size:16px!important}body.vantis-team-next .team-next-action:hover{transform:none}}
+@media (max-width:690px){body.vantis-team-next .team-stats{grid-template-columns:repeat(2,minmax(0,1fr))}body.vantis-team-next .team-next-action-grid{grid-template-columns:repeat(2,minmax(0,1fr))}body.vantis-team-next .team-next-search{grid-column:1/-1}body.vantis-team-next .team-next-action{padding:13px;min-height:76px;gap:10px}body.vantis-team-next .team-next-icon{flex-basis:38px;height:38px;border-radius:11px}body.vantis-team-next .team-next-copy strong{font-size:14px}body.vantis-team-next .team-next-copy small{font-size:10px}body.vantis-team-next .team-next-intro{align-items:flex-start;flex-direction:column;gap:11px;padding-top:22px}body.vantis-team-next .team-next-cloud{font-size:10px}body.vantis-team-next .team-next-actions-hint{display:none}}
+@media (max-width:370px){body.vantis-team-next .team-shell{width:calc(100% - 22px)}body.vantis-team-next .vantis-local-top{gap:9px}body.vantis-team-next .vantis-local-mark{width:38px;height:38px;flex:0 0 38px}body.vantis-team-next .vantis-local-tag{font-size:10px;padding:6px}body.vantis-team-next .team-next-action{padding:10px}body.vantis-team-next .team-next-action>b{display:none}body.vantis-team-next .team-stats>div{padding:14px}}
+@media (prefers-reduced-motion:reduce){body.vantis-team-next *,body.vantis-team-next *::before,body.vantis-team-next *::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+@media (forced-colors:active){body.vantis-team-next .team-next-action[aria-pressed="true"]{outline:2px solid Highlight}body.vantis-team-next .team-next-receive{border:2px solid CanvasText;color:CanvasText}}

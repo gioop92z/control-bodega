@@ -2,7 +2,7 @@ import {webkit, chromium} from 'playwright';
 import assert from 'node:assert/strict';
 
 const origin='https://gioop92z.github.io';
-const app=origin+'/control-bodega/team.html?mobileQA=5.15.1';
+const app=origin+'/control-bodega/team.html?mobileQA=5.17.0';
 const fake='88889999',pin='12345678';
 let logins=0;
 
@@ -44,8 +44,8 @@ async function browserCase(browser,device){
     const response=await page.goto(app,{waitUntil:'domcontentloaded',timeout:45000});
     assert.equal(response?.status(),200);
     await page.locator('#teamLoginSection').waitFor({state:'visible',timeout:18000});
-    assert.ok((await page.locator('#teamLoginSection').innerText()).includes('Versión móvil 5.15.1'),
-      'must use fresh 5.15.1 deployment instead of cached login code');
+    assert.ok((await page.locator('#teamLoginSection').innerText()).includes('Versión móvil 5.17.0'),
+      'must use fresh 5.17.0 deployment instead of cached login code');
     await page.locator('#teamEmployee').fill(fake);
     await page.locator('#teamPin').fill(pin);
     await page.locator('#teamLogin button[type="submit"]').click();

@@ -12,8 +12,9 @@
   <link rel="stylesheet" href="./scanner-pro.css?v=5.13.0">
   <link rel="stylesheet" href="./vantis-github-local.css?v=5.13.0">
   <link rel="stylesheet" href="./vantis-team.css?v=5.16.0">
+  <link rel="stylesheet" href="./vantis-team-next.css?v=5.17.0">
 </head>
-<body>
+<body class="vantis-team-next">
   <header class="vantis-local-top">
     <div class="vantis-local-mark">V</div>
     <div><strong>VANTIS</strong><small>Inventario compartido · edición de equipo</small></div>
@@ -36,7 +37,7 @@
         <button type="submit" class="vantis-local-primary">Entrar a VANTIS</button>
       </form>
       <p id="teamLoginError" class="vantis-local-error" role="alert" aria-live="assertive" hidden></p>
-      <p class="team-note">Usa el <strong>mismo número de empleado y PIN de tu computadora</strong>. El inventario es compartido; cada dispositivo inicia su propia sesión. Versión móvil 5.15.1.</p>
+      <p class="team-note">Usa el <strong>mismo número de empleado y PIN de tu computadora</strong>. El inventario es compartido; cada dispositivo inicia su propia sesión. Versión móvil 5.17.0.</p>
       <details class="team-setup">
         <summary>Primera configuración del administrador</summary>
         <p>Activa tu cuenta administradora una sola vez con el código privado de instalación. El código no está almacenado en esta página ni en GitHub.</p>
@@ -54,9 +55,30 @@
     </section>
     <section id="teamApp" hidden>
       <div class="team-bar"><div><b id="teamGreeting">VANTIS Equipo</b><span id="teamRole"></span></div><button id="teamLogout" type="button">Cerrar sesión</button></div>
+      <div class="team-next-intro">
+        <div><span class="team-next-eyebrow">VANTIS / EQUIPO</span><h1>Centro de operaciones</h1><p>Todo el inventario de tu bodega, en un solo lugar.</p></div>
+        <span class="team-next-cloud"><i aria-hidden="true"></i> Base compartida</span>
+      </div>
       <div class="vantis-local-banner"><strong>Inventario central</strong><span>Las lecturas confirmadas quedan disponibles para los demás empleados. Las pendientes no aumentan existencias.</span></div>
       <section class="team-stats" id="teamStats" aria-live="polite">Consultando existencias…</section>
-      <section class="team-panel">
+      <nav class="team-next-actions" id="teamQuickActions" aria-label="Accesos directos a las herramientas">
+        <div class="team-next-actions-heading"><div><span class="team-next-eyebrow">ACCESOS DIRECTOS</span><h2>¿Qué necesitas hacer?</h2></div><span class="team-next-actions-hint">Sin pasos innecesarios</span></div>
+        <div class="team-next-action-grid">
+          <button type="button" id="teamQuickSearch" class="team-next-action team-next-search" data-team-jump="search" aria-controls="teamSearchPanel" aria-pressed="false">
+            <span class="team-next-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></span>
+            <span class="team-next-copy"><strong>Consultar</strong><small>Buscar mercancía</small></span><b aria-hidden="true">›</b>
+          </button>
+          <button type="button" id="teamQuickReceive" class="team-next-action team-next-receive" data-team-jump="receive" aria-controls="teamReceiveSection" aria-pressed="false">
+            <span class="team-next-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 3v14m-5-5 5 5 5-5M4 17v3h16v-3"/></svg></span>
+            <span class="team-next-copy"><strong>Ingresar</strong><small>Escaneo continuo</small></span><b aria-hidden="true">›</b>
+          </button>
+          <button type="button" id="teamQuickOutbound" class="team-next-action team-next-outbound" data-team-jump="outbound" aria-controls="teamOutboundSection" aria-pressed="false">
+            <span class="team-next-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 21V7m-5 5 5-5 5 5M4 7V4h16v3"/></svg></span>
+            <span class="team-next-copy"><strong>Retirar</strong><small>Sacar de bodega</small></span><b aria-hidden="true">›</b>
+          </button>
+        </div>
+      </nav>
+      <section class="team-panel" id="teamSearchPanel">
         <h2>Buscar mercancía</h2>
         <p>Consulta por SKU, UPC, descripción o marbete para encontrar existencias y ubicación.</p>
         <form id="teamSearchForm" class="team-search"><input id="teamSearch" type="search" enterkeyhint="search" autocomplete="off" placeholder="SKU, UPC, nombre o marbete" aria-label="Buscar artículo"><button type="submit" class="vantis-local-primary">Buscar</button></form>
@@ -81,7 +103,7 @@
         <progress id="teamImportProgress" max="100" value="0" hidden></progress>
         <p id="teamImportStatus" role="status" aria-live="polite" class="team-muted"></p>
       </section>
-      <section class="team-panel">
+      <section class="team-panel" id="teamHistoryPanel">
         <h2>Movimientos recientes</h2>
         <div id="teamHistory" class="team-history">Consultando movimientos…</div>
       </section>
@@ -102,6 +124,6 @@
       <p class="vantis-local-bottom">La disponibilidad de este inventario depende de la conexión y del servidor. Si una lectura aparece como pendiente, conserva el navegador y reintenta con el mismo folio; no la cuentes dos veces.</p>
     </section>
   </main>
-  <script type="module" src="./vantis-team.mjs?v=5.16.0"></script>
+  <script type="module" src="./vantis-team.mjs?v=5.17.0"></script>
 </body>
 </html>

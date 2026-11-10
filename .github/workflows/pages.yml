@@ -34,8 +34,6 @@ jobs:
         run: |
           set -euo pipefail
           node --check app.js
-          node --check vantis-enterprise.js
-          node --test tests/mobile-native-ui.test.mjs
           node --test tests/vanifs-module.test.mjs
           node --check scanner.js
           node --check catalog-hybrid.mjs

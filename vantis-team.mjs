@@ -150,6 +150,7 @@ async function mount(v){
   $('teamPeopleSection').hidden=profile.role!=='admin';
   $('teamImportSection').hidden=profile.role!=='admin';
   $('teamScanSection').hidden=profile.role==='viewer';
+  teamQuickVisibility(profile.role!=='viewer');
   alertGlobal('');
   if(profile.role!=='viewer'){
     try{await navigator.storage?.persist?.();}catch{}
@@ -208,6 +209,7 @@ async function mount(v){
       $('teamOutboundSection').hidden=mode!=='outbound';
       $('teamModeReceive').classList.toggle('active',mode==='receive');
       $('teamModeOutbound').classList.toggle('active',mode==='outbound');
+      teamQuickSelect(mode);
       alertGlobal('');
       if(mode==='receive')receive();else outbound();
     };
@@ -218,6 +220,7 @@ async function mount(v){
     $('teamOutboundSection').hidden=true;
     $('teamModeReceive').classList.add('active');
     $('teamModeOutbound').classList.remove('active');
+    teamQuickSelect('receive');
     receive();
   }
   // A slow or temporarily unavailable summary must not undo a valid mobile login.
@@ -232,6 +235,38 @@ async function mount(v){
     if($('teamSearch').value.trim())void search().catch(reportError);
   },20000);
 }
+
+function teamQuickSelect(mode){
+  document.querySelectorAll('[data-team-jump]').forEach(button=>
+    button.setAttribute('aria-pressed',String(button.dataset.teamJump===mode)));
+}
+function teamQuickVisibility(canScan){
+  $('teamQuickReceive').hidden=!canScan;
+  $('teamQuickOutbound').hidden=!canScan;
+  teamQuickSelect(canScan?'receive':'search');
+}
+function teamQuickJump(mode){
+  if($('teamApp').hidden)return;
+  if(mode==='search'){
+    teamQuickSelect('search');
+    $('teamSearchPanel').scrollIntoView({behavior:'auto',block:'start'});
+    $('teamSearch').focus({preventScroll:true});
+    return;
+  }
+  if($('teamScanSection').hidden)return;
+  const button=$(mode==='receive'?'teamModeReceive':'teamModeOutbound');
+  button.click(); // Usa las validaciones originales de lecturas pendientes.
+  if(!button.classList.contains('active')){
+    const error=$('teamGlobalError');
+    if(!error.hidden)error.scrollIntoView({behavior:'auto',block:'center'});
+    return;
+  }
+  teamQuickSelect(mode);
+  $('teamScanSection').scrollIntoView({behavior:'auto',block:'start'});
+}
+document.querySelectorAll('[data-team-jump]').forEach(button=>{
+  button.addEventListener('click',()=>teamQuickJump(button.dataset.teamJump));
+});
 
 const loginForm=$('teamLogin');
 loginForm.addEventListener('invalid',event=>{

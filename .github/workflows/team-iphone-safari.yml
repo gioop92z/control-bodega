@@ -4,6 +4,8 @@ on:
     branches: [main]
     paths:
       - 'team.html'
+      - 'vantis-team-next.css'
+      - 'tests/team-next-ui.test.mjs'
       - 'vantis-team.mjs'
       - 'vantis-team-api.mjs'
       - 'team-config.mjs'
@@ -23,6 +25,8 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify mobile workspace and safety rules
+        run: node --test tests/team-next-ui.test.mjs
       - name: Install Safari and Chromium browser engines
         run: npx playwright install webkit chromium --with-deps
       - name: Wait for the new version on the real GitHub Pages URL
@@ -31,7 +35,7 @@ jobs:
           set -euo pipefail
           ready=0
           for i in $(seq 1 50); do
-            if curl -fsSL --retry 2 --retry-delay 2 -H 'Cache-Control: no-cache'               'https://gioop92z.github.io/control-bodega/team.html?v=5.15.1' | grep -q 'vantis-team.mjs?v=5.15.1'; then
+            if curl -fsSL --retry 2 --retry-delay 2 -H 'Cache-Control: no-cache'               'https://gioop92z.github.io/control-bodega/team.html?v=5.17.0' | grep -q 'vantis-team.mjs?v=5.17.0'; then
               ready=1
               break
             fi
