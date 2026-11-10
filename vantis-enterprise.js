@@ -9,8 +9,6 @@ let touchState=null;
 let decorateQueued=false;
 let lastMetricDept='';
 
-const reducedMotion=()=>window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-
 function replaceBrandText(root=document.body){
   if(!root)return;
   const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
@@ -161,39 +159,15 @@ function visibleView(){
 }
 
 function mainViews(){return MAIN_ORDER.filter(v=>document.querySelector(`.bottom-nav [data-view="${v}"]`));}
-function directionFor(from,to){
-  const order=[...MAIN_ORDER,'move','count','import'];
-  const a=order.indexOf(from),b=order.indexOf(to);
-  return a<0||b<0||a===b?'same':b>a?'forward':'back';
-}
+/* Navegación inmediata: sin esperas ni transiciones de página en el trabajo repetitivo. */
 function cleanupTransition(){transitionBusy=false;delete document.documentElement.dataset.vantisDirection;}
 function perform(handler,from,to,button){
   if(typeof handler!=='function')return;
-  transitionBusy=true;
-  document.documentElement.dataset.vantisDirection=directionFor(from,to);
-  window.scrollTo({top:0,behavior:'auto'});
-  if(!reducedMotion()&&typeof document.startViewTransition==='function'){
-    try{
-      const t=document.startViewTransition(()=>handler.call(button||null));
-      t.finished.then(cleanupTransition,cleanupTransition);
-      return;
-    }catch{}
-  }
-  try{handler.call(button||null);}finally{setTimeout(cleanupTransition,210)}
+  try{
+    window.scrollTo({top:0,behavior:'auto'});
+    handler.call(button||null);
+  }finally{cleanupTransition();}
 }
-
-function navigationElement(event){
-  if(!(event.target instanceof Element))return null;
-  return event.target.closest('.action-grid [data-act],.action-grid [data-go],.quick-row [data-go],#backHome');
-}
-document.addEventListener('click',event=>{
-  if(transitionBusy||reducedMotion()||typeof document.startViewTransition!=='function')return;
-  const el=navigationElement(event);
-  if(!el||typeof el.onclick!=='function')return;
-  const from=visibleView();
-  const to=el.id==='backHome'?'home':(el.dataset.go||el.dataset.view||(el.dataset.act?'move':from));
-  event.preventDefault();event.stopImmediatePropagation();perform(el.onclick,from,to,el);
-},true);
 
 function navigateMain(step){
   if(transitionBusy)return;
@@ -205,7 +179,14 @@ function navigateMain(step){
   const button=document.querySelector(`.bottom-nav [data-view="${next}"]`);
   if(button&&typeof button.onclick==='function')perform(button.onclick,current,next,button);
 }
-function gestureBlocked(target){return !(target instanceof Element)||Boolean(target.closest('button,input,textarea,select,label,.table-scroll,.tabs-row,.scanner-box,.modal,.nova-slide-container,.action-grid,.quick-row'))}
+function gestureBlocked(target){
+  if(!(target instanceof Element))return true;
+  return Boolean(target.closest(
+    'button,a,input,textarea,select,label,[role="button"],[role="dialog"],' +
+    '[contenteditable="true"],[data-no-swipe],#scanner,.table-scroll,.tabs-row,' +
+    '.scanner-box,.modal,.nova-slide-container,.action-grid,.quick-row'
+  ));
+}
 function swipeVisual(dx){
   const p=Math.max(-1,Math.min(1,dx/180));
   document.documentElement.style.setProperty('--vantis-swipe',String(p));
@@ -219,7 +200,10 @@ function resetSwipe(){
 }
 document.addEventListener('touchstart',event=>{
   if(event.touches.length!==1||transitionBusy||gestureBlocked(event.target))return;
-  const t=event.touches[0];touchState={x:t.clientX,y:t.clientY,time:performance.now()};
+  const t=event.touches[0];
+  // No interferir con el gesto de retroceso de Safari desde los bordes.
+  if(t.clientX<24||t.clientX>window.innerWidth-24)return;
+  touchState={x:t.clientX,y:t.clientY,time:performance.now()};
 },{passive:true});
 document.addEventListener('touchmove',event=>{
   if(!touchState||event.touches.length!==1)return;

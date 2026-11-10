@@ -1,0 +1,167 @@
+/* VANTIS · Mobile Native / Animation Performance / Break UI
+   El trabajo repetitivo de bodega tiene prioridad sobre cualquier efecto decorativo.
+   Solo capa de presentación; no modifica lecturas, ubicaciones ni almacenamiento. */
+
+:root{
+  --vui-accent:#e5007d;
+  --vui-ink:#302734;
+  --vui-focus:#ba0066;
+  --vui-surface:#ffffff;
+  --vui-border:#e9e3e9;
+}
+html{
+  -webkit-text-size-adjust:100%;
+  -webkit-tap-highlight-color:transparent;
+  overscroll-behavior-y:none;
+}
+body{
+  min-height:100vh;
+  min-height:100svh;
+  overscroll-behavior-y:none;
+}
+button,a,[role="button"],[data-view],[data-go],[data-act]{
+  touch-action:manipulation;
+}
+button,[role="button"],.action-card,.tabbtn,.vantis-command-toggle{
+  -webkit-user-select:none;
+  user-select:none;
+  -webkit-touch-callout:none;
+}
+button:focus-visible,a:focus-visible,[role="button"]:focus-visible,
+input:focus-visible,textarea:focus-visible,select:focus-visible{
+  outline:3px solid var(--vui-focus);
+  outline-offset:3px;
+}
+@media (pointer:coarse){
+  /* Safari enfoca sin hacer zoom ni desplazar el campo del escáner. */
+  input:not([type="checkbox"]):not([type="radio"]),textarea,select{
+    font-size:16px!important;
+  }
+  .vantis-command-item,.tabs-row .tabbtn,#scanner .scanner-close,
+  .scan-btn,.primary,.secondary,.ghost,.danger,.file-btn{
+    min-height:44px;
+  }
+}
+
+/* Reducir rasterización y efectos de fondo mientras la app está activa. */
+body::after,.topbar::before,
+.action-card::after,.vantis-metric::after{display:none!important}
+.topbar{
+  background:#fff!important;
+  -webkit-backdrop-filter:none!important;
+  backdrop-filter:none!important;
+  box-shadow:0 2px 10px rgba(35,22,34,.045);
+}
+.card,.action-grid .action-card,.vantis-metric,.kpi{
+  box-shadow:0 3px 16px rgba(33,22,33,.055);
+}
+.action-grid .action-card{
+  min-width:0;
+  border-radius:18px!important;
+  transition:border-color 120ms ease,background-color 120ms ease!important;
+}
+.action-grid .action-card:active,
+.vantis-command-toggle:active,
+.vantis-command-item:active{
+  transform:scale(.985)!important;
+}
+.vantis-command-toggle{
+  transition:background-color 120ms ease!important;
+}
+.vantis-command-item{
+  min-width:0;
+  transition:background-color 120ms ease!important;
+}
+.vantis-command-panel{
+  -webkit-backdrop-filter:none!important;
+  backdrop-filter:none!important;
+  background:#fff!important;
+  transition:opacity 130ms ease,transform 130ms ease,visibility 130ms!important;
+}
+.vantis-command-panel:not(.open){pointer-events:none}
+@media (hover:none),(pointer:coarse){
+  /* :hover de iOS puede quedar fijado después de tocar. */
+  .action-grid .action-card:hover,.vantis-metric:hover,.kpi:hover,
+  .vantis-command-toggle:hover,.vantis-command-item:hover{
+    transform:none!important;
+  }
+  .action-grid .action-card:hover{
+    box-shadow:0 3px 16px rgba(33,22,33,.055)!important;
+  }
+}
+
+/* Remove Animations: métricas y filas se actualizan sin entrada diferida. */
+.view-enter,.product-row,.history-row,.kpi,.login-card,.lp-family-strip,
+.vantis-metric.vm-pop strong,.vantis-position i.active,
+#scanner.scanner-pro,#scanner.scanner-pro .scanner-receipt{
+  animation:none!important;
+}
+.action-grid .action-card,.card,.vantis-metric,.kpi,
+.product-row,.history-row,.tabs-row .tabbtn{
+  transition-property:background-color,border-color,color!important;
+  transition-duration:120ms!important;
+}
+::view-transition-old(vantis-content),::view-transition-new(vantis-content){
+  animation:none!important;
+}
+/* Gestures: conservamos feedback espacial sin rotación 3D o blur. */
+html.vantis-swipe-live .content{
+  transform:translate3d(calc(var(--vantis-swipe)*14px),0,0)!important;
+  opacity:1!important;
+  transition:none!important;
+}
+
+/* Break UI: códigos, nombres y cantidades largas no cortan botones ni tarjetas. */
+.action-grid,.action-grid .action-card,.product-row,.history-row,
+.card,.vantis-metric,.vantis-command-panel,.vantis-command-item{
+  min-width:0;
+}
+.action-grid .action-card strong,.action-grid .action-card span,
+.product-row,.history-row,.vantis-metric,
+#scannerReceiptCode,#scannerStatus,.scanner-receipt{
+  overflow-wrap:anywhere;
+  word-break:normal;
+}
+.table-scroll,.tabs-row{
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior-x:contain;
+}
+.table-scroll{max-width:100%}
+
+/* Cámara: ocupa solo el viewport visible; safe areas ya son respetadas
+   por el encabezado y el pie de la interfaz de escaneo existente. */
+#scanner.scanner-pro{
+  position:fixed;
+  inset:0;
+  width:100%;
+  min-height:0;
+  height:100vh;
+  height:100dvh;
+  max-height:100dvh;
+  overflow:hidden;
+}
+#scanner.scanner-pro .scanner-viewport{
+  min-height:0;
+}
+#scanner.scanner-pro .scanner-close{
+  min-width:44px;
+  min-height:44px;
+}
+@media (max-width:370px){
+  .action-grid{gap:10px!important}
+  .action-grid .action-card{
+    padding:14px!important;
+    min-height:124px!important;
+  }
+  .vantis-command-panel{max-width:calc(100vw - 24px)}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    scroll-behavior:auto!important;
+    animation:none!important;
+    transition:none!important;
+  }
+  html.vantis-swipe-live .content{
+    transform:none!important;
+  }
+}
