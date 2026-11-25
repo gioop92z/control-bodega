@@ -1,0 +1,44 @@
+name: VANNI STUDIO · pruebas
+
+on:
+  push:
+    paths: ['vanni-studio/**', '.github/workflows/vanni-studio.yml']
+  pull_request:
+    paths: ['vanni-studio/**', '.github/workflows/vanni-studio.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vanni-studio-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: vanni-studio
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: vanni-studio/package-lock.json
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.5.x
+      - name: Instalar dependencias
+        run: npm ci --no-audit --no-fund
+      - name: Tipos (app)
+        run: npx tsc -p tsconfig.json
+      - name: Tipos (Edge Functions)
+        working-directory: vanni-studio/supabase/functions
+        run: deno check instagram/index.ts owner/index.ts backup/index.ts
+      - name: Pruebas unitarias, motor de sincronización y migraciones (PGlite)
+        run: npx vitest run
+      - name: Compilación de producción
+        run: npx vite build

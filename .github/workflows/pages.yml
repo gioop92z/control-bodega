@@ -63,6 +63,18 @@ jobs:
           cat > "${{ runner.temp }}/vantis-pages/deployment-info.json" <<EOF
           {"release":"5.8.3","commit":"${{ github.sha }}","generated_by":"github-actions-pages"}
           EOF
+      # VANNI STUDIO (app independiente de VANTIS) se publica compilada en /studio/.
+      # Si su compilación falla, el despliegue se detiene y el sitio publicado anterior sigue en línea.
+      - name: Build VANNI STUDIO into /studio
+        working-directory: vanni-studio
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          npx tsc -p tsconfig.json
+          npx vite build --outDir "${{ runner.temp }}/vantis-pages/studio" --emptyOutDir
+          rm -rf "${{ runner.temp }}/vantis-pages/vanni-studio"
+          test -s "${{ runner.temp }}/vantis-pages/studio/index.html"
+          test -s "${{ runner.temp }}/vantis-pages/studio/sw.js"
       - name: Upload static frontend
         uses: actions/upload-pages-artifact@v3
         with:
